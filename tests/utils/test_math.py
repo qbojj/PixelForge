@@ -1,7 +1,8 @@
 from amaranth import *
 from amaranth.sim import Simulator
 
-from gpu.utils.math import FixedPoint, FixedPointVecNormalize, Vector3
+from gpu.utils.math import FixedPointVecNormalize
+from gpu.utils.types import FixedPoint, Vector3
 
 rst = Signal(1)
 dut = ResetInserter({"sync": rst})(FixedPointVecNormalize(Vector3))
@@ -34,8 +35,8 @@ async def tb_operation(data, expected, ctx):
     result = [ctx.get(r.data) / (1 << FixedPoint.lo_bits) for r in result]
     print(f"got {result}; expected {expected} ({cycles=})")
 
-    if not all(abs(r - e) < 5e-3 for r, e in zip(result, expected)):
-        pass  # raise AssertionError("Test failed!")
+    if not all(abs(r - e) < 1e-1 for r, e in zip(result, expected)):
+        raise AssertionError("Test failed!")
 
 
 async def tb_normalize(ctx):
@@ -51,6 +52,10 @@ async def tb_normalize(ctx):
 
     # 3-4-5 triangle
     test_cases.append(([3.0, 4.0, 0.0], [0.6, 0.8, 0.0]))
+
+    # multiple single value vectors
+    for i in range(1, 10):
+        test_cases.append(([float(i), 0.0, 0.0], [1.0, 0.0, 0.0]))
 
     for data, expected in test_cases:
         await tb_operation(data, expected, ctx)

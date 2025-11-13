@@ -1,111 +1,8 @@
-from math import ceil, log10
-
 from amaranth import *
-from amaranth.lib import data, wiring
+from amaranth.lib import wiring
 from amaranth.lib.wiring import In, Out
 
-
-def ceil_div(a, b):
-    return -(-a // b)
-
-
-class FixedPointLayout(data.StructLayout):
-    def __init__(self, lo_bits: int = 16, hi_bits: int = 16):
-        super().__init__({"data": signed(lo_bits + hi_bits)})
-        self.lo_bits = lo_bits
-        self.hi_bits = hi_bits
-        self.total_bits = lo_bits + hi_bits
-
-    def __call__(self, value: Value) -> "FixedPointView":
-        return FixedPointView(self, value)
-
-    def from_float(self, value: float) -> "FixedPointView":
-        return self(self.from_float_const(value))
-
-    def from_float_const(self, value: float) -> data.Const:
-        fixed_value = int(value * (1 << self.lo_bits))
-        return self.const({"data": fixed_value})
-
-    def change_radix(self, value: "FixedPointView") -> "FixedPointView":
-        # Cast a FixedPointView to this layout (align the integer bits)
-        shift = self.lo_bits - value.shape().lo_bits
-        if self.lo_bits >= value.shape().lo_bits:
-            new_data = value.data.shift_left(shift)
-        else:
-            new_data = value.data.shift_right(-shift)
-
-        return self(Cat(new_data, C(0, self.total_bits - len(new_data))))
-
-
-class FixedPointView(data.View):
-    @property
-    def fract(self):
-        return self.data[: self.shape().lo_bits].as_unsigned()
-
-    @property
-    def int(self):
-        return self.data[-self.shape().hi_bits :].as_signed()
-
-    def __add__(self, o: "FixedPointView") -> "FixedPointView":
-        assert self.shape() == o.shape(), "Mismatched fixed point formats"
-        s = self.shape()
-        return s((self.data + o.data)[: s.total_bits])
-
-    def __sub__(self, o: "FixedPointView") -> "FixedPointView":
-        assert self.shape() == o.shape(), "Mismatched fixed point formats"
-        s = self.shape()
-        return s((self.data - o.data)[: s.total_bits])
-
-    def __mul__(self, o: "FixedPointView") -> "FixedPointView":
-        assert self.shape() == o.shape(), "Mismatched fixed point formats"
-        s = self.shape()
-        return s((self.data * o.data)[s.lo_bits : s.lo_bits + s.total_bits])
-
-    def format(self, format_spec):
-        fract_bits = len(self.fract)
-
-        # format as standard fixed_point
-        decimal_length = ceil(log10(2) * fract_bits)
-        len_pow = 10**decimal_length
-
-        if format_spec == "b":
-            # format as binary
-            return Format(
-                "{value.int:b}.{value.fract:0{fract_bits}b}}",
-                value=self,
-                fract_bits=fract_bits,
-            )
-        elif format_spec == "x":
-            # format as hex
-            if fract_bits % 4 != 0:
-                raise ValueError(
-                    "Hex format requires number of fractional bits to be multiple of 4"
-                )
-            return Format(
-                "{value.int:x}.{value.fract:0{fract_bits}x}}",
-                value=self,
-                fract_bits=fract_bits // 4,
-            )
-        elif format_spec == "u":
-            # format as unsigned float
-            v2 = (self.data.as_unsigned() * len_pow // (1 << fract_bits)) % len_pow
-            return Format("{:d}.{:0{}d}", self.int.as_unsigned(), v2, decimal_length)
-        elif format_spec != "":
-            raise ValueError(
-                f"Format specifier {format_spec!r} is not supported for layouts"
-            )
-
-        v1 = Mux((self.fract > 0) & (self.int < 0), self.int + 1, self.int)
-        v2 = (self.data.as_signed() * len_pow // (1 << fract_bits)) % len_pow
-        v3 = Mux((self.int < 0) & (self.fract > 0), len_pow - v2, v2)
-        return Format("{:-d}.{:0{}d}", v1, v3, decimal_length)
-
-
-# DE1-SoC has DSP blocks that can do 27x27 multiplications
-FixedPoint = FixedPointLayout(lo_bits=12, hi_bits=12)
-Vector2 = data.ArrayLayout(FixedPoint, 2)
-Vector3 = data.ArrayLayout(FixedPoint, 3)
-Vector4 = data.ArrayLayout(FixedPoint, 4)
+from .types import FixedPointLayout
 
 
 class VectorizedOperation(wiring.Component):
@@ -157,7 +54,7 @@ class VectorizedOperation(wiring.Component):
                     ]
                     m.d.sync += self.result[cycle].eq(op.result)
 
-                    m.next = "IDLE" if cycle == len(self.a) - 1 else f"STEP_{cycle+1}"
+                    m.next = "IDLE" if cycle == len(self.a) - 1 else f"STEP_{cycle + 1}"
 
         return m
 
@@ -219,7 +116,7 @@ class VectorizedOperationMC(wiring.Component):
                                 op.b.eq(b_v[cycle + 1]),
                                 op.start.eq(1),
                             ]
-                            m.next = f"STEP_{cycle+1}"
+                            m.next = f"STEP_{cycle + 1}"
                         else:
                             m.next = "IDLE"
 
@@ -280,8 +177,8 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                 with m.If(self.start):
                     m.d.sync += [
                         # Assert(self.value.int.as_unsigned() > 0),
-                        half_v.data.eq(self.value.data >> 1),
-                        x.eq(self.type.from_float(0.83)),
+                        half_v.data.eq(self.value.data.as_unsigned() >> 1),
+                        x.eq(self.type.from_float(0.88)),
                     ]
                     m.next = "ITERATE_0_STEP_0"
             for i in range(self.steps):
@@ -291,7 +188,7 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                         mul_b.eq(x),
                     ]
                     m.d.sync += [
-                        three_halfs_x.eq(x + self.type(x.data >> 1)),
+                        three_halfs_x.eq(x + self.type(x.data.as_unsigned() >> 1)),
                         ax.eq(mul_result),
                     ]
                     m.next = f"ITERATE_{i}_STEP_1"
@@ -309,11 +206,15 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                         mul_a.eq(ax),
                         mul_b.eq(x2),
                     ]
-                    m.d.sync += [x.eq(three_halfs_x - mul_result)]
+                    new_x = three_halfs_x - mul_result
+                    m.d.sync += [x.eq(new_x)]
                     if i == self.steps - 1:
                         m.next = "IDLE"
                     else:
-                        m.next = f"ITERATE_{i+1}_STEP_0"
+                        with m.If(x == new_x):
+                            m.next = "IDLE"
+                        with m.Else():
+                            m.next = f"ITERATE_{i + 1}_STEP_0"
 
         return m
 
@@ -351,6 +252,7 @@ class FixedPointInvSqrt(wiring.Component):
         shift_value = Signal(range(-data_bits, data_bits + 1))
         inv_sqrt_data_in = Signal(small_type)
         inv_sqrt_data_out = Signal(small_type)
+        pre_shift_value = Signal(small_type)
 
         m.d.comb += [
             inv_sqrt_small.value.eq(inv_sqrt_data_in),
@@ -394,44 +296,45 @@ class FixedPointInvSqrt(wiring.Component):
                 with m.If(inv_sqrt_small.ready):
                     # shift back: sqrt gets half the normalization shift
                     # divide by 2^floor(shift_value/2)
-                    v1 = self.type(
-                        do_shift_by(
-                            inv_sqrt_data_out.data.as_unsigned(),
-                            shift_value[1:].as_signed()
-                            + (self.type.lo_bits - small_type.lo_bits),
-                        )
-                    )
-                    m.d.sync += norm_value.eq(v1)
-                    with m.If(shift_value[0] == 0):
-                        m.next = "IDLE"
-                    with m.Else():
+                    m.d.sync += pre_shift_value.eq(inv_sqrt_data_out)
+                    with m.If(shift_value[0] == 1):
                         m.next = "POST_MULT"
+                    with m.Else():
+                        m.next = "SHIFT_BACK"
             with m.State("POST_MULT"):
-                # One additional multiplication by 1/sqrt(2) if we had an odd shift
-                inv_sqrt2 = self.type.from_float(1 / 2**0.5)
-                m.d.sync += norm_value.eq(norm_value * inv_sqrt2)
+                m.d.sync += [
+                    pre_shift_value.eq(pre_shift_value * small_type.from_float(2**0.5)),
+                ]
+                m.next = "SHIFT_BACK"
+            with m.State("SHIFT_BACK"):
+                shift_offset = self.type.lo_bits - small_type.lo_bits
+                m.d.sync += norm_value.eq(
+                    do_shift_by(
+                        pre_shift_value.data.as_unsigned(),
+                        shift_value[1:].as_signed() + shift_offset,
+                    )
+                )
                 m.next = "IDLE"
 
         return m
 
 
-def simple_operation_to_module(op, type: data.ShapeLike):
-    class SimpleOpModule(wiring.Component):
-        a: In(type)
-        b: In(type)
-        result: Out(type)
+class SimpleOpModule(wiring.Component):
+    def __init__(self, op, type):
+        super().__init__(
+            {
+                "a": In(type),
+                "b": In(type),
+                "result": Out(type),
+            }
+        )
+        self.op = op
+        self.type = type
 
-        def elaborate(self, platform):
-            m = Module()
-            m.d.comb += self.result.eq(op(self.a, self.b))
-            return m
-
-    return SimpleOpModule
-
-
-FixedPointMult = simple_operation_to_module(lambda a, b: a * b, FixedPoint)
-FixedPointAdd = simple_operation_to_module(lambda a, b: a + b, FixedPoint)
-FixedPointSub = simple_operation_to_module(lambda a, b: a - b, FixedPoint)
+    def elaborate(self, platform) -> Module:
+        m = Module()
+        m.d.comb += self.result.eq(self.op(self.a, self.b))
+        return m
 
 
 class FixedPointVecNormalize(wiring.Component):
@@ -450,17 +353,21 @@ class FixedPointVecNormalize(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
+        elem_type = self.vector_type.elem_shape
+
         m.submodules.inv_sqrt = inv_sqrt = FixedPointInvSqrt(
-            FixedPoint, steps=self.inv_sqrt_steps
+            elem_type, steps=self.inv_sqrt_steps
         )
-        m.submodules.mult = mult = VectorizedOperation(FixedPointMult, self.vector_type)
+        m.submodules.mult = mult = VectorizedOperation(
+            lambda: SimpleOpModule(lambda a, b: a * b, elem_type), self.vector_type
+        )
 
         v = Signal.like(self.value)
         dot_v = Signal.like(v[0])
         inv_len_v = Signal.like(v[0])
 
         m.d.comb += [
-            dot_v.eq(sum(mult.result, start=FixedPoint.from_float(0.0))),
+            dot_v.eq(sum(mult.result, start=elem_type.from_float(0.0))),
             inv_len_v.eq(inv_sqrt.result),
         ]
 

@@ -1,3 +1,4 @@
 amaranth==0.5.8
 amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git@7e24efe2f6e95afddd0c1b56f1a9423c48caa472
+amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc.git@5c43cf58f15d9cd9c69ff83c97997708d386b2dc
 amaranth-yosys==0.50.0.0.post117

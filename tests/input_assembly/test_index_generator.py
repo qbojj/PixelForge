@@ -11,11 +11,16 @@ from gpu.input_assembly.cores import IndexGenerator
 from gpu.utils.types import IndexKind
 
 from ..utils.memory import DebugAccess, get_memory_resource
+from ..utils.streams import stream_get
 
 
-def test_index_generator():
-    rst = Signal(1, reset_less=True)
-
+def make_test_index_generator(
+    addr: int,
+    count: int,
+    kind: IndexKind,
+    memory_data: list[int],
+    expected: list[int],
+):
     m = Module()
 
     m.submodules.dut = dut = IndexGenerator()
@@ -48,23 +53,9 @@ def test_index_generator():
     wiring.connect(m, arbiter.bus, decoder.bus)
     arbiter.bus.memory_map = decoder.bus.memory_map
 
-    m = ResetInserter(rst)(m)
     mmap: MemoryMap = decoder.bus.memory_map
 
-    async def test_with_data(
-        ctx,
-        addr: int,
-        count: int,
-        kind: IndexKind,
-        memory_data: list[int],
-        expected: list[int],
-    ):
-        # Reset DUT
-        ctx.set(rst, 1)
-        await ctx.tick()
-        ctx.set(rst, 0)
-        await ctx.tick()
-
+    async def tb(ctx):
         # setup memory
         print()
         print(f"Loading memory at {addr:#010x} with data: {memory_data}")
@@ -88,68 +79,71 @@ def test_index_generator():
         await ctx.tick()
 
         # pull indices until ready
-        indices = []
-        while not ctx.get(dut.ready) or ctx.get(dut.os_index.valid):
-            if ctx.get(dut.os_index.valid):
-                indices.append(ctx.get(dut.os_index.payload))
-                ctx.set(dut.os_index.ready, 1)
-            else:
-                ctx.set(dut.os_index.ready, 0)
-            await ctx.tick().until(dut.ready | dut.os_index.valid)
+        indices = await stream_get(ctx, dut.os_index, dut.ready)
 
         print(f"Generated indices: {indices}, expected: {expected}")
         # assert indices == expected, f"Expected indices {expected}, got {indices}"
 
-    async def tb(ctx):
-        await test_with_data(
-            ctx,
-            addr=0x80000000,
-            count=10,
-            kind=IndexKind.NOT_INDEXED,
-            memory_data=[],
-            expected=list(range(10)),
-        )
-
-        await test_with_data(
-            ctx,
-            addr=0x80000000,
-            count=5,
-            kind=IndexKind.U32,
-            memory_data=[0, 2, 4, 1, 5],
-            expected=[0, 2, 4, 1, 5],
-        )
-
-        await test_with_data(
-            ctx,
-            addr=0x80000000,
-            count=6,
-            kind=IndexKind.U16,
-            memory_data=[0x00030002, 0x00050004, 0x00000001],
-            expected=[2, 3, 4, 5, 1, 0],
-        )
-
-        await test_with_data(
-            ctx,
-            addr=0x80000000,
-            count=8,
-            kind=IndexKind.U8,
-            memory_data=[0x04030201, 0x08070605],
-            expected=[1, 2, 3, 4, 5, 6, 7, 8],
-        )
-
-        await test_with_data(
-            ctx,
-            addr=0x80000002,
-            count=8,
-            kind=IndexKind.U8,
-            memory_data=[0x02010000, 0x06050403, 0x00000807],
-            expected=[1, 2, 3, 4, 5, 6, 7, 8],
-        )
-
     sim = Simulator(m)
     sim.add_clock(1e-9)
     sim.add_testbench(tb)
-    with sim.write_vcd(
-        "test_index_generator.vcd", "test_index_generator.gtkw", traces=dut
-    ):
+
+    try:
         sim.run()
+    except Exception:
+        sim.reset()
+
+        with sim.write_vcd(
+            "test_index_generator.vcd", "test_index_generator.gtkw", traces=dut
+        ):
+            sim.run()
+
+
+def test_not_indexed():
+    make_test_index_generator(
+        addr=0x80000000,
+        count=10,
+        kind=IndexKind.NOT_INDEXED,
+        memory_data=[],
+        expected=list(range(10)),
+    )
+
+
+def test_indexed_u32():
+    make_test_index_generator(
+        addr=0x80000000,
+        count=5,
+        kind=IndexKind.U32,
+        memory_data=[0, 2, 4, 1, 5],
+        expected=[0, 2, 4, 1, 5],
+    )
+
+
+def test_indexed_u16():
+    make_test_index_generator(
+        addr=0x80000000,
+        count=6,
+        kind=IndexKind.U16,
+        memory_data=[0x00030002, 0x00050004, 0x00000001],
+        expected=[2, 3, 4, 5, 1, 0],
+    )
+
+
+def test_indexed_u8():
+    make_test_index_generator(
+        addr=0x80000000,
+        count=8,
+        kind=IndexKind.U8,
+        memory_data=[0x04030201, 0x08070605],
+        expected=[1, 2, 3, 4, 5, 6, 7, 8],
+    )
+
+
+def test_indexed_u8_unaligned():
+    make_test_index_generator(
+        addr=0x80000002,
+        count=8,
+        kind=IndexKind.U8,
+        memory_data=[0x02010000, 0x06050403, 0x00000807],
+        expected=[1, 2, 3, 4, 5, 6, 7, 8],
+    )

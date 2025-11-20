@@ -216,20 +216,24 @@ class InputTopologyProcessor(wiring.Component):
         regs = csr.Builder(addr_width=4, data_width=8)
 
         self.input_topology = regs.add(
-            "input_topology", csr.Field(csr.action.RW, InputTopology), access="rw"
+            "input_topology",
+            csr.Register(csr.Field(csr.action.RW, InputTopology), access="rw"),
+            offset=0x00,
         )
         self.primitive_restart_enable = regs.add(
             "primitive_restart_enable",
-            csr.Field(csr.action.RW, unsigned(1)),
-            access="rw",
+            csr.Register(csr.Field(csr.action.RW, unsigned(1)), access="rw"),
+            offset=0x04,
         )
         self.primitive_restart_index = regs.add(
             "primitive_restart_index",
-            csr.Field(csr.action.RW, unsigned(32)),
-            access="rw",
+            csr.Register(csr.Field(csr.action.RW, unsigned(32)), access="rw"),
+            offset=0x08,
         )
         self.base_vertex = regs.add(
-            "base_vertex", csr.Field(csr.action.RW, unsigned(32)), access="rw"
+            "base_vertex",
+            csr.Register(csr.Field(csr.action.RW, unsigned(32)), access="rw"),
+            offset=0x0C,
         )
 
         self.csr_bridge = csr.Bridge(regs.as_memory_map())
@@ -252,28 +256,18 @@ class InputTopologyProcessor(wiring.Component):
 
         ready_for_input = Signal()
 
-        m.d.comb += self.ready.eq(
-            ready_for_input & ~self.is_index.valid & ~self.os_index.valid
-        )
+        m.d.comb += self.ready.eq(ready_for_input & ~self.os_index.valid)
         m.d.comb += ready_for_input.eq(to_send_left == 0)
 
-        with m.If(self.os_index.ready):
-            with m.Switch(to_send_left):
-                for i in range(1, max_amplification + 1):
-                    with m.Case(i):
-                        m.d.sync += [
-                            self.os_index.payload.eq(
-                                to_send[i - 1] + self.base_vertex.f.data
-                            ),
-                            self.os_index.valid.eq(1),
-                            to_send_left.eq(to_send_left - 1),
-                        ]
-
-                        if i == 1:
-                            # last one being sent -> we are ready for new input
-                            m.d.comb += ready_for_input.eq(1)
-                with m.Default():
-                    m.d.sync += self.os_index.valid.eq(0)
+        with m.Switch(to_send_left):
+            for i in range(1, max_amplification + 1):
+                with m.Case(i):
+                    m.d.comb += self.os_index.payload.eq(
+                        to_send[i - 1] + self.base_vertex.f.data
+                    )
+                    m.d.comb += self.os_index.valid.eq(1)
+                    with m.If(self.os_index.ready):
+                        m.d.sync += to_send_left.eq(i - 1)
 
         with m.If(self.is_index.valid & ready_for_input):
             m.d.comb += self.is_index.ready.eq(1)
@@ -286,15 +280,45 @@ class InputTopologyProcessor(wiring.Component):
                 m.d.sync += vertex_count.eq(0)  # reset on primitive restart
             with m.Else():
                 with m.Switch(self.input_topology.f.data):
-                    with m.Case(
-                        InputTopology.POINT_LIST,
-                        InputTopology.LINE_LIST,
-                        InputTopology.TRIANGLE_LIST,
-                    ):
+                    with m.Case(InputTopology.POINT_LIST):
                         m.d.sync += [
-                            self.os_index.p.eq(idx),
-                            self.os_index.valid.eq(1),
+                            to_send[0].eq(idx),
+                            to_send_left.eq(1),
                         ]
+                    with m.Case(InputTopology.LINE_LIST):
+                        with m.Switch(vertex_count):
+                            with m.Case(0):
+                                m.d.sync += [
+                                    v1.eq(idx),
+                                    vertex_count.eq(1),
+                                ]
+                            with m.Case(1):
+                                m.d.sync += [
+                                    to_send[1].eq(v1),
+                                    to_send[0].eq(idx),
+                                    to_send_left.eq(2),
+                                    vertex_count.eq(0),
+                                ]
+                    with m.Case(InputTopology.TRIANGLE_LIST):
+                        with m.Switch(vertex_count):
+                            with m.Case(0):
+                                m.d.sync += [
+                                    v1.eq(idx),
+                                    vertex_count.eq(1),
+                                ]
+                            with m.Case(1):
+                                m.d.sync += [
+                                    v2.eq(idx),
+                                    vertex_count.eq(2),
+                                ]
+                            with m.Case(2):
+                                m.d.sync += [
+                                    to_send[2].eq(v1),
+                                    to_send[1].eq(v2),
+                                    to_send[0].eq(idx),
+                                    to_send_left.eq(3),
+                                    vertex_count.eq(0),
+                                ]
                     with m.Case(InputTopology.LINE_STRIP):
                         with m.If(vertex_count == 0):
                             m.d.sync += [
@@ -314,13 +338,11 @@ class InputTopologyProcessor(wiring.Component):
                                 m.d.sync += [
                                     v1.eq(idx),
                                     vertex_count.eq(1),
-                                    self.is_index.ready.eq(1),
                                 ]
                             with m.Case(1):
                                 m.d.sync += [
                                     v2.eq(idx),
                                     vertex_count.eq(2),
-                                    self.is_index.ready.eq(1),
                                 ]
                             with m.Case(2):
                                 # Odd triangle -> indexes n, n+1, n+2

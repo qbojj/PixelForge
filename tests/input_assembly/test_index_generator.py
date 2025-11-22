@@ -40,15 +40,13 @@ def make_test_index_generator(
     m.submodules.arbiter = arbiter = Arbiter(
         addr_width=32, data_width=32, granularity=8
     )
-    m.submodules.dbg_access = dbg_access = DebugAccess(
-        addr_width=32, data_width=32, granularity=8
-    )
+    dbg_access = DebugAccess(addr_width=32, data_width=32, granularity=8)
 
     decoder.add(mem.wb_bus, addr=0x80000000)
     decoder.add(csr_bridge.wb_bus, addr=0x00000000)
 
     arbiter.add(dut.bus)
-    arbiter.add(dbg_access.wb_bus)
+    arbiter.add(dbg_access)
 
     wiring.connect(m, arbiter.bus, decoder.bus)
     arbiter.bus.memory_map = decoder.bus.memory_map
@@ -59,7 +57,7 @@ def make_test_index_generator(
         # setup memory
         print()
         print(f"Loading memory at {addr:#010x} with data: {memory_data}")
-        await dbg_access.write(ctx, addr, memory_data)
+        await dbg_access.write_bytes(ctx, addr, memory_data)
 
         # Configure DUT
         print()
@@ -82,7 +80,7 @@ def make_test_index_generator(
         indices = await stream_get(ctx, dut.os_index, dut.ready)
 
         print(f"Generated indices: {indices}, expected: {expected}")
-        # assert indices == expected, f"Expected indices {expected}, got {indices}"
+        assert indices == expected, f"Expected indices {expected}, got {indices}"
 
     sim = Simulator(m)
     sim.add_clock(1e-9)
@@ -104,7 +102,7 @@ def test_not_indexed():
         addr=0x80000000,
         count=10,
         kind=IndexKind.NOT_INDEXED,
-        memory_data=[],
+        memory_data=b"",
         expected=list(range(10)),
     )
 
@@ -114,7 +112,7 @@ def test_indexed_u32():
         addr=0x80000000,
         count=5,
         kind=IndexKind.U32,
-        memory_data=[0, 2, 4, 1, 5],
+        memory_data=b"".join((i.to_bytes(4, "little") for i in [0, 2, 4, 1, 5])),
         expected=[0, 2, 4, 1, 5],
     )
 
@@ -124,7 +122,7 @@ def test_indexed_u16():
         addr=0x80000000,
         count=6,
         kind=IndexKind.U16,
-        memory_data=[0x00030002, 0x00050004, 0x00000001],
+        memory_data=b"".join((i.to_bytes(2, "little") for i in [2, 3, 4, 5, 1, 0])),
         expected=[2, 3, 4, 5, 1, 0],
     )
 
@@ -134,7 +132,9 @@ def test_indexed_u8():
         addr=0x80000000,
         count=8,
         kind=IndexKind.U8,
-        memory_data=[0x04030201, 0x08070605],
+        memory_data=b"".join(
+            (i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8])
+        ),
         expected=[1, 2, 3, 4, 5, 6, 7, 8],
     )
 
@@ -144,6 +144,8 @@ def test_indexed_u8_unaligned():
         addr=0x80000002,
         count=8,
         kind=IndexKind.U8,
-        memory_data=[0x02010000, 0x06050403, 0x00000807],
+        memory_data=b"".join(
+            (i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8])
+        ),
         expected=[1, 2, 3, 4, 5, 6, 7, 8],
     )

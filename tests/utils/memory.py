@@ -1,66 +1,45 @@
 from amaranth import *
-from amaranth.lib import wiring
-from amaranth.lib.wiring import Out
-from amaranth_soc.memory import MemoryMap
-from amaranth_soc.wishbone.bus import Signature
+from amaranth_soc.memory import MemoryMap, ResourceInfo
+from amaranth_soc.wishbone.bus import Interface
 
 
-def get_memory_resource(mmap: MemoryMap, name: str):
+def get_memory_resource(mmap: MemoryMap, name: str) -> ResourceInfo:
     subvalues = name.split(".")
+    subvalues = [MemoryMap.Name((*sv.split(","),)) for sv in subvalues]
 
     for res in mmap.all_resources():
-        if all(
-            res.path[i] == MemoryMap.Name(subvalues[i]) for i in range(len(subvalues))
+        if len(res.path) == len(subvalues) and all(
+            (res.path[i] == subvalues[i]) for i in range(len(res.path))
         ):
             return res
     raise KeyError(f"Resource {name} not found in memory map")
 
 
-class DebugAccess(wiring.Component):
-    """Simple Wishbone master for testbenches.
+class DebugAccess(Interface):
+    async def read_bytes(self, ctx, addr: int, width: int) -> bytes:
+        """Perform read of 8-bit data."""
+        assert self.granularity == 8, "Granularity must be 8 bits for read_bytes"
 
-    Can perform single read and write transactions.
+        ret = bytearray()
+        for i in range(width):
+            a = addr + i
 
-    Members
-    -------
-    wb_bus : ``Out(wishbone.Signature(...))``
-        Wishbone bus interface.
-    """
+            ctx.set(self.cyc, 1)
+            ctx.set(self.stb, 1)
+            ctx.set(self.we, 0)
 
-    def __init__(self, addr_width, data_width, granularity=None):
-        if granularity is None:
-            granularity = data_width
+            sel = a % (self.data_width // self.granularity)
+            adr = a // (self.data_width // self.granularity)
 
-        super().__init__(
-            {
-                "wb_bus": Out(
-                    Signature(
-                        addr_width=addr_width,
-                        data_width=data_width,
-                        granularity=granularity,
-                    )
-                )
-            }
-        )
+            ctx.set(self.adr, adr)
+            ctx.set(self.sel, 1 << sel)
+            await ctx.tick().until(self.ack)
+            ctx.set(self.cyc, 0)
+            ctx.set(self.stb, 0)
+            ret.append((ctx.get(self.dat_r) >> (sel * 8)) & 0xFF)
+            await ctx.tick()
 
-        self._addr_width = addr_width
-        self._data_width = data_width
-        self._granularity = granularity
-
-    @property
-    def addr_width(self):
-        return self._addr_width
-
-    @property
-    def data_width(self):
-        return self._data_width
-
-    @property
-    def granularity(self):
-        return self._granularity
-
-    def elaborate(self, platform):
-        return Module()
+        return bytes(ret)
 
     async def read(self, ctx, addr: int, width: int) -> list[int]:
         """Perform a read transaction.
@@ -79,22 +58,48 @@ class DebugAccess(wiring.Component):
             The read data as a list of Consts, one per byte.
         """
 
+        assert (
+            addr % (self.data_width // self.granularity) == 0
+        ), "Address must be aligned to data width/granularity"
+
         data = []
         for i in range(width):
-            ctx.set(self.wb_bus.adr, addr + i)
-            ctx.set(self.wb_bus.sel, ~0)
-            ctx.set(self.wb_bus.cyc, 1)
-            ctx.set(self.wb_bus.stb, 1)
-            ctx.set(self.wb_bus.we, 0)
-            await ctx.tick().until(self.wb_bus.ack)
-            data.append(ctx.get(self.wb_bus.dat_r))
-            ctx.set(self.wb_bus.cyc, 0)
-            ctx.set(self.wb_bus.stb, 0)
+            ctx.set(self.adr, addr + i)
+            ctx.set(self.sel, ~0)
+            ctx.set(self.cyc, 1)
+            ctx.set(self.stb, 1)
+            ctx.set(self.we, 0)
+            await ctx.tick().until(self.ack)
+            data.append(ctx.get(self.dat_r))
+            ctx.set(self.cyc, 0)
+            ctx.set(self.stb, 0)
             await ctx.tick()
         return data
 
+    async def write_bytes(self, ctx, addr: int, data: bytes) -> None:
+        """Perform writes of 8-bit data."""
+        assert self.granularity == 8, "Granularity must be 8 bits for write_bytes"
+
+        for i, byte in enumerate(data):
+            a = addr + i
+
+            ctx.set(self.cyc, 1)
+            ctx.set(self.stb, 1)
+            ctx.set(self.we, 1)
+
+            sel = a % (self.data_width // self.granularity)
+            adr = a // (self.data_width // self.granularity)
+
+            ctx.set(self.adr, adr)
+            ctx.set(self.dat_w, byte << (sel * 8))
+            ctx.set(self.sel, 1 << sel)
+            await ctx.tick().until(self.ack)
+            ctx.set(self.cyc, 0)
+            ctx.set(self.stb, 0)
+            await ctx.tick()
+
     async def write(self, ctx, addr: int, data: list[int]) -> None:
-        """Perform a write transaction.
+        """Perform a write transaction. on word-granularity.
 
         Parameters
         ----------
@@ -106,14 +111,18 @@ class DebugAccess(wiring.Component):
             The data to write as a list of Consts, one per byte.
         """
 
+        assert (
+            addr % (self.data_width // self.granularity) == 0
+        ), "Address must be aligned to data width/granularity"
+
         for i, datum in enumerate(data):
-            ctx.set(self.wb_bus.adr, addr // (self.data_width // self.granularity) + i)
-            ctx.set(self.wb_bus.dat_w, datum)
-            ctx.set(self.wb_bus.sel, ~0)
-            ctx.set(self.wb_bus.cyc, 1)
-            ctx.set(self.wb_bus.stb, 1)
-            ctx.set(self.wb_bus.we, 1)
-            await ctx.tick().until(self.wb_bus.ack)
-            ctx.set(self.wb_bus.cyc, 0)
-            ctx.set(self.wb_bus.stb, 0)
+            ctx.set(self.adr, addr // (self.data_width // self.granularity) + i)
+            ctx.set(self.dat_w, datum)
+            ctx.set(self.sel, ~0)
+            ctx.set(self.cyc, 1)
+            ctx.set(self.stb, 1)
+            ctx.set(self.we, 1)
+            await ctx.tick().until(self.ack)
+            ctx.set(self.cyc, 0)
+            ctx.set(self.stb, 0)
             await ctx.tick()

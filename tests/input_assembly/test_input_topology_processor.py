@@ -17,10 +17,10 @@ from ..utils.memory import DebugAccess, get_memory_resource
 
 def make_test_input_topology_processor(
     input_topology: InputTopology,
-    restart_index: int | None,
-    base_vertex: int,
     input: list[int],
     expected: list[int],
+    restart_index: int | None = None,
+    base_vertex: int = 0,
 ):
     m = Module()
 
@@ -38,13 +38,11 @@ def make_test_input_topology_processor(
     m.submodules.arbiter = arbiter = Arbiter(
         addr_width=32, data_width=32, granularity=8
     )
-    m.submodules.dbg_access = dbg_access = DebugAccess(
-        addr_width=32, data_width=32, granularity=8
-    )
+    dbg_access = DebugAccess(addr_width=32, data_width=32, granularity=8)
 
     decoder.add(csr_bridge.wb_bus, addr=0x00000000)
 
-    arbiter.add(dbg_access.wb_bus)
+    arbiter.add(dbg_access)
 
     wiring.connect(m, arbiter.bus, decoder.bus)
     arbiter.bus.memory_map = decoder.bus.memory_map
@@ -121,9 +119,7 @@ def make_test_input_topology_processor(
 def test_triangle_list():
     make_test_input_topology_processor(
         input_topology=InputTopology.TRIANGLE_LIST,
-        restart_index=None,
-        base_vertex=0,
-        input=[0, 1, 2, 3, 4, 5],
+        input=[0, 1, 2, 3, 4, 5, 999, 134],
         expected=[0, 1, 2, 3, 4, 5],
     )
 
@@ -131,28 +127,24 @@ def test_triangle_list():
 def test_base_vertex():
     make_test_input_topology_processor(
         input_topology=InputTopology.TRIANGLE_LIST,
-        restart_index=None,
-        base_vertex=10,
         input=[0, 1, 2, 3, 4, 5],
         expected=[10, 11, 12, 13, 14, 15],
+        base_vertex=10,
     )
 
 
 def test_triangle_list_with_restart():
     make_test_input_topology_processor(
         input_topology=InputTopology.TRIANGLE_LIST,
-        restart_index=0xFFFF,
-        base_vertex=0,
-        input=[0, 1, 2, 0xFFFF, 3, 4, 5, 6, 0xFFFF, 7, 8, 9],
+        input=[0, 1, 2, 0xFFFF_FFF8, 3, 4, 5, 6, 0xFFFF_FFF8, 7, 8, 9],
         expected=[0, 1, 2, 3, 4, 5, 7, 8, 9],
+        restart_index=0xFFFF_FFF8,
     )
 
 
 def test_triangle_strip():
     make_test_input_topology_processor(
         input_topology=InputTopology.TRIANGLE_STRIP,
-        restart_index=None,
-        base_vertex=0,
         input=[0, 1, 2, 3, 4],
         expected=[0, 1, 2, 2, 1, 3, 3, 2, 4],
     )
@@ -161,8 +153,6 @@ def test_triangle_strip():
 def test_triangle_fan():
     make_test_input_topology_processor(
         input_topology=InputTopology.TRIANGLE_FAN,
-        restart_index=None,
-        base_vertex=0,
         input=[0, 1, 2, 3, 4],
         expected=[0, 1, 2, 0, 2, 3, 0, 3, 4],
     )

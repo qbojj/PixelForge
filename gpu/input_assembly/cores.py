@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from amaranth import *
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
@@ -6,7 +8,14 @@ from amaranth_soc import csr
 from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 
 from ..utils.layouts import VertexLayout, num_textures
-from ..utils.types import IndexKind, InputTopology, address_shape, index_shape
+from ..utils.types import (
+    FixedPoint_mem,
+    IndexKind,
+    InputTopology,
+    Vector4_mem,
+    address_shape,
+    index_shape,
+)
 from .layouts import InputData, InputMode
 
 __all__ = [
@@ -26,7 +35,7 @@ class IndexGenerator(wiring.Component):
 
     os_index: Out(stream.Signature(index_shape))
 
-    bus: Out(wishbone_Signature(addr_width=32, data_width=32, granularity=8))
+    bus: Out(wishbone_Signature(addr_width=32, data_width=32))
 
     ready: Out(1)
 
@@ -92,9 +101,7 @@ class IndexGenerator(wiring.Component):
 
         data_read = Signal.like(self.bus.dat_r)
 
-        sel_width = len(self.bus.sel)
-
-        offset = address[0 : exact_log2(self.bus.data_width // self.bus.granularity)]
+        offset = address[0 : exact_log2(self.bus.data_width // 8)]
         extended_data = Signal(index_shape)
 
         with m.Switch(kind):
@@ -146,24 +153,12 @@ class IndexGenerator(wiring.Component):
 
             with m.State("MEM_READ_INIT"):
                 # initiate memory read
-
-                bytes_remaining = (count - cur_idx) << index_shift
-                max_mask = Signal.like(self.bus.sel)
-                with m.Switch(bytes_remaining):
-                    for i in range(sel_width):
-                        with m.Case(i):
-                            m.d.comb += max_mask.eq((1 << i) - 1)
-                    with m.Default():
-                        m.d.comb += max_mask.eq(~0)
-
                 m.d.sync += [
                     self.bus.cyc.eq(1),
-                    self.bus.adr.eq(
-                        address // (self.bus.data_width // self.bus.granularity)
-                    ),
+                    self.bus.adr.eq(address // (self.bus.data_width // 8)),
                     self.bus.we.eq(0),
                     self.bus.stb.eq(1),
-                    self.bus.sel.eq(max_mask >> offset),
+                    self.bus.sel.eq(~0),
                 ]
                 m.next = "MEM_READ_WAIT"
             with m.State("MEM_READ_WAIT"):
@@ -269,8 +264,9 @@ class InputTopologyProcessor(wiring.Component):
                     with m.If(self.os_index.ready):
                         m.d.sync += to_send_left.eq(i - 1)
 
+        m.d.comb += self.is_index.ready.eq(ready_for_input)
+
         with m.If(self.is_index.valid & ready_for_input):
-            m.d.comb += self.is_index.ready.eq(1)
             idx = self.is_index.payload
 
             with m.If(
@@ -419,36 +415,52 @@ class InputAssembly(wiring.Component):
 
     class InputDataReg(csr.Register, access="rw"):
         def __init__(self):
-            super().__init__(csr.Field(csr.action.RW, InputData))
+            super().__init__(
+                csr.Field(
+                    csr.action.RW,
+                    InputData,
+                    init=InputData.from_bits(
+                        Vector4_mem.const(
+                            [
+                                FixedPoint_mem.from_float_const(0.0),
+                                FixedPoint_mem.from_float_const(0.0),
+                                FixedPoint_mem.from_float_const(0.0),
+                                FixedPoint_mem.from_float_const(1.0),
+                            ]
+                        ).as_bits()
+                    ),
+                )
+            )
 
+    @dataclass
     class RegSet:
         mode: "InputAssembly.InputModeReg"
         info: "InputAssembly.InputDataReg"
 
     def __init__(self):
         super().__init__()
-        regs = csr.Builder(addr_width=4, data_width=32)
+        regs = csr.Builder(addr_width=8, data_width=8)
 
-        def make_reg_set():
-            v = self.RegSet()
-            v.mode = regs.add("mode", self.InputModeReg())
-            v.data = regs.add("data", self.InputDataReg())
-            return v
+        def make_reg_set(base):
+            return self.RegSet(
+                mode=regs.add("mode", self.InputModeReg(), offset=base + 0),
+                info=regs.add("data", self.InputDataReg(), offset=base + 0x10),
+            )
 
         with regs.Cluster("position"):
-            self.position = make_reg_set()
+            self.position = make_reg_set(0x00)
 
         with regs.Cluster("normal"):
-            self.normal = make_reg_set()
+            self.normal = make_reg_set(0x20)
 
         self.tex = []
         with regs.Cluster("texcoords"):
             for i in range(num_textures):
-                with regs.Index(i):
-                    self.tex.append(make_reg_set())
+                with regs.Cluster(str(i)):  # TODO: change to regs.Index
+                    self.tex.append(make_reg_set(0x40 + i * 0x20))
 
         with regs.Cluster("color"):
-            self.color = make_reg_set()
+            self.color = make_reg_set(0x40 + num_textures * 0x20)
 
         self.csr_bridge = csr.Bridge(regs.as_memory_map())
         self.csr_bus = self.csr_bridge.bus
@@ -463,20 +475,21 @@ class InputAssembly(wiring.Component):
         idx = Signal.like(self.is_index.payload)
         vtx = Signal.like(self.os_vertex.payload)
 
-        addr = Signal.like(desc.info.f.data.per_vertex.address)
+        addr = Signal.like(self.position.info.f.data.per_vertex.address)
 
         output_next_free = ~self.os_vertex.valid | self.os_vertex.ready
 
         with m.If(self.os_vertex.ready):
             m.d.sync += self.os_vertex.valid.eq(0)
 
+        @dataclass
         class AttrInfo:
             desc: "InputAssembly.RegSet"
             data_v: Signal
 
             @property
             def components(self) -> int:
-                return self.data_v.shape().num_components
+                return len(self.data_v)
 
         attr_info = [
             AttrInfo(
@@ -514,7 +527,7 @@ class InputAssembly(wiring.Component):
             for attr_no, attr in enumerate(attr_info):
                 base_name = f"FETCH_ATTR_{attr_no}"
                 with m.State(f"{base_name}_START"):
-                    desc = attr["desc"]
+                    desc = attr.desc
                     with m.Switch(desc.mode.f.data):
                         with m.Case(InputMode.CONSTANT):
                             # constant value
@@ -534,22 +547,24 @@ class InputAssembly(wiring.Component):
                         with m.Default():
                             m.d.sync += Assert(0, "Unknown input mode")
 
-                for i in range(len(desc.components)):
+                for i in range(len(attr.data_v)):
                     with m.State(f"{base_name}_MEM_READ_COMPONENT_{i}"):
                         # initiate memory read
                         m.d.sync += [
                             self.bus.cyc.eq(1),
-                            self.bus.adr.eq(addr),
+                            self.bus.adr.eq(addr // (self.bus.data_width // 8)),
                             self.bus.we.eq(0),
                             self.bus.stb.eq(1),
-                            self.bus.sel.eq(0b1111),  # 32-bits
+                            self.bus.sel.eq(~0),
                         ]
                         m.next = f"{base_name}_MEM_WAIT_{i}"
 
                     with m.State(f"{base_name}_MEM_WAIT_{i}"):
                         with m.If(self.bus.ack):
                             # parse and store
-                            m.d.sync += attr.data_v[i].eq_reinterpret(self.bus.dat_r)
+                            m.d.sync += attr.data_v[i].eq_reinterpret(
+                                FixedPoint_mem(self.bus.dat_r)
+                            )
 
                             # deassert memory access
                             m.d.sync += [
@@ -567,16 +582,16 @@ class InputAssembly(wiring.Component):
                                 # all components read
                                 m.next = f"{base_name}_DONE"
 
-                    with m.State(f"{base_name}_DONE"):
-                        if attr_no == len(attr_info) - 1:
-                            # last attribute -> output vertex
-                            with m.If(output_next_free):
-                                m.d.sync += [
-                                    self.os_vertex.payload.eq(vtx),
-                                    self.os_vertex.valid.eq(1),
-                                ]
-                                m.next = "IDLE"
-                        else:
-                            m.next = f"FETCH_ATTR_{attr_no + 1}_START"
+                with m.State(f"{base_name}_DONE"):
+                    if attr_no == len(attr_info) - 1:
+                        # last attribute -> output vertex
+                        with m.If(output_next_free):
+                            m.d.sync += [
+                                self.os_vertex.payload.eq(vtx),
+                                self.os_vertex.valid.eq(1),
+                            ]
+                            m.next = "IDLE"
+                    else:
+                        m.next = f"FETCH_ATTR_{attr_no + 1}_START"
 
         return m

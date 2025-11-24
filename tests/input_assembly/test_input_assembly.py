@@ -1,5 +1,3 @@
-import inspect
-
 import pytest
 from amaranth import *
 from amaranth.lib import wiring
@@ -12,13 +10,7 @@ from amaranth_soc.wishbone.sram import WishboneSRAM
 
 from gpu.input_assembly.cores import InputAssembly
 from gpu.input_assembly.layouts import InputData, InputMode
-from gpu.utils.types import (
-    FixedPoint,
-    FixedPoint_mem,
-    Vector3,
-    Vector4,
-    Vector4_mem,
-)
+from gpu.utils.types import FixedPoint, FixedPoint_mem, Vector3, Vector4, Vector4_mem
 
 from ..utils.memory import DebugAccess, get_memory_resource
 from ..utils.streams import stream_get, stream_put
@@ -47,7 +39,8 @@ vec000 = [
 default_data = InputData.const({"constant_value": vec0001_mem})
 
 
-def make_test_input_assmebly(
+def make_test_input_assembly(
+    test_name: str,
     addr: int,
     input_idx: list[int],
     memory_data: bytes,
@@ -165,20 +158,12 @@ def make_test_input_assmebly(
     sim.add_process(sender)
     sim.add_testbench(tb)
 
-    prev_func_name = None
-    for frame in reversed(inspect.stack()):
-        if frame.function.startswith("test_"):
-            prev_func_name = frame.function
-            break
-
     try:
         sim.run()
     except Exception:
         sim.reset()
 
-        with sim.write_vcd(
-            f"{prev_func_name}.vcd", f"{prev_func_name}.gtkw", traces=dut
-        ):
+        with sim.write_vcd(f"{test_name}.vcd", f"{test_name}.gtkw", traces=dut):
             sim.run()
 
 
@@ -220,7 +205,8 @@ vec5678 = Vector4.const(
 
 
 def test_input_assembly_constant_only():
-    make_test_input_assmebly(
+    make_test_input_assembly(
+        test_name="test_input_assembly_constant_only",
         addr=0x80000000,
         memory_data=b"",
         input_idx=[0, 1, 2, 3, 4],
@@ -237,21 +223,21 @@ def test_input_assembly_constant_only():
 
 
 @pytest.mark.parametrize(
-    ["comp", "comp_in", "separation"],
+    ["test_name", "comp", "comp_in", "separation"],
     [
-        ("position", "pos", 0),
-        ("normal", "norm", 0),
-        ("texcoords[0]", "tex0", 0),
-        ("texcoords[1]", "tex1", 0),
-        ("color", "color", 0),
-        ("position", "pos", 4),
-        ("normal", "norm", 8),
-        ("texcoords[0]", "tex0", 12),
-        ("texcoords[1]", "tex1", 16),
-        ("color", "color", 20),
+        ("test_input_assembly_continous_pos", "position", "pos", 0),
+        ("test_input_assembly_continous_norm", "normal", "norm", 0),
+        ("test_input_assembly_continous_tex0", "texcoords[0]", "tex0", 0),
+        ("test_input_assembly_continous_tex1", "texcoords[1]", "tex1", 0),
+        ("test_input_assembly_continous_col", "color", "color", 0),
+        ("test_input_assembly_strided_4_pos", "position", "pos", 4),
+        ("test_input_assembly_strided_8_norm", "normal", "norm", 8),
+        ("test_input_assembly_strided_12_tex0", "texcoords[0]", "tex0", 12),
+        ("test_input_assembly_strided_16_tex1", "texcoords[1]", "tex1", 16),
+        ("test_input_assembly_strided_20_col", "color", "color", 20),
     ],
 )
-def test_input_assembly_continous_single_component(comp, comp_in, separation):
+def test_input_assembly_single_component(test_name, comp, comp_in, separation):
     expected = [
         {
             "position": vec0001,
@@ -292,7 +278,8 @@ def test_input_assembly_continous_single_component(comp, comp_in, separation):
         ),
     }
 
-    make_test_input_assmebly(
+    make_test_input_assembly(
+        test_name=test_name,
         addr=0x80000000,
         memory_data=b"".join(
             (

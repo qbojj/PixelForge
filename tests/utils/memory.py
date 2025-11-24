@@ -1,4 +1,3 @@
-from amaranth import *
 from amaranth_soc.memory import MemoryMap, ResourceInfo
 from amaranth_soc.wishbone.bus import Interface
 
@@ -28,8 +27,8 @@ class DebugAccess(Interface):
             ctx.set(self.stb, 1)
             ctx.set(self.we, 0)
 
-            sel = a % (self.data_width // self.granularity)
-            adr = a // (self.data_width // self.granularity)
+            sel = a % (self.data_width // 8)
+            adr = a // (self.data_width // 8)
 
             ctx.set(self.adr, adr)
             ctx.set(self.sel, 1 << sel)
@@ -80,19 +79,34 @@ class DebugAccess(Interface):
         """Perform writes of 8-bit data."""
         assert self.granularity == 8, "Granularity must be 8 bits for write_bytes"
 
-        for i, byte in enumerate(data):
-            a = addr + i
+        # separate data by address alignment and write them block by block
+        # (each block should have different address // (data_width // 8))
+        blocks: list[tuple[int, int, bytearray]] = []  # addr_block, start_idx, data
+        for byte, adr in zip(data, range(addr, addr + len(data))):
+            addr_block = adr // (self.data_width // 8)
+            if len(blocks) == 0 or blocks[-1][0] != addr_block:
+                off = adr % (self.data_width // 8)
+                blocks.append((addr_block, off, bytearray([byte])))
+            else:
+                blocks[-1] = (
+                    blocks[-1][0],
+                    blocks[-1][1],
+                    blocks[-1][2] + bytearray([byte]),
+                )
 
+        for addr_block, start_idx, block_data in blocks:
+            # write block_data to addr_block
             ctx.set(self.cyc, 1)
             ctx.set(self.stb, 1)
             ctx.set(self.we, 1)
-
-            sel = a % (self.data_width // self.granularity)
-            adr = a // (self.data_width // self.granularity)
-
-            ctx.set(self.adr, adr)
-            ctx.set(self.dat_w, byte << (sel * 8))
-            ctx.set(self.sel, 1 << sel)
+            ctx.set(self.adr, addr_block)
+            dat_w_v = 0
+            sel_v = 0
+            for i, byte in enumerate(block_data, start=start_idx):
+                dat_w_v |= byte << (i * 8)
+                sel_v |= 1 << i
+            ctx.set(self.dat_w, dat_w_v)
+            ctx.set(self.sel, sel_v)
             await ctx.tick().until(self.ack)
             ctx.set(self.cyc, 0)
             ctx.set(self.stb, 0)

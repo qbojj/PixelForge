@@ -2,9 +2,10 @@ import pytest
 from amaranth import *
 from amaranth.sim import Simulator
 
-from gpu.utils import fixed
 from gpu.utils.math import FixedPointVecNormalize
-from gpu.utils.types import FixedPoint, Vector3
+from gpu.utils.types import Vector3
+
+from .streams import stream_testbench
 
 
 @pytest.mark.parametrize(
@@ -15,51 +16,34 @@ from gpu.utils.types import FixedPoint, Vector3
         ([0.0, 0.0, 1.0], [0.0, 0.0, 1.0]),
         ([3.0, 4.0, 0.0], [0.6, 0.8, 0.0]),
         ([-3.0, -4.0, 0.0], [-0.6, -0.8, 0.0]),
+        ([-3.0, 4.0, 0.0], [-0.6, 0.8, 0.0]),
+        ([0.2, 0.0, 0.0], [1.0, 0.0, 0.0]),
     ]
     + [([float(i), 0.0, 0.0], [1.0, 0.0, 0.0]) for i in range(1, 10)],
 )
 def test_normalize(data: list[float], expected: list[float]):
-    rst = Signal(1)
-    dut = ResetInserter(rst)(FixedPointVecNormalize(Vector3))
+    dut = FixedPointVecNormalize(Vector3, inv_sqrt_steps=6)
 
-    async def tb_operation(data, expected, ctx):
-        ctx.set(rst, 1)
-        ctx.set(dut.start, 0)
-        await ctx.tick()
-        ctx.set(rst, 0)
-        await ctx.tick()
-
+    async def output_checker(ctx, results):
+        results = [[v.as_float() for v in r] for r in results]
+        print("Input data:", data)
+        print("Checking output:", results)
+        print("Expected data:", [expected])
         print()
-        print(f"Testing with input: {data}")
 
-        ctx.set(dut.value, [fixed.Const(v, FixedPoint) for v in data])
-        ctx.set(dut.start, 1)
-
-        await ctx.tick()
-        ctx.set(dut.start, 0)
-
-        print("Waiting for ready signal...")
-
-        cycles = 0
-        while not ctx.get(dut.ready):
-            await ctx.tick()
-            cycles += 1
-
-        result = ctx.get(dut.result)
-        result = [ctx.get(r).as_float() for r in result]
-        print(f"got {result}; expected {expected} ({cycles=})")
-
-        await ctx.tick()
-
-        if not all(abs(r - e) < 1e-1 for r, e in zip(result, expected)):
-            raise AssertionError("Test failed!")
-
-    async def tb_normalize(ctx):
-        await tb_operation(data, expected, ctx)
+        assert len(results) == 1
+        assert all(abs(r - e) < 1e-3 for r, e in zip(results[0], expected))
 
     sim = Simulator(dut)
     sim.add_clock(1e-6)
-    sim.add_testbench(tb_normalize)
+    stream_testbench(
+        sim,
+        input_stream=dut.i,
+        input_data=[Vector3.const(data)],
+        output_stream=dut.o,
+        output_data_checker=output_checker,
+        idle_for=100,
+    )
 
     try:
         sim.run()

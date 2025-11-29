@@ -4,40 +4,12 @@ from amaranth.sim import Simulator
 
 from gpu.input_assembly.cores import InputAssembly
 from gpu.input_assembly.layouts import InputData, InputMode
-from gpu.utils import fixed
-from gpu.utils.types import FixedPoint, FixedPoint_mem, Vector3, Vector4, Vector4_mem
+from gpu.utils.types import Vector4_mem
 
 from ..utils.streams import stream_testbench
 from ..utils.testbench import SimpleTestbench
 
-vec0001_mem = Vector4_mem.const(
-    [
-        fixed.Const(0.0, FixedPoint_mem),
-        fixed.Const(0.0, FixedPoint_mem),
-        fixed.Const(0.0, FixedPoint_mem),
-        fixed.Const(1.0, FixedPoint_mem),
-    ]
-)
-
-vec0001 = Vector4.const(
-    [
-        fixed.Const(0.0, FixedPoint),
-        fixed.Const(0.0, FixedPoint),
-        fixed.Const(0.0, FixedPoint),
-        fixed.Const(1.0, FixedPoint),
-    ]
-)
-
-vec000 = Vector3.const(
-    [
-        fixed.Const(0.0, FixedPoint),
-        fixed.Const(0.0, FixedPoint),
-        fixed.Const(0.0, FixedPoint),
-    ]
-)
-
-
-default_data = InputData.const({"constant_value": vec0001_mem})
+default_data = InputData.const({"constant_value": [0.0, 0.0, 0.0, 1.0]})
 
 
 def make_test_input_assembly(
@@ -62,16 +34,16 @@ def make_test_input_assembly(
     t.set_csrs(
         t.dut.csr_bus,
         [
-            ((("position", "mode"),), pos_mode.value.to_bytes(1, "little")),
-            ((("position", "data"),), pos_data.as_bits().to_bytes(16, "little")),
-            ((("normal", "mode"),), norm_mode.value.to_bytes(1, "little")),
-            ((("normal", "data"),), norm_data.as_bits().to_bytes(16, "little")),
-            ((("texcoords", "0", "mode"),), tex0_mode.value.to_bytes(1, "little")),
-            ((("texcoords", "0", "data"),), tex0_data.as_bits().to_bytes(16, "little")),
-            ((("texcoords", "1", "mode"),), tex1_mode.value.to_bytes(1, "little")),
-            ((("texcoords", "1", "data"),), tex1_data.as_bits().to_bytes(16, "little")),
-            ((("color", "mode"),), color_mode.value.to_bytes(1, "little")),
-            ((("color", "data"),), color_data.as_bits().to_bytes(16, "little")),
+            ((("position", "mode"),), pos_mode),
+            ((("position", "data"),), pos_data),
+            ((("normal", "mode"),), norm_mode),
+            ((("normal", "data"),), norm_data),
+            ((("texcoords", "0", "mode"),), tex0_mode),
+            ((("texcoords", "0", "data"),), tex0_data),
+            ((("texcoords", "1", "mode"),), tex1_mode),
+            ((("texcoords", "1", "data"),), tex1_data),
+            ((("color", "mode"),), color_mode),
+            ((("color", "data"),), color_data),
         ],
         "input_assembly",
     )
@@ -104,43 +76,6 @@ def make_test_input_assembly(
             sim.run()
 
 
-vec1234_mem = Vector4_mem.const(
-    [
-        fixed.Const(1.0, FixedPoint_mem),
-        fixed.Const(2.0, FixedPoint_mem),
-        fixed.Const(3.0, FixedPoint_mem),
-        fixed.Const(4.0, FixedPoint_mem),
-    ]
-)
-
-vec1234 = Vector4.const(
-    [
-        fixed.Const(1.0, FixedPoint),
-        fixed.Const(2.0, FixedPoint),
-        fixed.Const(3.0, FixedPoint),
-        fixed.Const(4.0, FixedPoint),
-    ]
-)
-
-vec5678_mem = Vector4_mem.const(
-    [
-        fixed.Const(5.0, FixedPoint_mem),
-        fixed.Const(6.0, FixedPoint_mem),
-        fixed.Const(7.0, FixedPoint_mem),
-        fixed.Const(8.0, FixedPoint_mem),
-    ]
-)
-
-vec5678 = Vector4.const(
-    [
-        fixed.Const(5.0, FixedPoint),
-        fixed.Const(6.0, FixedPoint),
-        fixed.Const(7.0, FixedPoint),
-        fixed.Const(8.0, FixedPoint),
-    ]
-)
-
-
 def test_input_assembly_constant_only():
     make_test_input_assembly(
         test_name="test_input_assembly_constant_only",
@@ -149,10 +84,10 @@ def test_input_assembly_constant_only():
         input_idx=[0, 1, 2, 3, 4],
         expected=[
             {
-                "position": vec0001,
-                "normal": vec000,
-                "texcoords": [vec0001, vec0001],
-                "color": vec0001,
+                "position": [0.0, 0.0, 0.0, 1.0],
+                "normal": [0.0, 0.0, 0.0],
+                "texcoords": [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]],
+                "color": [0.0, 0.0, 0.0, 1.0],
             }
             for _ in range(5)
         ],
@@ -177,31 +112,31 @@ def test_input_assembly_constant_only():
 def test_input_assembly_single_component(test_name, comp, comp_in, separation):
     expected = [
         {
-            "position": vec0001,
-            "normal": vec000,
-            "texcoords": [vec0001, vec0001],
-            "color": vec0001,
+            "position": [0.0, 0.0, 0.0, 1.0],
+            "normal": [0.0, 0.0, 0.0],
+            "texcoords": [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]],
+            "color": [0.0, 0.0, 0.0, 1.0],
         },
         {
-            "position": vec0001,
-            "normal": vec000,
-            "texcoords": [vec0001, vec0001],
-            "color": vec0001,
+            "position": [0.0, 0.0, 0.0, 1.0],
+            "normal": [0.0, 0.0, 0.0],
+            "texcoords": [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]],
+            "color": [0.0, 0.0, 0.0, 1.0],
         },
     ]
 
     if comp == "texcoords[0]":
-        expected[0]["texcoords"][0] = vec1234
-        expected[1]["texcoords"][0] = vec5678
+        expected[0]["texcoords"][0] = [1.0, 2.0, 3.0, 4.0]
+        expected[1]["texcoords"][0] = [5.0, 6.0, 7.0, 8.0]
     elif comp == "texcoords[1]":
-        expected[0]["texcoords"][1] = vec1234
-        expected[1]["texcoords"][1] = vec5678
+        expected[0]["texcoords"][1] = [1.0, 2.0, 3.0, 4.0]
+        expected[1]["texcoords"][1] = [5.0, 6.0, 7.0, 8.0]
     elif comp == "normal":
-        expected[0][comp] = Vector3.const(vec1234[:3])
-        expected[1][comp] = Vector3.const(vec5678[:3])
+        expected[0][comp] = [1.0, 2.0, 3.0]
+        expected[1][comp] = [5.0, 6.0, 7.0]
     else:
-        expected[0][comp] = vec1234
-        expected[1][comp] = vec5678
+        expected[0][comp] = [1.0, 2.0, 3.0, 4.0]
+        expected[1][comp] = [5.0, 6.0, 7.0, 8.0]
 
     v = {
         f"{comp_in}_mode": InputMode.PER_VERTEX,
@@ -209,11 +144,14 @@ def test_input_assembly_single_component(test_name, comp, comp_in, separation):
             {
                 "per_vertex": {
                     "address": 0x80000000,
-                    "stride": (Vector4_mem.size // 8) + separation,
+                    "stride": 16 + separation,
                 }
             }
         ),
     }
+
+    vec1234_mem = Vector4_mem.const([1.0, 2.0, 3.0, 4.0])
+    vec5678_mem = Vector4_mem.const([5.0, 6.0, 7.0, 8.0])
 
     make_test_input_assembly(
         test_name=test_name,

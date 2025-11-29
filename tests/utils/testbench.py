@@ -9,6 +9,10 @@ from amaranth_soc.wishbone.sram import WishboneSRAM
 from tests.utils.memory import DebugAccess, get_memory_resource
 
 
+def div_ceil(a: int, b: int) -> int:
+    return (a + b - 1) // b
+
+
 class SimpleTestbench:
     def __init__(
         self,
@@ -62,14 +66,21 @@ class SimpleTestbench:
     def set_csrs(
         self,
         csr_bus: csr.Interface,
-        data: list[tuple[tuple, bytes]],
+        data: list[tuple[tuple, bytes | Const]],
         name: str | None = None,
     ):
         if name is None:
             name = f"csr_window_{len(self.csrs)}"
 
+        prepared_data = []
+        for path, value in data:
+            if not isinstance(value, bytes):
+                value = Const.cast(value)
+                value = value.value.to_bytes(div_ceil(len(value), 8), "little")
+            prepared_data.append((path, value))
+
         self.csr_decoder.add(csr_bus, name=name)
-        self.csrs.append((name, data))
+        self.csrs.append((name, prepared_data))
 
     def make(self):
         m = self.m

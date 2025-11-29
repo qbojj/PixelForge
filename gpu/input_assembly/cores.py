@@ -7,14 +7,11 @@ from amaranth.utils import exact_log2
 from amaranth_soc import csr
 from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 
-from gpu.utils import fixed
-
 from ..utils.layouts import VertexLayout, num_textures
 from ..utils.types import (
     FixedPoint_mem,
     IndexKind,
     InputTopology,
-    Vector4_mem,
     address_shape,
     index_shape,
 )
@@ -422,16 +419,9 @@ class InputAssembly(wiring.Component):
                 csr.Field(
                     csr.action.RW,
                     InputData,
-                    init=InputData.from_bits(
-                        Vector4_mem.const(
-                            [
-                                fixed.Const(0.0, FixedPoint_mem),
-                                fixed.Const(0.0, FixedPoint_mem),
-                                fixed.Const(0.0, FixedPoint_mem),
-                                fixed.Const(1.0, FixedPoint_mem),
-                            ]
-                        ).as_bits()
-                    ),
+                    init={
+                        "constant_value": [0.0, 0.0, 0.0, 1.0],
+                    },
                 )
             )
 

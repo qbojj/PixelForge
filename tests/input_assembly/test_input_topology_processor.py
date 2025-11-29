@@ -18,19 +18,16 @@ def make_test_input_topology_processor(
 ):
     t = SimpleTestbench(InputTopologyProcessor())
 
-    for res in t.dut.csr_bus.memory_map.all_resources():
-        print("CSR Resource:", res.path)
-
     t.set_csrs(
         t.dut.csr_bus,
         [
-            (("input_topology",), input_topology.value.to_bytes(4, "little")),
+            (("input_topology",), input_topology),
             (
                 ("primitive_restart_enable",),
-                (1 if restart_index is not None else 0).to_bytes(4, "little"),
+                1 if restart_index is not None else 0,
             ),
-            (("primitive_restart_index",), (restart_index or 0).to_bytes(4, "little")),
-            (("base_vertex",), base_vertex.to_bytes(4, "little")),
+            (("primitive_restart_index",), restart_index or 0),
+            (("base_vertex",), C(base_vertex, 32)),
         ],
         "input_topology_processor",
     )

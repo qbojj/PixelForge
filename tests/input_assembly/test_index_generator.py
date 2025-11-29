@@ -19,10 +19,10 @@ def make_test_index_generator(
     t.set_csrs(
         t.dut.csr_bus,
         [
-            (("address",), addr.to_bytes(4, "little")),
-            (("count",), count.to_bytes(4, "little")),
-            (("kind",), kind.value.to_bytes(4, "little")),
-            (("start",), (1).to_bytes(1, "little")),
+            (("address",), C(addr, 32)),
+            (("count",), C(count, 32)),
+            (("kind",), kind),
+            (("start",), 1),
         ],
         "index_gen",
     )

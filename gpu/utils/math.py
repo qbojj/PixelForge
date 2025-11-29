@@ -1,136 +1,104 @@
 from amaranth import *
-from amaranth.lib import wiring
+from amaranth.lib import stream, wiring
 from amaranth.lib.wiring import In, Out
 
 from . import fixed
 
 
-class VectorizedOperation(wiring.Component):
+class VectorToStream(wiring.Component):
     """
-    Multi-cycle vector operation component.
+    Converts a vector signal into a stream signal.
     """
 
-    def __init__(
-        self, operation, input_type_left, input_type_right=None, output_type=None
-    ):
-        if input_type_right is None:
-            input_type_right = input_type_left
-        if output_type is None:
-            output_type = input_type_left
-
+    def __init__(self, vector_type):
         super().__init__(
             {
-                "a": In(input_type_left),
-                "b": In(input_type_right),
-                "result": Out(output_type),
-                "start": In(1),
-                "ready": Out(1),
+                "i": In(stream.Signature(vector_type)),
+                "o": Out(stream.Signature(vector_type.elem_shape)),
             }
         )
-        self.operation = operation
+        self.vector_type = vector_type
 
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        a_v = Signal.like(self.a)
-        b_v = Signal.like(self.b)
+        num_elem = self.vector_type.length
+        to_send = Array(Signal(self.vector_type.elem_shape) for _ in range(num_elem))
 
-        m.submodules.op = op = self.operation()
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        def next_state(i):
+            if i + 1 < num_elem:
+                return f"SEND_{i + 1}"
+            else:
+                return "IDLE"
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += self.ready.eq(1)
-                with m.If(self.start):
+                with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
                     m.d.sync += [
-                        a_v.eq(self.a),
-                        b_v.eq(self.b),
-                    ]
-                    m.next = "STEP_0"
-            for cycle in range(len(self.a)):
-                with m.State(f"STEP_{cycle}"):
-                    m.d.comb += [
-                        op.a.eq(a_v[cycle]),
-                        op.b.eq(b_v[cycle]),
-                    ]
-                    m.d.sync += self.result[cycle].eq(op.result)
-
-                    m.next = "IDLE" if cycle == len(self.a) - 1 else f"STEP_{cycle + 1}"
+                        self.o.p.eq(self.i.p[0]),
+                        self.o.valid.eq(1),
+                    ] + [to_send[j].eq(self.i.p[j]) for j in range(1, num_elem)]
+                    m.d.comb += self.i.ready.eq(1)
+                    m.next = next_state(0)
+            for i in range(1, num_elem):
+                with m.State(f"SEND_{i}"):
+                    with m.If(self.o.ready | ~self.o.valid):
+                        m.d.sync += [
+                            self.o.p.eq(to_send[i]),
+                            self.o.valid.eq(1),
+                        ]
+                        m.next = next_state(i)
 
         return m
 
 
-class VectorizedOperationMC(wiring.Component):
+class StreamToVector(wiring.Component):
     """
-    Multi-cycle vector operation component for multi-cycle operations.
+    Converts a stream signal into a vector signal.
     """
 
-    def __init__(
-        self, operation, input_type_left, input_type_right=None, output_type=None
-    ):
-        if input_type_right is None:
-            input_type_right = input_type_left
-        if output_type is None:
-            output_type = input_type_left
-
+    def __init__(self, vector_type):
         super().__init__(
             {
-                "a": In(input_type_left),
-                "b": In(input_type_right),
-                "result": Out(output_type),
-                "start": In(1),
-                "ready": Out(1),
+                "i": In(stream.Signature(vector_type.elem_shape)),
+                "o": Out(stream.Signature(vector_type)),
             }
         )
-        self.operation = operation
+        self.vector_type = vector_type
 
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        a_v = Signal.like(self.a)
-        b_v = Signal.like(self.b)
+        num_elem = self.vector_type.length
+        received = Array(
+            Signal(self.vector_type.elem_shape) for _ in range(num_elem - 1)
+        )
 
-        m.submodules.op = op = self.operation()
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
-            with m.State("IDLE"):
-                m.d.comb += self.ready.eq(1)
-                with m.If(self.start):
+            for i in range(0, num_elem - 1):
+                with m.State(f"RECEIVE_{i}"):
+                    with m.If(self.i.valid):
+                        m.d.sync += (received[i].eq(self.i.p),)
+                        m.d.comb += self.i.ready.eq(1)
+                        m.next = f"RECEIVE_{i + 1}"
+            with m.State(f"RECEIVE_{num_elem - 1}"):
+                with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
                     m.d.sync += [
-                        a_v.eq(self.a),
-                        b_v.eq(self.b),
+                        self.o.p.eq(
+                            Cat([received[j] for j in range(num_elem - 1)] + [self.i.p])
+                        ),
+                        self.o.valid.eq(1),
                     ]
-                    m.d.comb += [
-                        op.a.eq(self.a[0]),
-                        op.b.eq(self.b[0]),
-                        op.start.eq(1),
-                    ]
-                    m.next = "STEP_0"
-            for cycle in range(len(self.a)):
-                with m.State(f"STEP_{cycle}"):
-                    with m.If(op.ready):
-                        m.d.sync += self.result[cycle].eq(op.result)
-
-                        if cycle < len(self.a) - 1:
-                            m.d.comb += [
-                                op.a.eq(a_v[cycle + 1]),
-                                op.b.eq(b_v[cycle + 1]),
-                                op.start.eq(1),
-                            ]
-                            m.next = f"STEP_{cycle + 1}"
-                        else:
-                            m.next = "IDLE"
+                    m.d.comb += self.i.ready.eq(1)
+                    m.next = "RECEIVE_0"
 
         return m
-
-
-def count_leading_zeros(value: Value) -> Value:
-    width = len(value)
-
-    ret = C(width)
-    for i in range(width):
-        ret = Mux(value[i] == 0, ret, C(width - i - 1))
-
-    return ret
 
 
 class FixedPointInvSqrtSmallDomain(wiring.Component):
@@ -144,10 +112,8 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
     def __init__(self, type: fixed.Shape, steps: int = 2):
         super().__init__(
             {
-                "value": In(type),
-                "result": Out(type),
-                "start": In(1),
-                "ready": Out(1),
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(type)),
             }
         )
         self.steps = steps
@@ -176,11 +142,11 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += [self.ready.eq(1), self.result.eq(x)]
-                with m.If(self.start):
+                with m.If(self.i.valid):
+                    m.d.comb += self.i.ready.eq(1)
                     m.d.sync += [
-                        half_v.eq(self.value >> 1),
-                        x.eq(fixed.Const(0.88)),  # Initial guess
+                        half_v.eq(self.i.p >> 1),
+                        x.eq(0.88),  # Initial guess
                     ]
                     m.next = "ITERATE_0_STEP_0"
             for i in range(self.steps):
@@ -211,12 +177,50 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                     new_x = three_halfs_x - mul_result
                     m.d.sync += [x.eq(new_x)]
                     if i == self.steps - 1:
-                        m.next = "IDLE"
+                        m.next = "SEND_RESULT"
                     else:
-                        with m.If(x == new_x):
-                            m.next = "IDLE"
-                        with m.Else():
-                            m.next = f"ITERATE_{i + 1}_STEP_0"
+                        m.next = f"ITERATE_{i + 1}_STEP_0"
+            with m.State("SEND_RESULT"):
+                with m.If(self.o.ready | ~self.o.valid):
+                    m.d.sync += [
+                        self.o.p.eq(x),
+                        self.o.valid.eq(1),
+                    ]
+                    m.next = "IDLE"
+
+        return m
+
+
+class CountLeadingZeros(wiring.Component):
+    """
+    Counts leading zeros in a FixedPoint number.
+    """
+
+    def __init__(self, type: Shape):
+        super().__init__(
+            {
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(range(type.width + 1))),
+            }
+        )
+
+    def elaborate(self, platform) -> Module:
+        m = Module()
+        width = self.i.p.shape().width
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
+            with m.Switch(self.i.p):
+                for i in range(width):
+                    with m.Case("0" * i + "1" + "-" * (width - i - 1)):
+                        m.d.sync += self.o.p.eq(i)
+                with m.Case("0" * width):
+                    m.d.sync += self.o.p.eq(width)
+
+            m.d.sync += self.o.valid.eq(1)
+            m.d.comb += self.i.ready.eq(1)
 
         return m
 
@@ -230,10 +234,8 @@ class FixedPointInvSqrt(wiring.Component):
     def __init__(self, type: fixed.Shape, steps: int = 2):
         super().__init__(
             {
-                "value": In(type),
-                "result": Out(type),
-                "start": In(1),
-                "ready": Out(1),
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(type)),
             }
         )
         self.steps = steps
@@ -247,76 +249,86 @@ class FixedPointInvSqrt(wiring.Component):
         m.submodules.inv_sqrt_small = inv_sqrt_small = FixedPointInvSqrtSmallDomain(
             small_type, self.steps
         )
+        m.submodules.clz = clz = CountLeadingZeros(self.type.as_shape())
 
         v = Signal(self.type)
         norm_value = Signal(self.type)
         lz = Signal(range(data_bits))
         shift_value = Signal(range(-data_bits, data_bits + 1))
-        inv_sqrt_data_in = Signal(small_type)
-        inv_sqrt_data_out = Signal(small_type)
         pre_shift_value = Signal(small_type)
 
         m.d.comb += [
-            inv_sqrt_small.value.eq(inv_sqrt_data_in),
-            inv_sqrt_data_out.eq(inv_sqrt_small.result),
-            shift_value.eq(lz - (self.type.i_bits - small_type.i_bits)),  # - 1),
+            shift_value.eq(lz - (self.type.i_bits - small_type.i_bits)),
         ]
 
-        def do_shift_by(value: Value, shift: Value) -> Value:
-            """Shift value by shift (can be negative)."""
-            return Mux(
-                shift >= 0,
-                (value << shift.as_unsigned())[: len(value)],
-                value >> (-shift).as_unsigned(),
-            )
+        # no pipelining for now
+        m.d.comb += [
+            clz.o.ready.eq(1),
+            inv_sqrt_small.o.ready.eq(1),
+        ]
+
+        with m.If(clz.i.ready):
+            m.d.sync += clz.i.valid.eq(0)
+
+        with m.If(inv_sqrt_small.i.ready):
+            m.d.sync += inv_sqrt_small.i.valid.eq(0)
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += [self.ready.eq(1), self.result.eq(norm_value)]
-                with m.If(self.start):
-                    with m.If(self.value <= 0):
-                        m.d.sync += [
-                            # Return 0 for non-positive inputs
-                            norm_value.eq(fixed.Const(0.0)),
-                        ]
-                        m.next = "IDLE"
-                    with m.Else():
-                        m.d.sync += v.eq(self.value)
-                        m.next = "CLZ"
+                with m.If(self.i.valid):
+                    m.d.sync += v.eq(self.i.p)
+                    m.d.comb += self.i.ready.eq(1)
+
+                    m.d.sync += [
+                        clz.i.valid.eq(1),
+                        clz.i.p.eq(self.i.p),
+                    ]
+
+                    m.next = "CLZ"
+
             with m.State("CLZ"):
-                m.d.sync += [
-                    lz.eq(count_leading_zeros(v.as_value())),
-                ]
-                m.next = "NORMALIZE"
-            with m.State("NORMALIZE"):
-                m.d.comb += [
-                    inv_sqrt_data_in.eq(v.as_value() << lz),
-                    inv_sqrt_small.start.eq(1),
-                ]
-                m.next = "INV_SQRT_SMALL"
+                with m.If(clz.o.valid):
+                    lz_ = clz.o.p
+                    m.d.sync += lz.eq(lz_)
+
+                    m.d.sync += [
+                        inv_sqrt_small.i.p.eq(v.as_value() << lz_),
+                        inv_sqrt_small.i.valid.eq(1),
+                    ]
+                    m.next = "INV_SQRT_SMALL"
             with m.State("INV_SQRT_SMALL"):
-                with m.If(inv_sqrt_small.ready):
+                with m.If(inv_sqrt_small.o.valid):
                     # shift back: sqrt gets half the normalization shift
                     # divide by 2^floor(shift_value/2)
-                    m.d.sync += pre_shift_value.eq(inv_sqrt_data_out)
+
                     with m.If(shift_value[0] == 1):
-                        m.next = "POST_MULT"
+                        m.d.sync += pre_shift_value.eq(
+                            inv_sqrt_small.o.p * fixed.Const(2**0.5)
+                        )
                     with m.Else():
-                        m.next = "SHIFT_BACK"
-            with m.State("POST_MULT"):
-                m.d.sync += [
-                    pre_shift_value.eq(pre_shift_value * fixed.Const(2**0.5)),
-                ]
-                m.next = "SHIFT_BACK"
+                        m.d.sync += pre_shift_value.eq(inv_sqrt_small.o.p)
+
+                    m.next = "SHIFT_BACK"
             with m.State("SHIFT_BACK"):
-                shift_offset = self.type.f_bits - small_type.f_bits
-                m.d.sync += norm_value.eq(
-                    do_shift_by(
-                        pre_shift_value.as_value(),
-                        shift_value[1:].as_signed() + shift_offset,
-                    )
-                )
-                m.next = "IDLE"
+                with m.If(self.o.ready | ~self.o.valid):
+                    sv_s = shift_value[1:].as_signed()
+
+                    with m.If(sv_s >= 0):
+                        m.d.comb += norm_value.eq(pre_shift_value << sv_s.as_unsigned())
+                    with m.Else():
+                        m.d.comb += norm_value.eq(
+                            pre_shift_value >> (-sv_s).as_unsigned()
+                        )
+
+                    m.d.sync += [
+                        self.o.p.eq(norm_value),
+                        self.o.valid.eq(1),
+                    ]
+
+                    m.next = "IDLE"
 
         return m
 
@@ -325,9 +337,9 @@ class SimpleOpModule(wiring.Component):
     def __init__(self, op, type):
         super().__init__(
             {
-                "a": In(type),
-                "b": In(type),
-                "result": Out(type),
+                "a": In(stream.Signature(type)),
+                "b": In(stream.Signature(type)),
+                "o": Out(stream.Signature(type)),
             }
         )
         self.op = op
@@ -335,7 +347,14 @@ class SimpleOpModule(wiring.Component):
 
     def elaborate(self, platform) -> Module:
         m = Module()
-        m.d.comb += self.result.eq(self.op(self.a, self.b))
+
+        m.d.comb += [
+            self.o.valid.eq(self.a.valid & self.b.valid),
+            self.o.payload.eq(self.op(self.a.p, self.b.p)),
+            self.a.ready.eq(self.o.ready & self.o.valid),
+            self.b.ready.eq(self.o.ready & self.o.valid),
+        ]
+
         return m
 
 
@@ -343,10 +362,8 @@ class FixedPointVecNormalize(wiring.Component):
     def __init__(self, vector_type, inv_sqrt_steps=2):
         super().__init__(
             {
-                "value": In(vector_type),
-                "result": Out(vector_type),
-                "start": In(1),
-                "ready": Out(1),
+                "i": In(stream.Signature(vector_type)),
+                "o": Out(stream.Signature(vector_type)),
             }
         )
         self.vector_type = vector_type
@@ -356,52 +373,72 @@ class FixedPointVecNormalize(wiring.Component):
         m = Module()
 
         elem_type = self.vector_type.elem_shape
+        unsiged_elem_type = fixed.UQ(elem_type.i_bits, elem_type.f_bits)
 
         m.submodules.inv_sqrt = inv_sqrt = FixedPointInvSqrt(
-            elem_type, steps=self.inv_sqrt_steps
-        )
-        m.submodules.mult = mult = VectorizedOperation(
-            lambda: SimpleOpModule(lambda a, b: a * b, elem_type), self.vector_type
+            unsiged_elem_type, steps=self.inv_sqrt_steps
         )
 
-        v = Signal.like(self.value)
-        dot_v = Signal.like(v[0])
-        inv_len_v = Signal.like(v[0])
+        m.submodules.vec_to_stream_a = v2s_a = VectorToStream(self.vector_type)
+        m.submodules.vec_to_stream_b = v2s_b = VectorToStream(self.vector_type)
+        m.submodules.stream_to_vec = s2v = StreamToVector(self.vector_type)
+        m.submodules.mult = mult = SimpleOpModule(lambda a, b: a * b, elem_type)
 
-        m.d.comb += [
-            dot_v.eq(sum(mult.result, start=fixed.Const(0.0))),
-            inv_len_v.eq(inv_sqrt.result),
-        ]
+        wiring.connect(m, v2s_a.o, mult.a)
+        wiring.connect(m, v2s_b.o, mult.b)
+        wiring.connect(m, mult.o, s2v.i)
+
+        v = Signal.like(self.i.p)
+
+        with m.If(v2s_a.i.ready):
+            m.d.sync += v2s_a.i.valid.eq(0)
+
+        with m.If(v2s_b.i.ready):
+            m.d.sync += v2s_b.i.valid.eq(0)
+
+        with m.If(inv_sqrt.i.ready):
+            m.d.sync += inv_sqrt.i.valid.eq(0)
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += [self.ready.eq(1), self.result.eq(mult.result)]
-                with m.If(self.start):
-                    m.d.sync += v.eq(self.value)
-                    m.d.comb += [
-                        mult.a.eq(self.value),
-                        mult.b.eq(self.value),
-                        mult.start.eq(1),
+                with m.If(self.i.valid):
+                    m.d.comb += self.i.ready.eq(1)
+                    m.d.sync += v.eq(self.i.p)
+                    m.d.sync += [
+                        v2s_a.i.p.eq(self.i.p),
+                        v2s_b.i.p.eq(self.i.p),
+                        v2s_a.i.valid.eq(1),
+                        v2s_b.i.valid.eq(1),
                     ]
                     m.next = "COMPUTE_DOT"
             with m.State("COMPUTE_DOT"):
-                with m.If(mult.ready):
-                    m.d.comb += [
-                        inv_sqrt.value.eq(dot_v),
-                        inv_sqrt.start.eq(1),
+                with m.If(s2v.o.valid):
+                    m.d.comb += (s2v.o.ready.eq(1),)
+                    m.d.sync += [
+                        inv_sqrt.i.p.eq(sum(s2v.o.payload, start=fixed.Const(0.0))),
+                        inv_sqrt.i.valid.eq(1),
                     ]
                     m.next = "INV_SQRT"
             with m.State("INV_SQRT"):
-                with m.If(inv_sqrt.ready):
-                    m.d.comb += [
-                        mult.a.eq(v),
-                        mult.b.eq(Cat([inv_len_v for _ in range(len(v))])),
-                        mult.start.eq(1),
+                with m.If(inv_sqrt.o.valid):
+                    m.d.comb += inv_sqrt.o.ready.eq(1)
+                    m.d.sync += [
+                        v2s_a.i.p.eq(v),
+                        v2s_b.i.p.eq(Cat([inv_sqrt.o.p for _ in range(len(v))])),
+                        v2s_a.i.valid.eq(1),
+                        v2s_b.i.valid.eq(1),
                     ]
                     m.next = "MULTIPLY"
             with m.State("MULTIPLY"):
-                with m.If(mult.ready):
-                    m.d.comb += [self.ready.eq(1), self.result.eq(mult.result)]
+                with m.If(s2v.o.valid & (self.o.ready | ~self.o.valid)):
+                    m.d.comb += s2v.o.ready.eq(1)
+                    m.d.sync += [
+                        self.o.p.eq(s2v.o.payload),
+                        self.o.valid.eq(1),
+                    ]
                     m.next = "IDLE"
 
         return m

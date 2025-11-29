@@ -6,8 +6,11 @@ target-version = ['py310']
 profile = "black"
 
 [tool.ruff]
-line-length = 100
+line-length = 140
 fix = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C", "N", "I"]

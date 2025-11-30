@@ -6,6 +6,7 @@ from amaranth_soc.memory import MemoryMap
 from amaranth_soc.wishbone.bus import Arbiter, Decoder
 from amaranth_soc.wishbone.sram import WishboneSRAM
 
+from gpu.utils.layouts import wb_bus_addr_width, wb_bus_data_width, wb_bus_granularity
 from tests.utils.memory import DebugAccess, get_memory_resource
 
 
@@ -17,9 +18,9 @@ class SimpleTestbench:
     def __init__(
         self,
         dut: Module,
-        addr_width: int = 32,
-        data_width: int = 32,
-        granularity: int = 8,
+        addr_width: int = wb_bus_addr_width,
+        data_width: int = wb_bus_data_width,
+        granularity: int = wb_bus_granularity,
         features: frozenset = frozenset(),
         mem_size: int = 1024 * 4,
         mem_addr: int = 0x80000000,

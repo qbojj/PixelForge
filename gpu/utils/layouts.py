@@ -14,6 +14,10 @@ num_textures = 2
 texture_coords = data.ArrayLayout(Vector4, num_textures)
 texture_position = data.ArrayLayout(texture_coord_shape, 2)
 
+wb_bus_data_width = 32
+wb_bus_addr_width = 30  # address per 32-bit word
+wb_bus_granularity = 8  # bytes
+
 
 class VertexLayout(data.Struct):
     position: Vector4

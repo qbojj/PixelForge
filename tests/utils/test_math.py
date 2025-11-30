@@ -20,7 +20,7 @@ from .streams import stream_testbench
         ([[0.2, 0.0, 0.0]], [[1.0, 0.0, 0.0]]),
     ]
     + [([[float(i), 0.0, 0.0]], [[1.0, 0.0, 0.0]]) for i in range(1, 10)]
-    + [([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])],
+    + [([[0.0, 1.0, 0.0], [2.0, 0.0, 0.0]], [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])],
 )
 def test_normalize(data: list[list[float]], expected: list[list[float]]):
     dut = FixedPointVecNormalize(Vector3)
@@ -47,7 +47,7 @@ def test_normalize(data: list[list[float]], expected: list[list[float]]):
         input_data=data,
         output_stream=dut.o,
         output_data_checker=output_checker,
-        idle_for=100,
+        idle_for=30,
     )
 
     try:

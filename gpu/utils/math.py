@@ -17,40 +17,40 @@ class VectorToStream(wiring.Component):
                 "o": Out(stream.Signature(vector_type.elem_shape)),
             }
         )
-        self.vector_type = vector_type
 
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        num_elem = self.vector_type.length
-        to_send = Array(Signal(self.vector_type.elem_shape) for _ in range(num_elem))
-
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
+        num_elem = self.i.p.shape().length
 
         def next_state(i):
             if i + 1 < num_elem:
                 return f"SEND_{i + 1}"
             else:
-                return "IDLE"
+                return "SEND_0"
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
-            with m.State("IDLE"):
+            with m.State("SEND_0"):
                 with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
                     m.d.sync += [
                         self.o.p.eq(self.i.p[0]),
                         self.o.valid.eq(1),
-                    ] + [to_send[j].eq(self.i.p[j]) for j in range(1, num_elem)]
-                    m.d.comb += self.i.ready.eq(1)
+                    ]
                     m.next = next_state(0)
             for i in range(1, num_elem):
                 with m.State(f"SEND_{i}"):
-                    with m.If(self.o.ready | ~self.o.valid):
+                    with m.If(self.o.ready):
                         m.d.sync += [
-                            self.o.p.eq(to_send[i]),
+                            self.o.p.eq(self.i.p[i]),
                             self.o.valid.eq(1),
                         ]
                         m.next = next_state(i)
+
+                        if i + 1 == num_elem:
+                            m.d.comb += self.i.ready.eq(1)
 
         return m
 
@@ -67,15 +67,12 @@ class StreamToVector(wiring.Component):
                 "o": Out(stream.Signature(vector_type)),
             }
         )
-        self.vector_type = vector_type
 
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        num_elem = self.vector_type.length
-        received = Array(
-            Signal(self.vector_type.elem_shape) for _ in range(num_elem - 1)
-        )
+        num_elem = self.o.p.shape().length
+        received = Array(Signal.like(self.i.p) for _ in range(num_elem - 1))
 
         with m.If(self.o.ready):
             m.d.sync += self.o.valid.eq(0)
@@ -83,20 +80,22 @@ class StreamToVector(wiring.Component):
         with m.FSM():
             for i in range(0, num_elem - 1):
                 with m.State(f"RECEIVE_{i}"):
+                    m.d.comb += self.i.ready.eq(1)
+
                     with m.If(self.i.valid):
-                        m.d.sync += (received[i].eq(self.i.p),)
-                        m.d.comb += self.i.ready.eq(1)
+                        m.d.sync += received[i].eq(self.i.p)
                         m.next = f"RECEIVE_{i + 1}"
             with m.State(f"RECEIVE_{num_elem - 1}"):
-                with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
-                    m.d.sync += [
-                        self.o.p.eq(
-                            Cat([received[j] for j in range(num_elem - 1)] + [self.i.p])
-                        ),
-                        self.o.valid.eq(1),
-                    ]
+                with m.If(self.o.ready | ~self.o.valid):
                     m.d.comb += self.i.ready.eq(1)
-                    m.next = "RECEIVE_0"
+
+                    with m.If(self.i.valid):
+                        m.d.sync += [
+                            self.o.p.eq(Cat(received, self.i.p)),
+                            self.o.valid.eq(1),
+                        ]
+                        m.d.comb += self.i.ready.eq(1)
+                        m.next = "RECEIVE_0"
 
         return m
 
@@ -208,19 +207,17 @@ class CountLeadingZeros(wiring.Component):
         m = Module()
         width = self.i.p.shape().width
 
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
+        m.d.comb += [
+            self.i.ready.eq(self.o.ready & self.o.valid),
+            self.o.valid.eq(self.i.valid),
+        ]
 
-        with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
-            with m.Switch(self.i.p):
-                for i in range(width):
-                    with m.Case("0" * i + "1" + "-" * (width - i - 1)):
-                        m.d.sync += self.o.p.eq(i)
-                with m.Case("0" * width):
-                    m.d.sync += self.o.p.eq(width)
-
-            m.d.sync += self.o.valid.eq(1)
-            m.d.comb += self.i.ready.eq(1)
+        with m.Switch(self.i.p):
+            for i in range(width):
+                with m.Case("0" * i + "1" + "-" * (width - i - 1)):
+                    m.d.comb += self.o.p.eq(i)
+            with m.Case("0" * width):
+                m.d.comb += self.o.p.eq(width)
 
         return m
 
@@ -251,9 +248,8 @@ class FixedPointInvSqrt(wiring.Component):
         )
         m.submodules.clz = clz = CountLeadingZeros(self.type.as_shape())
 
-        v = Signal(self.type)
         norm_value = Signal(self.type)
-        lz = Signal(range(data_bits))
+        lz = clz.o.payload
         shift_value = Signal(range(-data_bits, data_bits + 1))
         pre_shift_value = Signal(small_type)
 
@@ -278,10 +274,7 @@ class FixedPointInvSqrt(wiring.Component):
 
         with m.FSM():
             with m.State("IDLE"):
-                with m.If(self.i.valid):
-                    m.d.sync += v.eq(self.i.p)
-                    m.d.comb += self.i.ready.eq(1)
-
+                with m.If(self.i.valid & (~clz.i.valid | clz.i.ready)):
                     m.d.sync += [
                         clz.i.valid.eq(1),
                         clz.i.p.eq(self.i.p),
@@ -290,16 +283,18 @@ class FixedPointInvSqrt(wiring.Component):
                     m.next = "CLZ"
 
             with m.State("CLZ"):
-                with m.If(clz.o.valid):
-                    lz_ = clz.o.p
-                    m.d.sync += lz.eq(lz_)
-
+                with m.If(
+                    clz.o.valid & (~inv_sqrt_small.i.valid | inv_sqrt_small.i.ready)
+                ):
                     m.d.sync += [
-                        inv_sqrt_small.i.p.eq(v.as_value() << lz_),
+                        inv_sqrt_small.i.p.eq(self.i.p.as_value() << lz),
                         inv_sqrt_small.i.valid.eq(1),
                     ]
+                    m.d.comb += self.i.ready.eq(1)
                     m.next = "INV_SQRT_SMALL"
+
             with m.State("INV_SQRT_SMALL"):
+                m.d.comb += inv_sqrt_small.o.ready.eq(1)
                 with m.If(inv_sqrt_small.o.valid):
                     # shift back: sqrt gets half the normalization shift
                     # divide by 2^floor(shift_value/2)
@@ -314,7 +309,7 @@ class FixedPointInvSqrt(wiring.Component):
                     m.next = "SHIFT_BACK"
             with m.State("SHIFT_BACK"):
                 with m.If(self.o.ready | ~self.o.valid):
-                    sv_s = shift_value[1:].as_signed()
+                    sv_s = shift_value >> 1
 
                     with m.If(sv_s >= 0):
                         m.d.comb += norm_value.eq(pre_shift_value << sv_s.as_unsigned())
@@ -322,6 +317,8 @@ class FixedPointInvSqrt(wiring.Component):
                         m.d.comb += norm_value.eq(
                             pre_shift_value >> (-sv_s).as_unsigned()
                         )
+
+                    m.d.comb += clz.o.ready.eq(1)
 
                     m.d.sync += [
                         self.o.p.eq(norm_value),
@@ -388,7 +385,7 @@ class FixedPointVecNormalize(wiring.Component):
         wiring.connect(m, v2s_b.o, mult.b)
         wiring.connect(m, mult.o, s2v.i)
 
-        v = Signal.like(self.i.p)
+        v = self.i.p
 
         with m.If(v2s_a.i.ready):
             m.d.sync += v2s_a.i.valid.eq(0)
@@ -405,8 +402,6 @@ class FixedPointVecNormalize(wiring.Component):
         with m.FSM():
             with m.State("IDLE"):
                 with m.If(self.i.valid):
-                    m.d.comb += self.i.ready.eq(1)
-                    m.d.sync += v.eq(self.i.p)
                     m.d.sync += [
                         v2s_a.i.p.eq(self.i.p),
                         v2s_b.i.p.eq(self.i.p),
@@ -416,17 +411,20 @@ class FixedPointVecNormalize(wiring.Component):
                     m.next = "COMPUTE_DOT"
             with m.State("COMPUTE_DOT"):
                 with m.If(s2v.o.valid):
-                    m.d.comb += (s2v.o.ready.eq(1),)
+                    m.d.comb += s2v.o.ready.eq(1)
                     m.d.sync += [
-                        inv_sqrt.i.p.eq(sum(s2v.o.payload, start=fixed.Const(0.0))),
+                        inv_sqrt.i.p.eq(sum(s2v.o.p, start=fixed.Const(0.0))),
                         inv_sqrt.i.valid.eq(1),
                     ]
                     m.next = "INV_SQRT"
             with m.State("INV_SQRT"):
                 with m.If(inv_sqrt.o.valid):
-                    m.d.comb += inv_sqrt.o.ready.eq(1)
+                    m.d.comb += [
+                        inv_sqrt.o.ready.eq(1),
+                        self.i.ready.eq(1),
+                    ]
                     m.d.sync += [
-                        v2s_a.i.p.eq(v),
+                        v2s_a.i.p.eq(self.i.p),
                         v2s_b.i.p.eq(Cat([inv_sqrt.o.p for _ in range(len(v))])),
                         v2s_a.i.valid.eq(1),
                         v2s_b.i.valid.eq(1),

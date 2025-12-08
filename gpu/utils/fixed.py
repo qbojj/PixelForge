@@ -7,7 +7,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from amaranth import Mux, hdl
+from math import ceil, log10
+
+from amaranth import Format, Mux, hdl
 from amaranth.utils import bits_for
 
 __all__ = ["Shape", "SQ", "UQ", "Value", "Const"]
@@ -72,6 +74,53 @@ class Shape(hdl.ShapeCastable):
 
     def __repr__(self):
         return f"{'SQ' if self.signed else 'UQ'}({self.i_bits}, {self.f_bits})"
+
+    def format(self, value, format_spec):
+        # format as standard fixed_point
+        decimal_length = ceil(log10(2) * self.f_bits) + 1
+        len_pow = 10**decimal_length
+
+        if format_spec == "b":
+            # format as binary
+            return Format(
+                "{value.int:b}.{value.fract:0{fract_bits}b}}",
+                value=value.as_value(),
+                fract_bits=self.f_bits,
+            )
+        elif format_spec == "x":
+            # format as hex
+            if self.f_bits % 4 != 0:
+                raise ValueError(
+                    "Hex format requires number of fractional bits to be multiple of 4"
+                )
+
+            return Format(
+                "{value.int:x}.{value.fract:0{fract_bits}x}}",
+                value=value.as_value(),
+                fract_bits=self.f_bits // 4,
+            )
+        elif format_spec != "":
+            raise ValueError(
+                f"Format specifier {format_spec!r} is not supported for layouts"
+            )
+
+        fract = value.as_value() & ((1 << self.f_bits) - 1)
+        integer = value.as_value() >> self.f_bits
+
+        if self.f_bits == 0:
+            return Format("{:d}.", integer)
+
+        if self.signed:
+            v1 = Mux((fract > 0) & (integer < 0), integer + 1, integer)
+            v2 = (value.as_value() * len_pow // (1 << self.f_bits)) % len_pow
+
+            v3 = Mux((integer < 0) & (fract > 0), len_pow - v2, v2)
+
+            return Format("{:-d}.{:0{}d}", v1, v3, decimal_length)
+        else:
+            v1 = integer
+            v2 = (value.as_value() * len_pow // (1 << self.f_bits)) % len_pow
+            return Format("{:d}.{:0{}d}", v1, v2, decimal_length)
 
 
 class SQ(Shape):

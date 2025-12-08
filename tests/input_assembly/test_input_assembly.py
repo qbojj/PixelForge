@@ -29,10 +29,11 @@ def make_test_input_assembly(
     color_mode: InputMode = InputMode.CONSTANT,
     color_data: InputData = default_data,
 ):
-    t = SimpleTestbench(InputAssembly(), mem_addr=addr, mem_size=1024)
+    dut = InputAssembly()
+    t = SimpleTestbench(mem_addr=addr, mem_size=1024)
 
     t.set_csrs(
-        t.dut.csr_bus,
+        dut.csr_bus,
         [
             ((("position", "mode"),), pos_mode),
             ((("position", "data"),), pos_data),
@@ -48,23 +49,22 @@ def make_test_input_assembly(
         "input_assembly",
     )
 
-    t.arbiter.add(t.dut.bus)
-    t.make()
+    t.arbiter.add(dut.bus)
 
     async def tb(ctx):
         await t.initialize_memory(ctx, addr, memory_data)
         await t.initialize_csrs(ctx)
 
-    sim = Simulator(t.m)
+    sim = Simulator(t.make(dut))
     sim.add_clock(1e-9)
     stream_testbench(
         sim,
         init_process=tb,
-        input_stream=t.dut.is_index,
+        input_stream=dut.is_index,
         input_data=input_idx,
-        output_stream=t.dut.os_vertex,
+        output_stream=dut.os_vertex,
         expected_output_data=expected,
-        is_finished=t.dut.ready,
+        is_finished=dut.ready,
     )
 
     try:

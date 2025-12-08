@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from amaranth import *
-from amaranth.lib import data, stream, wiring
+from amaranth.lib import stream, wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.utils import exact_log2
 from amaranth_soc import csr
@@ -154,10 +154,10 @@ class IndexGenerator(wiring.Component):
                 # initiate memory read
                 m.d.sync += [
                     self.bus.cyc.eq(1),
-                    self.bus.adr.eq(address // (self.bus.data_width // 8)),
+                    self.bus.adr.eq(address[len(offset) :]),
                     self.bus.we.eq(0),
                     self.bus.stb.eq(1),
-                    self.bus.sel.eq(~0),
+                    self.bus.sel.eq(~0),  # TODO: access only what is needed
                 ]
                 m.next = "MEM_READ_WAIT"
             with m.State("MEM_READ_WAIT"):
@@ -181,7 +181,7 @@ class IndexGenerator(wiring.Component):
                     ]
                     with m.If(cur_idx + 1 == count):
                         m.next = "WAIT_FLUSH"
-                    with m.Elif(next_addr[0 : len(offset)] != 0):
+                    with m.Elif(next_addr[: len(offset)] != 0):
                         m.next = "INDEX_SEND"
                     with m.Else():
                         m.next = (
@@ -245,7 +245,7 @@ class InputTopologyProcessor(wiring.Component):
 
         # max 3 output indices per input index
         max_amplification = 3
-        to_send = Signal(data.ArrayLayout(index_shape, max_amplification))
+        to_send = Array(Signal(index_shape) for _ in range(max_amplification))
         to_send_left = Signal(2)
 
         ready_for_input = Signal()
@@ -484,27 +484,29 @@ class InputAssembly(wiring.Component):
             def components(self) -> int:
                 return len(self.data_v)
 
-        attr_info = [
-            AttrInfo(
-                desc=self.position,
-                data_v=vtx.position,
-            ),
-            AttrInfo(
-                desc=self.normal,
-                data_v=vtx.normal,
-            ),
-            *[
+        attr_info = Array(
+            [
                 AttrInfo(
-                    desc=self.tex[i],
-                    data_v=vtx.texcoords[i],
-                )
-                for i in range(num_textures)
-            ],
-            AttrInfo(
-                desc=self.color,
-                data_v=vtx.color,
-            ),
-        ]
+                    desc=self.position,
+                    data_v=vtx.position,
+                ),
+                AttrInfo(
+                    desc=self.normal,
+                    data_v=vtx.normal,
+                ),
+                *[
+                    AttrInfo(
+                        desc=self.tex[i],
+                        data_v=vtx.texcoords[i],
+                    )
+                    for i in range(num_textures)
+                ],
+                AttrInfo(
+                    desc=self.color,
+                    data_v=vtx.color,
+                ),
+            ]
+        )
 
         with m.FSM():
             with m.State("IDLE"):

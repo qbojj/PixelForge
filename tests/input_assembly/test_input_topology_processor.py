@@ -16,10 +16,11 @@ def make_test_input_topology_processor(
     restart_index: int | None = None,
     base_vertex: int = 0,
 ):
-    t = SimpleTestbench(InputTopologyProcessor())
+    dut = InputTopologyProcessor()
+    t = SimpleTestbench()
 
     t.set_csrs(
-        t.dut.csr_bus,
+        dut.csr_bus,
         [
             (("input_topology",), input_topology),
             (
@@ -31,18 +32,17 @@ def make_test_input_topology_processor(
         ],
         "input_topology_processor",
     )
-    t.make()
 
-    sim = Simulator(t.m)
+    sim = Simulator(t.make(dut))
     sim.add_clock(1e-9)
     stream_testbench(
         sim,
         init_process=t.initialize_csrs,
-        input_stream=t.dut.is_index,
+        input_stream=dut.is_index,
         input_data=input,
-        output_stream=t.dut.os_index,
+        output_stream=dut.os_index,
         expected_output_data=expected,
-        is_finished=t.dut.ready,
+        is_finished=dut.ready,
     )
 
     try:

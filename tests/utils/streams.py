@@ -5,26 +5,26 @@ from amaranth.lib import stream
 from amaranth.sim import Simulator, SimulatorContext
 
 
-async def stream_get(
-    ctx: SimulatorContext, stream: stream.Interface, finish: Value
-) -> list:
-    results = []
+async def stream_get(ctx: SimulatorContext, stream: stream.Interface, finish: Value):
+    sent_ready = False
 
-    while not ctx.get(finish):
-        await ctx.tick().until(stream.valid | finish)
+    ctx.set(stream.ready, 0)
+    async for _, _, finish_v, stream_v, stream_p in ctx.tick().sample(
+        finish, stream.valid, stream.payload
+    ):
+        ctx.set(stream.ready, 0)
 
-        while ctx.get(stream.valid):
-            results.append(ctx.get(stream.payload))
+        last_ready, sent_ready = sent_ready, False
+
+        if stream_v and not last_ready:
+            yield stream_p
             ctx.set(stream.ready, 1)
-            await ctx.tick()
-            ctx.set(stream.ready, 0)
+            sent_ready = True
+        elif finish_v:
+            return
 
-    return results
 
-
-async def stream_put(
-    ctx: SimulatorContext, stream: stream.Interface, data: list
-) -> None:
+async def stream_put(ctx: SimulatorContext, stream: stream.Interface, data: list):
     for item in data:
         ctx.set(stream.payload, item)
         ctx.set(stream.valid, 1)
@@ -34,12 +34,10 @@ async def stream_put(
 
 async def idle_cycles(ctx: SimulatorContext, cycles: int, event: Value) -> None:
     idle_count = 0
-    while idle_count < cycles:
-        await ctx.tick()
-        if ctx.get(event):
-            idle_count = 0
-        else:
-            idle_count += 1
+    async for _, _, event_v in ctx.tick().sample(event):
+        idle_count = 0 if event_v else idle_count + 1
+        if idle_count >= cycles:
+            return
 
 
 def data_checker(expected):
@@ -107,7 +105,7 @@ def stream_testbench(
 
     async def output_tb(ctx: SimulatorContext):
         await ctx.tick().until(is_initialized)
-        results = await stream_get(ctx, output_stream, stop_reading)
+        results = [x async for x in stream_get(ctx, output_stream, stop_reading)]
         await output_data_checker(ctx, results)
 
     async def init_tb(ctx: SimulatorContext):

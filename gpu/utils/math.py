@@ -3,99 +3,267 @@ from amaranth.lib import stream, wiring
 from amaranth.lib.wiring import In, Out
 
 from . import fixed
+from .stream import StreamToVector, VectorToStream
 
 
-class VectorToStream(wiring.Component):
+class CountLeadingZeros(wiring.Component):
     """
-    Converts a vector signal into a stream signal.
+    Counts leading zeros in a FixedPoint number.
     """
 
-    def __init__(self, vector_type):
+    def __init__(self, type: Shape):
         super().__init__(
             {
-                "i": In(stream.Signature(vector_type)),
-                "o": Out(stream.Signature(vector_type.elem_shape)),
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(range(type.width + 1))),
             }
         )
 
     def elaborate(self, platform) -> Module:
         m = Module()
+        width = self.i.p.shape().width
 
-        num_elem = self.i.p.shape().length
+        m.d.comb += [
+            self.i.ready.eq(self.o.ready & self.o.valid),
+            self.o.valid.eq(self.i.valid),
+        ]
 
-        def next_state(i):
-            if i + 1 < num_elem:
-                return f"SEND_{i + 1}"
-            else:
-                return "SEND_0"
-
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
-
-        with m.FSM():
-            with m.State("SEND_0"):
-                with m.If(self.i.valid & (self.o.ready | ~self.o.valid)):
-                    m.d.sync += [
-                        self.o.p.eq(self.i.p[0]),
-                        self.o.valid.eq(1),
-                    ]
-                    m.next = next_state(0)
-            for i in range(1, num_elem):
-                with m.State(f"SEND_{i}"):
-                    with m.If(self.o.ready):
-                        m.d.sync += [
-                            self.o.p.eq(self.i.p[i]),
-                            self.o.valid.eq(1),
-                        ]
-                        m.next = next_state(i)
-
-                        if i + 1 == num_elem:
-                            m.d.comb += self.i.ready.eq(1)
+        with m.Switch(self.i.p):
+            for i in range(width):
+                with m.Case("0" * i + "1" + "-" * (width - i - 1)):
+                    m.d.comb += self.o.p.eq(i)
+            with m.Case("0" * width):
+                m.d.comb += self.o.p.eq(width)
 
         return m
 
 
-class StreamToVector(wiring.Component):
+class FixedPointInvSmallDomain(wiring.Component):
     """
-    Converts a stream signal into a vector signal.
+    Approximate fixed-point reciprocal using Newton-Raphson method.
+    Input value should be in range of [1.0, 2.0).
+    Result will be in (0.5, 1.0]
     """
 
-    def __init__(self, vector_type):
+    def __init__(self, type: fixed.Shape, steps: int = 4):
         super().__init__(
             {
-                "i": In(stream.Signature(vector_type.elem_shape)),
-                "o": Out(stream.Signature(vector_type)),
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(type)),
             }
         )
+        self._steps = steps
+        self._type = type
 
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        num_elem = self.o.p.shape().length
-        received = Array(Signal.like(self.i.p) for _ in range(num_elem - 1))
+        # Using Newton-Raphson method for reciprocal
+        # x_{n+1}=x_n(2−value∗x_n)
+        # x_{n+1}=2*x_n - value*x_n*x_n
+
+        initial_guess = fixed.Const(0.75, self._type)
+
+        x = Signal(self._type)
+        x2 = Signal(self._type)
+        vx2 = Signal(self._type)
+
+        mul_a = Signal(self._type)
+        mul_b = Signal(self._type)
+        mul_result = Signal(self._type)
+        m.d.comb += mul_result.eq(mul_a * mul_b)
+
+        iter = Signal(range(self._steps))
 
         with m.If(self.o.ready):
             m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
-            for i in range(0, num_elem - 1):
-                with m.State(f"RECEIVE_{i}"):
+            with m.State("IDLE"):
+                with m.If(self.i.valid):
+                    m.d.sync += [
+                        x.eq(initial_guess),
+                        iter.eq(0),
+                    ]
+                    m.next = "STEP_0"
+            with m.State("STEP_0"):
+                m.d.sync += Print(Format("Iter {}: x = {}, v = {}", iter, x, self.i.p))
+                m.d.comb += [
+                    mul_a.eq(x),
+                    mul_b.eq(x),
+                ]
+                m.d.sync += [
+                    x2.eq(mul_result),
+                ]
+                m.next = "STEP_1"
+            with m.State("STEP_1"):
+                m.d.comb += [
+                    mul_a.eq(self.i.p),
+                    mul_b.eq(x2),
+                ]
+                m.d.sync += [
+                    vx2.eq(mul_result),
+                ]
+                m.next = "STEP_2"
+            with m.State("STEP_2"):
+                new_x = (x << 1) - vx2
+                m.d.sync += [
+                    x.eq(new_x),
+                    iter.eq(iter + 1),
+                ]
+                with m.If(iter < self._steps - 1):
+                    m.next = "STEP_0"
+                with m.Else():
                     m.d.comb += self.i.ready.eq(1)
-
-                    with m.If(self.i.valid):
-                        m.d.sync += received[i].eq(self.i.p)
-                        m.next = f"RECEIVE_{i + 1}"
-            with m.State(f"RECEIVE_{num_elem - 1}"):
+                    m.next = "SEND_RESULT"
+            with m.State("SEND_RESULT"):
                 with m.If(self.o.ready | ~self.o.valid):
-                    m.d.comb += self.i.ready.eq(1)
+                    m.d.sync += [
+                        self.o.p.eq(x),
+                        self.o.valid.eq(1),
+                    ]
+                    m.next = "IDLE"
 
-                    with m.If(self.i.valid):
-                        m.d.sync += [
-                            self.o.p.eq(Cat(received, self.i.p)),
-                            self.o.valid.eq(1),
-                        ]
-                        m.d.comb += self.i.ready.eq(1)
-                        m.next = "RECEIVE_0"
+        return m
+
+
+class FixedPointInv(wiring.Component):
+    """
+    Approximate fixed-point reciprocal using Newton-Raphson method.
+    Works for any positive or negative FixedPoint number.
+    """
+
+    def __init__(self, type: fixed.Shape, steps: int = 4):
+        super().__init__(
+            {
+                "i": In(stream.Signature(type)),
+                "o": Out(stream.Signature(type)),
+            }
+        )
+        self._steps = steps
+        self._type = type
+
+    def elaborate(self, platform) -> Module:
+        m = Module()
+
+        data_bits = self._type.i_bits + self._type.f_bits
+        # type should fit all sub computations of N-R method
+        small_type = fixed.UQ(2, data_bits - 2)
+
+        m.submodules.inv_small = inv_small = FixedPointInvSmallDomain(
+            small_type, steps=self._steps
+        )
+
+        u_type = fixed.UQ(self._type.i_bits, self._type.f_bits)
+
+        v0 = Signal(u_type)
+        sgn = Signal()
+
+        lz = Signal(range(data_bits + 1))
+        norm_value = Signal(u_type)
+
+        m.submodules.clz = clz = CountLeadingZeros(self._type.as_shape())
+
+        shift_value = lz - (self._type.i_bits - small_type.i_bits) - 1
+
+        with m.If(inv_small.i.ready):
+            m.d.sync += inv_small.i.valid.eq(0)
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        def shift_left_signed(val: Signal, shift: Signal) -> Signal:
+            result = Signal(val.shape())
+            return result
+
+        with m.FSM():
+            with m.State("IDLE"):
+                with m.If(self.i.valid):
+                    m.d.sync += [
+                        sgn.eq(self.i.p < 0),
+                        v0.eq(abs(self.i.p)),
+                        clz.i.p.eq(abs(self.i.p)),
+                        clz.i.valid.eq(1),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
+                    m.next = "CLZ"
+            with m.State("CLZ"):
+                with m.If(clz.o.valid & (~inv_small.i.valid | inv_small.i.ready)):
+                    m.d.comb += clz.o.ready.eq(1)
+                    m.d.sync += [
+                        lz.eq(clz.o.p),
+                        inv_small.i.valid.eq(1),
+                    ]
+
+                    shift = clz.o.p - 1
+
+                    with m.If(shift >= 0):
+                        m.d.sync += inv_small.i.p.as_value().eq(
+                            v0.as_value() << shift.as_unsigned()
+                        )
+                    with m.Else():
+                        m.d.sync += inv_small.i.p.as_value().eq(
+                            v0.as_value() >> (-shift).as_unsigned()
+                        )
+
+                    m.next = "INV_SMALL"
+            with m.State("INV_SMALL"):
+                with m.If(inv_small.o.valid):
+                    # shift back: divide by 2^shift_value
+                    m.d.comb += inv_small.o.ready.eq(1)
+
+                    m.d.sync += Print(
+                        Format(
+                            "Input: {}, Leading zeros: {}, Shift value: {}, Inv small output: {}",
+                            v0,
+                            lz,
+                            shift_value,
+                            inv_small.o.p,
+                        )
+                    )
+
+                    with m.If(shift_value >= 0):
+                        m.d.sync += norm_value.eq(
+                            inv_small.o.p << shift_value.as_unsigned()
+                        )
+                    with m.Else():
+                        m.d.sync += norm_value.eq(
+                            inv_small.o.p >> (-shift_value).as_unsigned()
+                        )
+
+                    m.next = "SEND_RESULT"
+            with m.State("SEND_RESULT"):
+                with m.If(self.o.ready | ~self.o.valid):
+                    m.d.sync += Print(
+                        Format(
+                            "Input: {}, Leading zeros: {}, Shift value: {}, Normalized value: {}",
+                            v0,
+                            lz,
+                            shift_value,
+                            norm_value,
+                        )
+                    )
+                    ret = Signal(self._type)
+                    with m.If(sgn):
+                        m.d.comb += ret.as_value().eq(-norm_value)
+                    with m.Else():
+                        m.d.comb += ret.as_value().eq(norm_value)
+
+                    m.d.sync += self.o.p.eq(ret)
+                    m.d.sync += self.o.valid.eq(1)
+
+                    m.d.sync += [
+                        Print(
+                            Format(
+                                "Input abs: {}, Input sign: {}, Output: {}",
+                                v0,
+                                sgn,
+                                ret,
+                            )
+                        )
+                    ]
+
+                    m.next = "IDLE"
 
         return m
 
@@ -128,7 +296,8 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
         # x_{n+1}=(x_n + x_n/2) - half_v*x_n*x_n*x_n, where half_v = value/2
 
         x = Signal(self.type)
-        half_v = Signal(self.type)
+
+        initial_guess = fixed.Const(0.88, self.type)
 
         three_halfs_x = Signal(self.type)
         ax = Signal(self.type)
@@ -139,46 +308,50 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
         mul_result = Signal(self.type)
         m.d.comb += mul_result.eq(mul_a * mul_b)
 
+        iter = Signal(range(self.steps))
+
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
         with m.FSM():
             with m.State("IDLE"):
                 with m.If(self.i.valid):
+                    m.d.sync += x.eq(initial_guess)
+                    m.next = "STEP_0"
+            with m.State("STEP_0"):
+                m.d.comb += [
+                    mul_a.eq(self.i.p >> 1),
+                    mul_b.eq(x),
+                ]
+                m.d.sync += [
+                    three_halfs_x.eq(x + (x >> 1)),
+                    ax.eq(mul_result),
+                ]
+                m.next = "STEP_1"
+            with m.State("STEP_1"):
+                m.d.comb += [
+                    mul_a.eq(x),
+                    mul_b.eq(x),
+                ]
+                m.d.sync += [
+                    x2.eq(mul_result),
+                ]
+                m.next = "STEP_2"
+            with m.State("STEP_2"):
+                m.d.comb += [
+                    mul_a.eq(ax),
+                    mul_b.eq(x2),
+                ]
+                new_x = three_halfs_x - mul_result
+                m.d.sync += [
+                    x.eq(new_x),
+                    iter.eq(iter + 1),
+                ]
+                with m.If(iter < self.steps - 1):
+                    m.next = "STEP_0"
+                with m.Else():
                     m.d.comb += self.i.ready.eq(1)
-                    m.d.sync += [
-                        half_v.eq(self.i.p >> 1),
-                        x.eq(0.88),  # Initial guess
-                    ]
-                    m.next = "ITERATE_0_STEP_0"
-            for i in range(self.steps):
-                with m.State(f"ITERATE_{i}_STEP_0"):
-                    m.d.comb += [
-                        mul_a.eq(half_v),
-                        mul_b.eq(x),
-                    ]
-                    m.d.sync += [
-                        three_halfs_x.eq(x + (x >> 1)),
-                        ax.eq(mul_result),
-                    ]
-                    m.next = f"ITERATE_{i}_STEP_1"
-                with m.State(f"ITERATE_{i}_STEP_1"):
-                    m.d.comb += [
-                        mul_a.eq(x),
-                        mul_b.eq(x),
-                    ]
-                    m.d.sync += [
-                        x2.eq(mul_result),
-                    ]
-                    m.next = f"ITERATE_{i}_STEP_2"
-                with m.State(f"ITERATE_{i}_STEP_2"):
-                    m.d.comb += [
-                        mul_a.eq(ax),
-                        mul_b.eq(x2),
-                    ]
-                    new_x = three_halfs_x - mul_result
-                    m.d.sync += [x.eq(new_x)]
-                    if i == self.steps - 1:
-                        m.next = "SEND_RESULT"
-                    else:
-                        m.next = f"ITERATE_{i + 1}_STEP_0"
+                    m.next = "SEND_RESULT"
             with m.State("SEND_RESULT"):
                 with m.If(self.o.ready | ~self.o.valid):
                     m.d.sync += [
@@ -186,38 +359,6 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                         self.o.valid.eq(1),
                     ]
                     m.next = "IDLE"
-
-        return m
-
-
-class CountLeadingZeros(wiring.Component):
-    """
-    Counts leading zeros in a FixedPoint number.
-    """
-
-    def __init__(self, type: Shape):
-        super().__init__(
-            {
-                "i": In(stream.Signature(type)),
-                "o": Out(stream.Signature(range(type.width + 1))),
-            }
-        )
-
-    def elaborate(self, platform) -> Module:
-        m = Module()
-        width = self.i.p.shape().width
-
-        m.d.comb += [
-            self.i.ready.eq(self.o.ready & self.o.valid),
-            self.o.valid.eq(self.i.valid),
-        ]
-
-        with m.Switch(self.i.p):
-            for i in range(width):
-                with m.Case("0" * i + "1" + "-" * (width - i - 1)):
-                    m.d.comb += self.o.p.eq(i)
-            with m.Case("0" * width):
-                m.d.comb += self.o.p.eq(width)
 
         return m
 

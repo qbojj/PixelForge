@@ -22,6 +22,9 @@ Matrix3_mem = data.ArrayLayout(FixedPoint_mem, 9)
 
 texture_coord_shape = unsigned(12)  # Max 4kx4k textures
 address_shape = unsigned(32)
+
+# The FPGA has hardware multiplier of max 27x27 bits, so we don't want stride at 32bits
+# Using 16 bits should be enough as we don't expect very wide input buffer strides or textures
 stride_shape = unsigned(16)
 index_shape = unsigned(32)
 
@@ -34,10 +37,9 @@ class IndexKind(enum.Enum, shape=2):
 
 
 class InputTopology(enum.Enum, shape=4):
-    """Input primitive topology types
-    Same as in Vulkan
-
-    For now only support TRIANGLE_LIST.
+    """
+    Input primitive topology types
+    VkPrimitiveTopology equivalent
     """
 
     POINT_LIST = 0
@@ -59,13 +61,13 @@ class PrimitiveType(enum.Enum, shape=2):
     TRIANGLES = 2
 
 
-class ScalingType(enum.Enum, shape=unsigned(3)):
+class ScalingType(enum.Enum, shape=3):
     """Scaling format type
 
     Component format changes
 
     UNORM: value / (2^n - 1)
-    SNORM: max(min(value / (2^(n-1) - 1), 1.0), -1.0)
+    SNORM: clamp(value / (2^(n-1) - 1), 1.0, -1.0)
     UINT: value as unsigned integer
     SINT: value as signed integer
     FIXED: value as FixedPoint (16.16)
@@ -78,3 +80,39 @@ class ScalingType(enum.Enum, shape=unsigned(3)):
     SINT = 3
     FIXED = 4
     FLOAT = 5
+
+
+class CullFace(enum.Flag, shape=2):
+    """
+    VkCullModeFlagBits equivalent
+    """
+
+    FRONT = 1
+    BACK = 2
+
+    NONE = 0
+    FRONT_AND_BACK = FRONT | BACK
+
+
+class FrontFace(enum.Enum, shape=1):
+    """
+    VkFrontFace equivalent
+    """
+
+    CCW = 0
+    CW = 1
+
+
+class CompareOp(enum.Flag, shape=3):
+    """
+    VkCompareOp equivalent
+    """
+
+    NEVER = 0
+    LESS = 1
+    EQUAL = 2
+    LESS_OR_EQUAL = LESS | EQUAL
+    GREATER = 4
+    NOT_EQUAL = LESS | GREATER
+    GREATER_OR_EQUAL = EQUAL | GREATER
+    ALWAYS = LESS | EQUAL | GREATER

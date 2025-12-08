@@ -14,9 +14,11 @@ num_textures = 2
 texture_coords = data.ArrayLayout(Vector4, num_textures)
 texture_position = data.ArrayLayout(texture_coord_shape, 2)
 
+# Wishbone bus parameters for GPU memory access
+# granularity 1 byte, data width 4 bytes, 32-bit addresses
 wb_bus_data_width = 32
-wb_bus_addr_width = 30  # address per 32-bit word
-wb_bus_granularity = 8  # bytes
+wb_bus_granularity = 8
+wb_bus_addr_width = 30  # Addresses are per data width (4 bytes)
 
 
 class VertexLayout(data.Struct):

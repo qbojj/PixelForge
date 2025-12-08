@@ -14,10 +14,11 @@ def make_test_index_generator(
     memory_data: bytes,
     expected: list[int],
 ):
-    t = SimpleTestbench(IndexGenerator(), mem_addr=0x80000000, mem_size=1024)
+    dut = IndexGenerator()
+    t = SimpleTestbench(mem_addr=0x80000000, mem_size=1024)
 
     t.set_csrs(
-        t.dut.csr_bus,
+        dut.csr_bus,
         [
             (("address",), C(addr, 32)),
             (("count",), C(count, 32)),
@@ -27,21 +28,20 @@ def make_test_index_generator(
         "index_gen",
     )
 
-    t.arbiter.add(t.dut.bus)
-    t.make()
+    t.arbiter.add(dut.bus)
 
     async def tb(ctx):
         await t.initialize_memory(ctx, addr, memory_data)
         await t.initialize_csrs(ctx)
 
-    sim = Simulator(t.m)
+    sim = Simulator(t.make(dut))
     sim.add_clock(1e-9)
     stream_testbench(
         sim,
         init_process=tb,
-        output_stream=t.dut.os_index,
+        output_stream=dut.os_index,
         expected_output_data=expected,
-        is_finished=t.dut.ready,
+        is_finished=dut.ready,
     )
 
     try:

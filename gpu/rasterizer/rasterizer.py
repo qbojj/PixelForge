@@ -232,12 +232,15 @@ class TriangleRasterizer(wiring.Component):
             with m.State("EMIT"):
                 # Compute perspective-correct interpolation numerators
                 # inv_w_sum = w0*inv_w0 + w1*inv_w1 + w2*inv_w2
-                m.d.sync += [
+                m.d.comb += [
                     inv_w_sum.eq(
                         w0 * vtx[0].position_ndc[3]
                         + w1 * vtx[1].position_ndc[3]
                         + w2 * vtx[2].position_ndc[3]
                     ),
+                ]
+
+                m.d.sync += [
                     # Depth uses linear (non-perspective-correct) interpolation per spec
                     depth_num.eq(
                         w0 * vtx[0].position_ndc[2]
@@ -290,8 +293,6 @@ class TriangleRasterizer(wiring.Component):
                 # Output interpolated values
                 # Depth uses normalized barycentric coords (linear interpolation per spec)
                 m.d.comb += self.os_fragment.valid.eq(1)
-
-                Memory
 
                 m.d.comb += [
                     self.os_fragment.p.coord_pos[0].eq(px),

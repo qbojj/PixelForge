@@ -131,17 +131,26 @@ class FixedPointInv(wiring.Component):
     """
     Approximate fixed-point reciprocal using Newton-Raphson method.
     Works for any positive or negative FixedPoint number.
+
+    unsigned input n.m -> output unsigned m.n
+    signed   input n.m -> output signed m.n
     """
 
     def __init__(self, type: fixed.Shape, steps: int = 4):
+        if type.signed:
+            output_type = fixed.SQ(max(type.f_bits, 2), type.i_bits)
+        else:
+            output_type = fixed.UQ(max(type.f_bits, 1), type.i_bits)
+
         super().__init__(
             {
                 "i": In(stream.Signature(type)),
-                "o": Out(stream.Signature(type)),
+                "o": Out(stream.Signature(output_type)),
             }
         )
         self._steps = steps
         self._type = type
+        self._output_type = output_type
 
     def elaborate(self, platform) -> Module:
         m = Module()
@@ -155,16 +164,17 @@ class FixedPointInv(wiring.Component):
         )
 
         u_type = fixed.UQ(self._type.i_bits, self._type.f_bits)
+        u_otype = fixed.UQ(self._output_type.i_bits, self._output_type.f_bits)
 
         v0 = Signal(u_type)
         sgn = Signal()
 
         lz = Signal(range(data_bits + 1))
-        norm_value = Signal(u_type)
+        norm_value = Signal(u_otype)
 
         m.submodules.clz = clz = CountLeadingZeros(self._type.as_shape())
 
-        shift_value = lz - (self._type.i_bits - small_type.i_bits) - 1
+        shift_value = lz - (u_type.i_bits - small_type.i_bits) - 1
 
         with m.If(inv_small.i.ready):
             m.d.sync += inv_small.i.valid.eq(0)
@@ -204,29 +214,24 @@ class FixedPointInv(wiring.Component):
 
                     m.next = "INV_SMALL"
             with m.State("INV_SMALL"):
-                with m.If(inv_small.o.valid):
+                with m.If(inv_small.o.valid & (~self.o.valid | self.o.ready)):
                     # shift back: divide by 2^shift_value
                     m.d.comb += inv_small.o.ready.eq(1)
 
                     with m.If(shift_value >= 0):
-                        m.d.sync += norm_value.eq(
+                        m.d.comb += norm_value.eq(
                             inv_small.o.p << shift_value.as_unsigned()
                         )
                     with m.Else():
-                        m.d.sync += norm_value.eq(
+                        m.d.comb += norm_value.eq(
                             inv_small.o.p >> (-shift_value).as_unsigned()
                         )
 
-                    m.next = "SEND_RESULT"
-            with m.State("SEND_RESULT"):
-                with m.If(self.o.ready | ~self.o.valid):
-                    ret = Signal(self._type)
                     with m.If(sgn):
-                        m.d.comb += ret.as_value().eq(-norm_value)
+                        m.d.sync += self.o.p.eq(-norm_value)
                     with m.Else():
-                        m.d.comb += ret.as_value().eq(norm_value)
+                        m.d.sync += self.o.p.eq(norm_value)
 
-                    m.d.sync += self.o.p.eq(ret)
                     m.d.sync += self.o.valid.eq(1)
 
                     m.next = "IDLE"

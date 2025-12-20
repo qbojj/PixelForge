@@ -1,3 +1,4 @@
+import pytest
 from amaranth.sim import Simulator
 
 from gpu.rasterizer.rasterizer import TriangleRasterizer
@@ -17,7 +18,8 @@ def make_pa_vertex(pos, color):
     }
 
 
-def test_rasterizer_single_triangle():
+@pytest.mark.parametrize("persp", [True, False])
+def test_rasterizer_single_triangle(persp: bool):
     """Test rasterizing a single triangle"""
     dut = TriangleRasterizer()
     t = SimpleTestbench(dut)
@@ -46,13 +48,17 @@ def test_rasterizer_single_triangle():
     # Triangle vertices in NDC [-1, 1]
     triangle_vertices = [
         make_pa_vertex(
-            [-0.5, -0.5, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]  # Bottom-left (NDC)  # Red
+            [-1.0, -1.0, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]  # Bottom-left (NDC)  # Red
         ),
         make_pa_vertex(
-            [0.5, -0.5, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]  # Bottom-right (NDC)  # Green
+            [1.0, -1.0, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]  # Bottom-right (NDC)  # Green
         ),
-        make_pa_vertex([0.0, 0.5, 0.5, 1.0], [0.0, 0.0, 1.0, 1.0]),  # Top (NDC)  # Blue
+        make_pa_vertex([0.0, 1.0, 0.5, 1.0], [0.0, 0.0, 1.0, 1.0]),  # Top (NDC)  # Blue
     ]
+
+    if persp:
+        for i, v in enumerate(triangle_vertices):
+            v["position_ndc"][3] = 0.5 + i * 0.5  # Vary w for perspective interpolation
 
     collected_fragments = []
 
@@ -68,6 +74,10 @@ def test_rasterizer_single_triangle():
             x, y = int(frag.coord_pos[0]), int(frag.coord_pos[1])
             assert 0 <= x < fb_width, f"Fragment X {x} out of bounds"
             assert 0 <= y < fb_height, f"Fragment Y {y} out of bounds"
+
+            assert all(
+                0.0 <= c.as_float() <= 1.0 for c in frag.color
+            ), f"Fragment color {frag.color} out of range"
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
@@ -104,8 +114,14 @@ def test_rasterizer_single_triangle():
     ]
 
     # Visualize results
+    file = "triangle_single_persp.ppm" if persp else "triangle_single_linear.ppm"
     visualizer = FragmentVisualizer(fb_width, fb_height)
-    visualizer.generate_ppm_image(fragments, "triangle_single.ppm")
+
+    visualizer.clear((0.0, 0.0, 0.0, 1.0))
+    visualizer.render(fragments)
+
+    visualizer.generate_ppm_image(file)
+
     stats = visualizer.generate_statistics(fragments)
     print("Rasterization statistics:", stats)
 
@@ -210,7 +226,11 @@ def test_rasterizer_two_triangles():
 
     # Visualize results
     visualizer = FragmentVisualizer(fb_width, fb_height)
-    visualizer.generate_ppm_image(fragments, "triangle_two.ppm")
+
+    visualizer.clear((0.0, 0.0, 0.0, 1.0))
+    visualizer.render(fragments)
+
+    visualizer.generate_ppm_image("triangle_two.ppm")
     stats = visualizer.generate_statistics(fragments)
     print("Rasterization statistics:", stats)
 
@@ -286,7 +306,7 @@ def test_rasterizer_depth_interpolation():
         Fragment(
             coord_pos=(frag.coord_pos[0], frag.coord_pos[1]),
             color=(
-                frag.depth.as_float(),
+                (1.0 + frag.depth.as_float()) / 2.0,
                 0.0,
                 0.0,
                 1.0,
@@ -297,6 +317,119 @@ def test_rasterizer_depth_interpolation():
 
     # Visualize results
     visualizer = FragmentVisualizer(fb_width, fb_height)
-    visualizer.generate_ppm_image(fragments, "triangle_depth.ppm")
+
+    visualizer.clear((0.0, 0.0, 0.0, 1.0))
+    visualizer.render(fragments)
+
+    visualizer.generate_ppm_image("triangle_depth.ppm")
+    stats = visualizer.generate_statistics(fragments)
+    print("Rasterization statistics:", stats)
+
+
+@pytest.mark.parametrize("alpha", [True, False])
+def test_rasterizer_two_overlapping_triangles(alpha: bool):
+    """Test rasterizing two overlapping triangles to check fragment generation"""
+    dut = TriangleRasterizer()
+    t = SimpleTestbench(dut)
+
+    fb_width = 128
+    fb_height = 128
+    fb_info = {
+        "width": fb_width,
+        "height": fb_height,
+        "viewport_x": 0.0,
+        "viewport_y": 0.0,
+        "viewport_width": float(fb_width),
+        "viewport_height": float(fb_height),
+        "viewport_min_depth": 0.0,
+        "viewport_max_depth": 1.0,
+        "scissor_offset_x": 0,
+        "scissor_offset_y": 0,
+        "scissor_width": fb_width,
+        "scissor_height": fb_height,
+        "color_address": 0,
+        "color_pitch": fb_width * 4,
+    }
+
+    # Two overlapping triangles
+    triangle1 = [
+        make_pa_vertex([-0.5, -0.5, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]),  # Red
+        make_pa_vertex([0.5, -0.5, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]),
+        make_pa_vertex([0.0, 0.5, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]),
+    ]
+
+    triangle2 = [
+        make_pa_vertex([-0.3, -0.3, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]),  # Green
+        make_pa_vertex([0.7, -0.3, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]),
+        make_pa_vertex([0.2, 0.7, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]),
+    ]
+
+    if alpha:
+        for v in triangle1 + triangle2:
+            v["color"][3] = 0.5  # Set alpha to 0.5
+
+    all_fragments = []
+
+    async def collect_output(ctx, results):
+        nonlocal all_fragments
+        all_fragments = results
+        print(f"Generated {len(results)} fragments for overlapping triangles")
+
+        if len(results) > 0:
+            red_frags = sum(
+                1
+                for f in results
+                if f.color[0].as_float() > 0.8 and f.color[1].as_float() < 0.2
+            )
+            green_frags = sum(
+                1
+                for f in results
+                if f.color[1].as_float() > 0.8 and f.color[0].as_float() < 0.2
+            )
+
+            print(f"Red fragments: {red_frags}, Green fragments: {green_frags}")
+        else:
+            print("Warning: No fragments generated for overlapping triangles test")
+
+    sim = Simulator(t)
+    sim.add_clock(1e-6)
+    input_vertices = triangle1 + triangle2
+
+    async def init_proc(ctx):
+        ctx.set(t.dut.fb_info, fb_info)
+
+    stream_testbench(
+        sim,
+        init_process=init_proc,
+        input_stream=t.dut.is_vertex,
+        input_data=input_vertices,
+        output_stream=t.dut.os_fragment,
+        output_data_checker=collect_output,
+        idle_for=10000,  # Wait for rasterization to complete
+    )
+
+    sim.run()
+
+    fragments = [
+        Fragment(
+            coord_pos=(frag.coord_pos[0], frag.coord_pos[1]),
+            color=(
+                frag.color[0].as_float(),
+                frag.color[1].as_float(),
+                frag.color[2].as_float(),
+                frag.color[3].as_float(),
+            ),
+        )
+        for frag in all_fragments
+    ]
+
+    # Visualize results
+    visualizer = FragmentVisualizer(fb_width, fb_height)
+
+    visualizer.clear((0.0, 0.0, 0.0, 1.0))
+    visualizer.render(fragments)
+
+    file = "triangle_overlapping_alpha.ppm" if alpha else "triangle_overlapping.ppm"
+    visualizer.generate_ppm_image(file)
     stats = visualizer.generate_statistics(fragments)
     print("Rasterization statistics:", stats)

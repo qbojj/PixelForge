@@ -2,8 +2,9 @@ import pytest
 from amaranth import *
 from amaranth.sim import Simulator
 
+from gpu.utils import fixed
 from gpu.utils.math import FixedPointInv, FixedPointVecNormalize
-from gpu.utils.types import FixedPoint, Vector3
+from gpu.utils.types import Vector3
 
 from .streams import stream_testbench
 
@@ -59,19 +60,22 @@ def test_normalize(data: list[list[float]]):
 
 
 @pytest.mark.parametrize(
-    "data",
+    "ibits, fbits, signed, data",
     [
-        [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0],
-        [-4.0, -2.0, -1.0, -0.5, -0.25],
-        [0.1 * i for i in range(1, 11)],
-        [f for f in range(-10, 11) if f != 0.0],
-        [f * 0.1 for f in range(-10, 11) if f != 0.0],
+        (15, 0, False, [1024.0 * 16.0]),
+        (8, 0, False, [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]),
+        (0, 6, False, [0.5, 0.25, 0.125, 0.0625, 0.03125]),
+        (1, 6, True, [0.5, -0.5, 0.25, -0.25, 0.125, -0.125]),
+        (4, 0, True, [4.0, -4.0, 2.0, -2.0, 1.0, -1.0]),
     ],
 )
-def test_inverse(data: list[float]):
+def test_inverse_unbalanced_type(
+    ibits: int, fbits: int, signed: bool, data: list[float]
+):
     expected = [1.0 / v for v in data]
 
-    dut = FixedPointInv(FixedPoint, steps=3)
+    t = fixed.SQ(ibits, fbits) if signed else fixed.UQ(ibits, fbits)
+    dut = FixedPointInv(t, steps=3)
 
     async def output_checker(ctx, results):
         results = [v.as_float() for v in results]

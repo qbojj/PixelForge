@@ -181,6 +181,10 @@ class Value(hdl.ValueCastable):
     def reshape(self, f_bits):
         # If we're increasing precision, extend with more fractional bits. If we're
         # reducing precision, truncate bits.
+
+        if self.i_bits == 0 and f_bits == 0:
+            return Const(0.0)
+
         shape = hdl.Shape(self.i_bits + f_bits, signed=self.signed)
         if f_bits > self.f_bits:
             result = Shape(shape, f_bits)(
@@ -220,13 +224,10 @@ class Value(hdl.ValueCastable):
         return Value(shape, clamped.as_value())
 
     def floor(self) -> hdl.Value:
-        return self.as_value() >> self.f_bits
+        return self.as_value()[self.f_bits :]
 
     def ceil(self) -> hdl.Value:
-        fractional_mask = (1 << self.f_bits) - 1
-        has_fraction = (self.as_value() & fractional_mask) != 0
-        integer_part = self.floor()
-        return integer_part + Mux(has_fraction, 1, 0)
+        return self.floor() + (self.as_value()[: self.f_bits] != 0)
 
     def _binary_op(
         self,

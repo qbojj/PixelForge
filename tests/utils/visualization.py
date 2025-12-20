@@ -1,19 +1,17 @@
 """Visualization utilities for rasterizer output"""
 
+from dataclasses import dataclass
 from typing import List, Tuple
 
+import numpy as np
 
+
+@dataclass
 class Fragment:
     """Represents a rasterized fragment"""
 
-    def __init__(
-        self, coord_pos: Tuple[int, int], color: Tuple[float, float, float, float]
-    ):
-        self.coord_pos = coord_pos  # (x, y) position in framebuffer
-        self.color = color  # (r, g, b, a) color values in [0, 1]
-
-    def __repr__(self):
-        return f"Fragment(pos={self.coord_pos}, color={self.color})"
+    coord_pos: Tuple[int, int]
+    color: Tuple[float, float, float, float]
 
 
 class FragmentVisualizer:
@@ -23,20 +21,13 @@ class FragmentVisualizer:
         self.width = width
         self.height = height
 
-    def visualize_ascii(self, fragments: List[Fragment], intensity_char=True) -> str:
-        """Generate ASCII art visualization of fragments
+        self.canvas = np.zeros((height, width, 4), dtype=np.float32)  # RGBA
+        self.depth = np.full((height, width), 1.0, dtype=np.float32)  # Depth buffer
+        self.stencil = np.zeros((height, width), dtype=np.uint8)  # Stencil buffer
 
-        Args:
-            fragments: List of fragment objects with coord_pos and color
-            intensity_char: If True, use intensity-based characters; else solid block
+    def render(self, fragments: List[Fragment]):
+        """Render fragments onto the canvas"""
 
-        Returns:
-            String representation of the rasterized image
-        """
-        # Create canvas
-        canvas = [["." for _ in range(self.width)] for _ in range(self.height)]
-
-        # Plot fragments
         for frag in fragments:
             x, y = int(frag.coord_pos[0]), int(frag.coord_pos[1])
 
@@ -44,107 +35,104 @@ class FragmentVisualizer:
             if not (0 <= x < self.width and 0 <= y < self.height):
                 continue
 
-            # Get color
-            r, g, b, a = frag.color
-            intensity = (r + g + b) / 3.0  # Average intensity
+            # TODO: Depth and stencil tests can be added here
 
-            if intensity_char:
-                if intensity > 0.9:
-                    char = "█"  # Full block
-                elif intensity > 0.7:
-                    char = "▓"  # Dark shade (75%)
-                elif intensity > 0.5:
-                    char = "▒"  # Medium shade (50%)
-                elif intensity > 0.25:
-                    char = "░"  # Light shade (25%)
-                else:
-                    char = "·"  # Light dot
-            else:
-                char = "█"  # Always solid block
+            d_rgba = np.array(frag.color, dtype=np.float32)
+            s_rgba = self.canvas[y, x]
 
-            canvas[y][x] = char
+            d_rgb = d_rgba[0:3]
+            d_a = d_rgba[3]
+            s_rgb = s_rgba[0:3]
+            s_a = s_rgba[3]
 
-        # Convert to string
-        output = []
-        for row in canvas:
-            output.append("".join(row))
-        return "\n".join(output)
+            # Alpha blending
+            def lerp(c1, c2, t):
+                return c1 * (1 - t) + c2 * t
 
-    def visualize_color_ascii(self, fragments: List[Fragment]) -> str:
-        """Generate colorized ASCII visualization (ANSI codes)
+            out_a = lerp(s_a, d_a, d_a)
+            out_rgb = lerp(s_rgb, d_rgb, d_a)
 
-        Args:
-            fragments: List of fragment objects
+            self.canvas[y, x, 0:3] = out_rgb
+            self.canvas[y, x, 3] = out_a
+
+    def clear(self, color: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)):
+        """Clear the canvas to a specific color"""
+        self.canvas[:, :] = color
+
+    def clear_depth(self, depth: float = 1.0):
+        """Clear the depth buffer to a specific value"""
+        self.depth[:, :] = depth
+
+    def clear_stencil(self, stencil: int = 0):
+        """Clear the stencil buffer to a specific value"""
+        self.stencil[:, :] = stencil
+
+    def visualize_ascii(self) -> str:
+        """Generate ASCII art visualization of canvas
 
         Returns:
-            String with ANSI color codes
+            String representation of the rasterized image
         """
-        canvas = [
-            [[255, 255, 255] for _ in range(self.width)] for _ in range(self.height)
-        ]
 
-        # Plot fragments (white background by default)
-        for frag in fragments:
-            x, y = int(frag.coord_pos[0]), int(frag.coord_pos[1])
+        # Build ASCII string
+        ascii_chars = [" ", "░", "▒", "▓", "█"]  # From light to dark
 
-            if not (0 <= x < self.width and 0 <= y < self.height):
-                continue
-
-            r, g, b, a = frag.color
-            # Convert from [0, 1] to [0, 255]
-            canvas[y][x] = [int(r * 255), int(g * 255), int(b * 255)]
-
-        # Build ANSI string with 24-bit true color
         lines = []
         for y in range(self.height):
             line = ""
             for x in range(self.width):
-                r, g, b = canvas[y][x]
-                # ANSI 24-bit color escape sequence
-                line += f"\033[38;2;{r};{g};{b}m█\033[0m"
+                r, g, b, a = self.canvas[y, x]
+                intensity = int(((r + g + b) / 3.0) * (len(ascii_chars) - 1))
+                intensity = max(0, min(intensity, len(ascii_chars) - 1))
+                line += ascii_chars[intensity]
             lines.append(line)
 
         return "\n".join(lines)
 
-    def generate_ppm_image(
-        self, fragments: List[Fragment], filepath: str = "rasterizer_output.ppm"
-    ):
+    def visualize_color_ascii(self) -> str:
+        """Generate colorized ASCII visualization (ANSI codes)
+
+        Returns:
+            String with ANSI color codes
+        """
+
+        lines = []
+        for y in range(self.height):
+            line = ""
+            for x in range(self.width):
+                r, g, b, a = self.canvas[y, x]
+                r_ansi = int(r * 255)
+                g_ansi = int(g * 255)
+                b_ansi = int(b * 255)
+                line += f"\x1b[38;2;{r_ansi};{g_ansi};{b_ansi}m█\x1b[0m"
+            lines.append(line)
+
+        return "\n".join(lines)
+
+    def generate_ppm_image(self, filepath: str = "rasterizer_output.ppm"):
         """Generate PPM (Portable PixMap) image file
 
         Args:
-            fragments: List of fragment objects
             filepath: Output file path
         """
-        # Create image buffer (white background)
-        image = [
-            [[255, 255, 255] for _ in range(self.width)] for _ in range(self.height)
-        ]
 
-        # Plot fragments
-        for frag in fragments:
-            x, y = int(frag.coord_pos[0]), int(frag.coord_pos[1])
-
-            if not (0 <= x < self.width and 0 <= y < self.height):
-                continue
-
-            r, g, b, a = frag.color
-            # Convert from [0, 1] to [0, 255]
-            image[y][x] = [int(r * 255), int(g * 255), int(b * 255)]
+        max_v = 255
 
         # Write PPM file
         with open(filepath, "w") as f:
             # PPM header
             f.write("P3\n")
             f.write(f"{self.width} {self.height}\n")
-            f.write("255\n")
+            f.write(f"{max_v}\n")
 
-            # Pixel data
             for y in range(self.height):
-                row_data = []
                 for x in range(self.width):
-                    r, g, b = image[y][x]
-                    row_data.append(f"{r} {g} {b}")
-                f.write(" ".join(row_data) + "\n")
+                    r, g, b, a = self.canvas[y, x]
+                    r_i = int(max(0, min(r * max_v, max_v)))
+                    g_i = int(max(0, min(g * max_v, max_v)))
+                    b_i = int(max(0, min(b * max_v, max_v)))
+                    f.write(f"{r_i} {g_i} {b_i} ")
+                f.write("\n")
 
         print(f"Generated PPM image: {filepath}")
 

@@ -295,6 +295,13 @@ class DepthStencilTest(wiring.Component):
                     self.wb_bus.sel.eq(0x3 << depth_offset),
                 ]
                 with m.If(self.wb_bus.ack):
+                    m.d.sync += Print(
+                        "Reading depth from address:",
+                        depth_addr,
+                        " got: ",
+                        self.wb_bus.dat_r,
+                    )
+
                     m.d.sync += depth_value.eq(
                         self.wb_bus.dat_r.word_select(depth_offset[1:], 16)
                     )
@@ -471,7 +478,9 @@ class SwapchainOutput(wiring.Component):
 
         v = Signal.like(self.is_fragment.payload)
 
-        dst_data = Signal(Vector4)
+        color_shape = fixed.UQ(0, 16)
+
+        dst_data = Signal(data.ArrayLayout(color_shape, 4))
 
         color_addr = Signal(wb_bus_addr_width)
         color_offset = Signal(range(4))
@@ -544,8 +553,10 @@ class SwapchainOutput(wiring.Component):
                 with m.If(self.wb_bus.ack):
                     m.d.sync += [
                         dst_data[i].eq(
-                            self.wb_bus.dat_r.word_select(i, 8)
-                            * fixed.Const(1.0 / 255.0, shape=fixed.UQ(0, 8))
+                            (
+                                self.wb_bus.dat_r.word_select(i, 8)
+                                * fixed.Const(1.0 / 255.0, shape=color_shape)
+                            ).saturate(color_shape)
                         )
                         for i in range(4)
                     ]

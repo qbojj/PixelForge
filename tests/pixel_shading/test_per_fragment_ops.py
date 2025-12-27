@@ -79,7 +79,7 @@ def test_depth_stencil_pass_and_depth_write():
     }
 
     fragments = [make_fragment(0, 0, 0.75, [0.2, 0.2, 0.2, 1.0])]
-    expected_depth = int(0.75 * (1 << 16))
+    expected_depth = int((1.0 + 0.75) / 2.0 * ((1 << 16) - 1))
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
@@ -122,8 +122,7 @@ def test_depth_stencil_depth_fail():
     fb_info = make_fb_info()
 
     # Pre-fill depth buffer with 0.5
-    initial_depth = int(((0.5 + 1.0) / 2.0) * (1 << 16))
-    depth_bytes = initial_depth.to_bytes(2, "little")
+    initial_depth = round((0.5 + 1.0) / 2.0 * ((1 << 16) - 1))
 
     stencil_conf = {
         "compare_op": CompareOp.ALWAYS,
@@ -149,7 +148,9 @@ def test_depth_stencil_depth_fail():
 
     async def init_proc(ctx):
         # Pre-fill depth buffer
-        await t.initialize_memory(ctx, fb_info["depth_address"], depth_bytes)
+        await t.initialize_memory(
+            ctx, fb_info["depth_address"], initial_depth.to_bytes(2, "little")
+        )
         # Pre-fill stencil with 5
         await t.initialize_memory(ctx, fb_info["stencil_address"], b"\x05")
 

@@ -6,4 +6,5 @@ __all__ = [
     "rasterizer",
     "pixel_shading",
     "pipeline",
+    "output",
 ]

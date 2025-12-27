@@ -1,8 +1,7 @@
+import amaranth_soc.wishbone.bus as wb
 from amaranth import *
 from amaranth.lib import data, fifo, stream, wiring
 from amaranth.lib.wiring import In, Out
-from amaranth_soc.wishbone.bus import Interface as wishbone_Interface
-from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 
 from gpu.utils.layouts import wb_bus_addr_width, wb_bus_data_width
 
@@ -18,6 +17,23 @@ V_FRONT = 10
 V_SYNC = 2
 V_BACK = 33
 V_TOTAL = V_VISIBLE + V_FRONT + V_SYNC + V_BACK
+
+
+class VGASignature(wiring.Signature):
+    """VGA output signals signature"""
+
+    h_sync: Out(1)
+    v_sync: Out(1)
+    r: Out(8)
+    g: Out(8)
+    b: Out(8)
+    blank: Out(1)
+    clk: Out(1)
+
+
+class VGAInterface(wiring.PureInterface):
+    def __init__(self):
+        super().__init__(VGASignature())
 
 
 class RGBColorLayout(data.Struct):
@@ -37,7 +53,7 @@ class FrameBufferDMA(wiring.Component):
 
     fb_base: Value
     fb_pitch: Value
-    wb_bus: wishbone_Interface
+    wb_bus: wb.Interface
     start_fetching: Value
     color_stream: stream.Interface
     ready: Value
@@ -51,7 +67,7 @@ class FrameBufferDMA(wiring.Component):
                 "fb_base": In(unsigned(wb_bus_addr_width)),
                 "fb_pitch": In(unsigned(wb_bus_addr_width)),
                 "wb_bus": Out(
-                    wishbone_Signature(
+                    wb.Signature(
                         addr_width=wb_bus_addr_width,
                         data_width=wb_bus_data_width,
                         granularity=8,
@@ -186,13 +202,7 @@ class VGADisplay(wiring.Component):
     during the active area.
     """
 
-    h_sync: Value  # active low
-    v_sync: Value  # active low
-    r: Value
-    g: Value
-    b: Value
-    blank: Value
-    clk: Value
+    vga: VGAInterface
 
     start_fetching: Value
     color_stream: stream.Interface
@@ -200,13 +210,7 @@ class VGADisplay(wiring.Component):
     def __init__(self):
         super().__init__(
             {
-                "h_sync": Out(1),
-                "v_sync": Out(1),
-                "blank": Out(1),
-                "clk": Out(1),
-                "r": Out(8),
-                "g": Out(8),
-                "b": Out(8),
+                "vga": Out(VGASignature()),
                 "start_fetching": Out(1),
                 "color_stream": In(stream.Signature(RGBColorLayout)),
                 "ok_to_vsync": Out(1),
@@ -220,34 +224,60 @@ class VGADisplay(wiring.Component):
         x_cnt = Signal(range(H_TOTAL))
         y_cnt = Signal(range(V_TOTAL))
 
+        x_end = Signal()
+        y_end = Signal()
+
+        missed_pixel = Signal()
+
+        m.d.comb += [
+            x_end.eq(x_cnt == H_TOTAL - 1),
+            y_end.eq(y_cnt == V_TOTAL - 1),
+        ]
+
         # Horizontal/vertical counters
-        with m.If(x_cnt == H_TOTAL - 1):
+        with m.If(x_end & y_end):
             m.d.sync += x_cnt.eq(0)
-            with m.If(y_cnt == V_TOTAL - 1):
-                m.d.sync += y_cnt.eq(0)
-            with m.Else():
-                m.d.sync += y_cnt.eq(y_cnt + 1)
+            m.d.sync += y_cnt.eq(0)
+            m.d.sync += [
+                Assert(~missed_pixel, "Missed pixel during frame!"),
+                missed_pixel.eq(0),
+            ]
+        with m.Elif(x_end):
+            m.d.sync += x_cnt.eq(0)
+            m.d.sync += y_cnt.eq(y_cnt + 1)
         with m.Else():
             m.d.sync += x_cnt.eq(x_cnt + 1)
 
         # Sync pulses (active low)
-        m.d.sync += self.h_sync.eq(
+        m.d.sync += self.vga.h_sync.eq(
             ~((x_cnt >= H_VISIBLE + H_FRONT) & (x_cnt < H_VISIBLE + H_FRONT + H_SYNC))
         )
-        m.d.sync += self.v_sync.eq(
+        m.d.sync += self.vga.v_sync.eq(
             ~((y_cnt >= V_VISIBLE + V_FRONT) & (y_cnt < V_VISIBLE + V_FRONT + V_SYNC))
         )
+        m.d.comb += self.vga.clk.eq(ClockSignal())
+        m.d.sync += self.vga.blank.eq((x_cnt < H_VISIBLE) & (y_cnt < V_VISIBLE))
 
-        active_area = Signal()
-        m.d.comb += active_area.eq((x_cnt < H_VISIBLE) & (y_cnt < V_VISIBLE))
-        m.d.sync += self.blank.eq(active_area)
+        with m.If(self.vga.blank):
+            # During visible area, output pixel data from stream
+            with m.If(self.color_stream.valid & self.color_stream.ready):
+                m.d.sync += [
+                    self.vga.r.eq(self.color_stream.p.r),
+                    self.vga.g.eq(self.color_stream.p.g),
+                    self.vga.b.eq(self.color_stream.p.b),
+                ]
+            with m.Else():
+                # No pixel data available, output black
+                m.d.sync += [
+                    self.vga.r.eq(0),
+                    self.vga.g.eq(0),
+                    self.vga.b.eq(0),
+                ]
+                m.d.sync += missed_pixel.eq(1)
 
         # start fetching data right after v_sync
-        m.d.sync += self.start_fetching.eq(
+        m.d.comb += self.start_fetching.eq(
             (x_cnt == 0) & (y_cnt == V_VISIBLE + V_FRONT + V_SYNC)
         )
-
-        # Expose pixel clock
-        m.d.comb += self.clk.eq(ClockSignal())
 
         return m

@@ -69,9 +69,9 @@ def test_triangle_list_with_restart():
     make_test_input_topology_processor(
         test_name="test_triangle_list_with_restart",
         input_topology=InputTopology.TRIANGLE_LIST,
-        input=[0, 1, 2, 0xFFFF_FFF8, 3, 4, 5, 6, 0xFFFF_FFF8, 7, 8, 9],
+        input=[0, 1, 2, 0xFFFE, 3, 4, 5, 6, 0xFFFE, 7, 8, 9],
         expected=[0, 1, 2, 3, 4, 5, 7, 8, 9],
-        restart_index=0xFFFF_FFF8,
+        restart_index=0xFFFE,
     )
 
 

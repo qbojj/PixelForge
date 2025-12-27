@@ -26,7 +26,7 @@ address_shape = unsigned(32)
 # The FPGA has hardware multiplier of max 27x27 bits, so we don't want stride at 32bits
 # Using 16 bits should be enough as we don't expect very wide input buffer strides or textures
 stride_shape = unsigned(16)
-index_shape = unsigned(32)
+index_shape = unsigned(16)
 
 
 class IndexKind(enum.Enum, shape=2):

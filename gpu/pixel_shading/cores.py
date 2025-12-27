@@ -8,11 +8,10 @@ Implements the fragment pipeline with memory access:
 5. Write to framebuffer (color + depth + stencil)
 """
 
+import amaranth_soc.wishbone.bus as wb
 from amaranth import *
 from amaranth.lib import data, enum, stream, wiring
 from amaranth.lib.wiring import In, Out
-from amaranth_soc.wishbone.bus import Interface as wishbone_Interface
-from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 
 from gpu.utils import fixed
 
@@ -115,11 +114,14 @@ class Texturing(wiring.Component):
             {
                 "is_fragment": In(stream.Signature(FragmentLayout)),
                 "os_fragment": Out(stream.Signature(FragmentLayout)),
+                "ready": Out(1),
             }
         )
 
     def elaborate(self, platform):
         m = Module()
+
+        m.d.comb += self.ready.eq(1)
 
         wiring.connect(
             m, wiring.flipped(self.is_fragment), wiring.flipped(self.os_fragment)
@@ -138,7 +140,7 @@ class DepthStencilTest(wiring.Component):
     depth_conf: Value
     fb_info: Value
 
-    wb_bus: wishbone_Interface
+    wb_bus: wb.Interface
 
     def __init__(self):
         super().__init__(
@@ -150,12 +152,13 @@ class DepthStencilTest(wiring.Component):
                 "depth_conf": In(DepthTestConfig),
                 "fb_info": In(FramebufferInfoLayout),
                 "wb_bus": Out(
-                    wishbone_Signature(
+                    wb.Signature(
                         addr_width=wb_bus_addr_width,
                         data_width=wb_bus_data_width,
                         granularity=8,
                     )
                 ),
+                "ready": Out(1),
             }
         )
 
@@ -243,7 +246,7 @@ class DepthStencilTest(wiring.Component):
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += self.is_fragment.ready.eq(1)
+                m.d.comb += [self.is_fragment.ready.eq(1), self.ready.eq(1)]
                 with m.If(self.is_fragment.valid):
                     m.d.sync += v.eq(self.is_fragment.payload)
 
@@ -476,11 +479,12 @@ class SwapchainOutput(wiring.Component):
                 "conf": In(BlendConfig),
                 "fb_info": In(FramebufferInfoLayout),
                 "wb_bus": Out(
-                    wishbone_Signature(
+                    wb.Signature(
                         addr_width=wb_bus_addr_width,
                         data_width=wb_bus_data_width,
                     )
                 ),
+                "ready": Out(1),
             }
         )
 
@@ -535,7 +539,7 @@ class SwapchainOutput(wiring.Component):
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += self.is_fragment.ready.eq(1)
+                m.d.comb += [self.is_fragment.ready.eq(1), self.ready.eq(1)]
                 with m.If(self.is_fragment.valid):
                     m.d.sync += color_addr.eq(
                         self.fb_info.color_address[2:]

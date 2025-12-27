@@ -1,7 +1,7 @@
+import amaranth_soc.wishbone.bus as wb
 from amaranth import *
 from amaranth.lib import data, wiring
 from amaranth.lib.wiring import In, Out
-from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 
 from .input_assembly.cores import (
     IndexGenerator,
@@ -25,6 +25,7 @@ from .rasterizer.cores import PrimitiveClipper
 from .rasterizer.rasterizer import TriangleRasterizer
 from .utils.layouts import (
     FramebufferInfoLayout,
+    num_lights,
     num_textures,
     wb_bus_addr_width,
     wb_bus_data_width,
@@ -84,7 +85,7 @@ class GraphicsPipeline(wiring.Component):
 
     # Shading configuration
     material: In(MaterialPropertyLayout)
-    lights: In(LightPropertyLayout).array(1)
+    lights: In(LightPropertyLayout).array(num_lights)
 
     # Primitive assembly configuration
     pa_conf: In(PrimitiveAssemblyConfigLayout)
@@ -98,20 +99,20 @@ class GraphicsPipeline(wiring.Component):
 
     # Wishbone buses (separate for simplicity)
     wb_index: Out(
-        wishbone_Signature(
+        wb.Signature(
             addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
         )
     )
     wb_vertex: Out(
-        wishbone_Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_depthstencil: Out(
-        wishbone_Signature(
+        wb.Signature(
             addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
         )
     )
     wb_color: Out(
-        wishbone_Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
 
     # Backpressure/ready (reflect index generator readiness)
@@ -192,7 +193,7 @@ class GraphicsPipeline(wiring.Component):
         m.d.comb += [
             ia.c_pos.eq(self.c_pos),
             ia.c_norm.eq(self.c_norm),
-            ia.c_tex.eq(self.c_tex),
+            *[ia.c_tex[i].eq(self.c_tex[i]) for i in range(num_textures)],
             ia.c_col.eq(self.c_col),
         ]
 
@@ -202,13 +203,16 @@ class GraphicsPipeline(wiring.Component):
             vtx_xf.position_mv.eq(self.position_mv),
             vtx_xf.position_p.eq(self.position_p),
             vtx_xf.normal_mv_inv_t.eq(self.normal_mv_inv_t),
-            vtx_xf.texture_transforms.eq(self.texture_transforms),
+            *[
+                vtx_xf.texture_transforms[i].eq(self.texture_transforms[i])
+                for i in range(num_textures)
+            ],
         ]
 
         # Vertex shading configuration
         m.d.comb += [
             vtx_sh.material.eq(self.material),
-            vtx_sh.lights.eq(self.lights),
+            *[vtx_sh.lights[i].eq(self.lights[i]) for i in range(num_lights)],
         ]
 
         # Primitive assembly and clipper configuration
@@ -222,8 +226,8 @@ class GraphicsPipeline(wiring.Component):
             rast.fb_info.eq(self.fb_info),
             ds.fb_info.eq(self.fb_info),
             sc.fb_info.eq(self.fb_info),
-            ds.stencil_conf_front.eq(self.stencil_conf_front),
             ds.stencil_conf_back.eq(self.stencil_conf_back),
+            ds.stencil_conf_front.eq(self.stencil_conf_front),
             ds.depth_conf.eq(self.depth_conf),
             sc.conf.eq(self.blend_conf),
         ]

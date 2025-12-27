@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
+import amaranth_soc.wishbone.bus as wb
 from amaranth import *
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.utils import exact_log2
-from amaranth_soc.wishbone.bus import Signature as wishbone_Signature
 from transactron import *
 from transactron.lib import *
 
@@ -40,7 +40,9 @@ class IndexGenerator(wiring.Component):
 
     os_index: Out(stream.Signature(index_shape))
     bus: Out(
-        wishbone_Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
+        wb.Signature(
+            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
+        )
     )
     ready: Out(1)
 
@@ -355,16 +357,12 @@ class InputAssembly(wiring.Component):
 
     is_index: In(stream.Signature(index_shape))
     os_vertex: Out(stream.Signature(VertexLayout))
-    bus: Out(
-        wishbone_Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
-    )
+    bus: Out(wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width))
     ready: Out(1)
-
-    TexCfgArray = data.ArrayLayout(InputAssemblyAttrConfigLayout, num_textures)
 
     c_pos: In(InputAssemblyAttrConfigLayout)
     c_norm: In(InputAssemblyAttrConfigLayout)
-    c_tex: In(TexCfgArray)
+    c_tex: In(InputAssemblyAttrConfigLayout).array(num_textures)
     c_col: In(InputAssemblyAttrConfigLayout)
 
     def elaborate(self, platform) -> Module:

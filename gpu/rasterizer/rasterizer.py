@@ -1,11 +1,11 @@
 from amaranth import *
 from amaranth.lib import stream, wiring
 from amaranth.lib.wiring import In, Out
-from transactron.utils.amaranth_ext.functions import max_value, min_value
 
 from ..utils import fixed
 from ..utils import math as gpu_math
 from ..utils.layouts import FragmentLayout, FramebufferInfoLayout, RasterizerLayout
+from ..utils.transactron_utils import max_value, min_value
 
 
 class TriangleRasterizer(wiring.Component):

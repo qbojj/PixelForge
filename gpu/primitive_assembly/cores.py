@@ -27,7 +27,7 @@ class PrimitiveAssembly(wiring.Component):
     os_primitive: Out(stream.Signature(RasterizerLayout))
     ready: Out(1)
 
-    config: In(PrimitiveAssemblyConfigLayout)
+    prim_config: In(PrimitiveAssemblyConfigLayout)
 
     def __init__(self):
         super().__init__()
@@ -35,7 +35,7 @@ class PrimitiveAssembly(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        with m.Switch(self.config.type):
+        with m.Switch(self.prim_config.type):
             with m.Case(PrimitiveType.POINTS, PrimitiveType.LINES):
                 # Simple pass-through for points and lines
                 m.d.comb += self.ready.eq(1)
@@ -106,7 +106,7 @@ class PrimitiveAssembly(wiring.Component):
                         ]
 
                         ff = Signal()
-                        with m.Switch(self.config.winding):
+                        with m.Switch(self.prim_config.winding):
                             with m.Case(FrontFace.CCW):
                                 m.d.comb += ff.eq(area > 0)
                             with m.Case(FrontFace.CW):
@@ -124,12 +124,12 @@ class PrimitiveAssembly(wiring.Component):
                                 "Area: {}, Front Facing: {}, prim_wind: {}, cull: {}",
                                 area,
                                 ff,
-                                self.config.winding,
-                                self.config.cull,
+                                self.prim_config.winding,
+                                self.prim_config.cull,
                             )
                         )
 
-                        cull_v = self.config.cull.as_value()
+                        cull_v = self.prim_config.cull.as_value()
 
                         with m.If(ff & ((cull_v & CullFace.FRONT.value) != 0)):
                             m.d.sync += Print("Culling front face")

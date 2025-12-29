@@ -2,12 +2,11 @@
 name = "pixel-forge"
 dynamic = ["version"]
 dependencies = [
-    "amaranth >= 0.5.0",
+    "amaranth >= 0.4.0",
     "amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git@7e24efe2f6e95afddd0c1b56f1a9423c48caa472",
     "amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc.git@5c43cf58f15d9cd9c69ff83c97997708d386b2dc",
-    "transactron >= 0.4.0",
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 
 [project.urls]
 "Source Code" = "https://github.com/qbojj/PiexelForge.git"
@@ -15,12 +14,18 @@ requires-python = ">=3.13"
 [project.optional-dependencies]
 dev = [
     # Testing
-    "pytest >= 9.0.0",
+    "pytest >= 8.0.0",
     "pytest-xdist == 3.5.0",
     "hypothesis == 6.99.6",
     # Other
     "pre-commit >= 2.20.0",
-    "numpy >= 2.3.0"
+    "numpy >= 2.0.0"
+]
+
+build = [
+  "litedram @ git+https://github.com/enjoy-digital/litedram.git@f8e4838aa343cf48356322435b8e2ec45a338d07",
+  "litex @ git+https://github.com/enjoy-digital/litex.git@735b1efa5fb4fb634d69a2c837ac7f33a0646d4f",
+  "litex-boards @ git+https://github.com/litex-hub/litex-boards.git@1cfca3b994cab9ba69ddedec26f22a5a5d82b013",
 ]
 
 [tool.black]

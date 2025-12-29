@@ -1,10 +1,10 @@
 from amaranth import *
 from amaranth.lib import stream, wiring
 from amaranth.lib.wiring import In, Out
-from transactron.utils.amaranth_ext.functions import sum_value
 
 from . import fixed
 from .stream import StreamToVector, VectorToStream
+from .transactron_utils import sum_value
 
 
 class CountLeadingZeros(wiring.Component):

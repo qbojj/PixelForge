@@ -5,8 +5,6 @@ from amaranth import *
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 from amaranth.utils import exact_log2
-from transactron import *
-from transactron.lib import *
 
 from ..utils.layouts import (
     VertexLayout,
@@ -138,6 +136,8 @@ class IndexGenerator(wiring.Component):
             with m.State("MEM_READ_WAIT"):
                 with m.If(self.bus.ack):
                     m.d.sync += data_read.eq(self.bus.dat_r)
+                    m.d.sync += self.bus.cyc.eq(0)
+                    m.d.sync += self.bus.stb.eq(0)
                     m.next = "INDEX_SEND"
             with m.State("INDEX_SEND"):
                 with m.If(~self.os_index.valid | self.os_index.ready):
@@ -389,22 +389,20 @@ class InputAssembly(wiring.Component):
             def components(self) -> int:
                 return len(self.data_v)
 
-        attr_info = Array(
-            [
-                AttrInfo(config=self.c_pos, data_v=vtx.position),
-                AttrInfo(config=self.c_norm, data_v=vtx.normal),
-                *[
-                    AttrInfo(config=self.c_tex[i], data_v=vtx.texcoords[i])
-                    for i in range(num_textures)
-                ],
-                AttrInfo(config=self.c_col, data_v=vtx.color),
-            ]
-        )
+        attr_info = [
+            AttrInfo(config=self.c_pos, data_v=vtx.position),
+            AttrInfo(config=self.c_norm, data_v=vtx.normal),
+            *[
+                AttrInfo(config=self.c_tex[i], data_v=vtx.texcoords[i])
+                for i in range(num_textures)
+            ],
+            AttrInfo(config=self.c_col, data_v=vtx.color),
+        ]
 
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += [
-                    self.ready.eq(~self.os_vertex.valid & ~self.is_index.valid),
+                    self.ready.eq(1),
                     self.is_index.ready.eq(1),
                 ]
 
@@ -430,10 +428,8 @@ class InputAssembly(wiring.Component):
                             stride = config.info.per_vertex.stride
                             m.d.sync += addr.eq(base_addr + idx * stride)
                             m.next = f"{base_name}_MEM_READ_COMPONENT_0"
-                        with m.Default():
-                            m.d.sync += Assert(0, "Unknown input mode")
 
-                for i in range(len(attr.data_v)):
+                for i in range(attr.components):
                     with m.State(f"{base_name}_MEM_READ_COMPONENT_{i}"):
                         # initiate memory read
                         m.d.sync += [

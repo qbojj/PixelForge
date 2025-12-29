@@ -118,9 +118,6 @@ class GraphicsPipeline(wiring.Component):
     # Backpressure/ready (reflect index generator readiness)
     ready: Out(1)
 
-    def __init__(self):
-        super().__init__()
-
     def elaborate(self, platform):
         m = Module()
 

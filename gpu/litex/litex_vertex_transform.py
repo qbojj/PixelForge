@@ -23,15 +23,12 @@ class LiteXVertexTransform(LiteXModule, AutoCSR):
         self._enabled = CSRStorage(4, description="Enable transform stages")
 
         # Transformation matrices (simplified - 16 entries for 4x4 matrices)
-        self._position_mv_0 = CSRStorage(32, description="Position MV matrix [0]")
-        self._position_mv_1 = CSRStorage(32, description="Position MV matrix [1]")
-        self._position_mv_2 = CSRStorage(32, description="Position MV matrix [2]")
-        self._position_mv_3 = CSRStorage(32, description="Position MV matrix [3]")
+        self._position_mv = CSRStorage(32 * 4, description="Position MV matrix")
+        self._position_p = CSRStorage(32 * 4, description="Position P matrix")
 
-        self._position_p_0 = CSRStorage(32, description="Position P matrix [0]")
-        self._position_p_1 = CSRStorage(32, description="Position P matrix [1]")
-        self._position_p_2 = CSRStorage(32, description="Position P matrix [2]")
-        self._position_p_3 = CSRStorage(32, description="Position P matrix [3]")
+        self._normal_mv_inv_t = CSRStorage(
+            27 * 4, description="Normal MV Inv Transpose matrix"
+        )
 
         # # #
 
@@ -40,19 +37,9 @@ class LiteXVertexTransform(LiteXModule, AutoCSR):
             "i_rst": ResetSignal(),
             "o_ready": self._ready.status,
             "i_enabled": self._enabled.storage,
-            "i_position_mv": Cat(
-                self._position_mv_0.storage,
-                self._position_mv_1.storage,
-                self._position_mv_2.storage,
-                self._position_mv_3.storage,
-            ),
-            "i_position_p": Cat(
-                self._position_p_0.storage,
-                self._position_p_1.storage,
-                self._position_p_2.storage,
-                self._position_p_3.storage,
-            ),
-            "i_normal_mv_inv_t": 0,  # Not yet configured
+            "i_position_mv": self._position_mv.storage,
+            "i_position_p": self._position_p.storage,
+            "i_normal_mv_inv_t": self._normal_mv_inv_t.storage,
             "i_texture_transforms": 0,  # Not yet configured
             # Stream input (is_vertex)
             "i_is_vertex__valid": self.sink_vertex.valid,

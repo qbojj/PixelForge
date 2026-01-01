@@ -6,25 +6,30 @@
 # Copyright (c) 2025
 # SPDX-License-Identifier: BSD-2-Clause
 
+from hps.core import HPS
 from litedram.modules import IS42S16320
 from litedram.phy import GENSDRPHY
 from litex.build.io import DDROutput
 from litex.gen import *
 from litex.soc.cores.clock import CycloneVPLL
+from litex.soc.cores.cpu import CPUS
 from litex.soc.cores.video import VideoVGAPHY, video_timings
 from litex.soc.integration.builder import *
 from litex.soc.integration.soc_core import *
+from litex.soc.interconnect.csr import *
 from migen import *
 
-# Import GPU module
 from gpu.litex import LiteXGPU
 
-# Use custom platform with corrected VGA pins
-from gpu.litex.platforms import de1soc_platform
+from .de1soc_platform import Platform
+
+CPUS.update({"hps": HPS})
+
+PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
+BUILD_DIR = os.path.abspath("build")
+
 
 # CRG ----------------------------------------------------------------------------------------------
-
-
 class _CRG(LiteXModule):
     def __init__(
         self, platform, sys_clk_freq, with_vga=False, vga_timings="640x480@60Hz"
@@ -60,8 +65,6 @@ class _CRG(LiteXModule):
 
 
 # BaseSoC ------------------------------------------------------------------------------------------
-
-
 class BaseSoC(SoCCore):
     def __init__(
         self,
@@ -71,7 +74,7 @@ class BaseSoC(SoCCore):
         vga_timings="640x480@60Hz",
         **kwargs,
     ):
-        platform = de1soc_platform.Platform()
+        platform = Platform()
 
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(
@@ -86,7 +89,7 @@ class BaseSoC(SoCCore):
             self,
             platform,
             sys_clk_freq,
-            ident="LiteX SoC on DE1-SoC with GPU",
+            ident="LiteX SoC on DE1-SoC with HPS CPU and GPU",
             **kwargs,
         )
 
@@ -106,7 +109,7 @@ class BaseSoC(SoCCore):
             self.submodules.gpu = LiteXGPU(platform)
 
             # Register GPU Verilog sources with the platform
-            platform.add_source_dir("/home/kuba/Desktop/FPGA/praca/build/gpu_verilog")
+            platform.add_source_dir(f"{BUILD_DIR}/gpu_verilog")
 
             # Connect GPU Wishbone buses to main bus as masters
             self.bus.add_master(name="gpu_index", master=self.gpu.bus_index)
@@ -131,7 +134,7 @@ def main():
     from litex.build.parser import LiteXArgumentParser
 
     parser = LiteXArgumentParser(
-        platform=de1soc_platform.Platform,
+        platform=Platform,
         description="LiteX SoC on DE1-SoC with GPU support.",
     )
     parser.add_target_argument(
@@ -142,6 +145,10 @@ def main():
     )
     parser.add_target_argument(
         "--with-gpu", action="store_true", help="Enable GPU (3D graphics pipeline)."
+    )
+    parser.set_defaults(
+        cpu_type="hps",
+        csr_ordering="little",
     )
     args = parser.parse_args()
 

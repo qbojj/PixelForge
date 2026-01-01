@@ -27,10 +27,17 @@ class LiteXSwapchainOutput(LiteXModule, AutoCSR):
         self._fb_color_addr = CSRStorage(32, description="Color buffer base address")
 
         # Blend configuration
-        self._blend_enable = CSRStorage(1, description="Enable blending")
-        self._blend_src_factor = CSRStorage(4, description="Source blend factor")
-        self._blend_dst_factor = CSRStorage(4, description="Destination blend factor")
-        self._blend_op = CSRStorage(3, description="Blend operation")
+        self._conf = CSRStorage(
+            12,
+            fields=[
+                CSRField("blend_enable", size=1, description="Enable blending"),
+                CSRField("blend_src_factor", size=4, description="Source blend factor"),
+                CSRField(
+                    "blend_dst_factor", size=4, description="Destination blend factor"
+                ),
+                CSRField("blend_op", size=3, description="Blend operation"),
+            ],
+        )
 
         # # #
 
@@ -43,12 +50,7 @@ class LiteXSwapchainOutput(LiteXModule, AutoCSR):
                 self._fb_height.storage,
                 self._fb_color_addr.storage,
             ),
-            "i_conf": Cat(
-                self._blend_enable.storage,
-                self._blend_src_factor.storage,
-                self._blend_dst_factor.storage,
-                self._blend_op.storage,
-            ),
+            "i_conf": self._conf.storage,
             # Wishbone connections
             "o_wb_bus__adr": self.wb_bus.adr,
             "i_wb_bus__dat_r": self.wb_bus.dat_r,

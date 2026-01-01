@@ -19,12 +19,6 @@ class LiteXTexturing(LiteXModule, AutoCSR):
         self.sink_fragment = stream.Endpoint(fragment_layout)
         self.source_fragment = stream.Endpoint(fragment_layout)
 
-        # Texture sampling configuration
-        self._tex_enabled = CSRStorage(8, description="Texture unit enable flags")
-        self._tex_filter = CSRStorage(8, description="Texture filter mode per unit")
-        self._tex_wrap_s = CSRStorage(8, description="S wrap mode per unit")
-        self._tex_wrap_t = CSRStorage(8, description="T wrap mode per unit")
-
         # # #
 
         gpu_params = {

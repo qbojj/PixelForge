@@ -3,6 +3,8 @@ from amaranth.lib import data
 
 from .types import (
     FixedPoint,
+    FixedPoint_depth,
+    FixedPoint_fb,
     Vector3,
     Vector4,
     address_shape,
@@ -65,13 +67,14 @@ class FramebufferInfoLayout(data.Struct):
     width: texture_coord_shape
     height: texture_coord_shape
 
-    # Viewport transform (NDC to screen space) - floats converted to fixed-point
-    viewport_x: FixedPoint
-    viewport_y: FixedPoint
-    viewport_width: FixedPoint
-    viewport_height: FixedPoint
-    viewport_min_depth: FixedPoint
-    viewport_max_depth: FixedPoint
+    # Viewport transform (NDC to screen space) - stored as standard FixedPoint_mem (16.16) in CSRs
+    # Internal pipeline converts to FixedPoint_fb (12.4) or FixedPoint_depth (UQ(1,15)) as needed
+    viewport_x: FixedPoint_fb
+    viewport_y: FixedPoint_fb
+    viewport_width: FixedPoint_fb
+    viewport_height: FixedPoint_fb
+    viewport_min_depth: FixedPoint_depth
+    viewport_max_depth: FixedPoint_depth
 
     # Scissor rectangle (rasterization clip region) - integer coordinates
     scissor_offset_x: signed(32)

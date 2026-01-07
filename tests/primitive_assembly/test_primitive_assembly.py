@@ -236,7 +236,7 @@ def test_triangle_front_facing():
         input_data=tri,
         output_stream=dut.os_primitive,
         output_data_checker=checker,
-        idle_for=30,
+        idle_for=1000,
     )
 
     sim.run()

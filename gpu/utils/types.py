@@ -19,8 +19,16 @@ Vector4_mem = data.ArrayLayout(FixedPoint_mem, 4)
 Matrix4_mem = data.ArrayLayout(FixedPoint_mem, 16)
 Matrix3_mem = data.ArrayLayout(FixedPoint_mem, 9)
 
+# Framebuffer screen-space coordinates with subpixel precision
+FixedPoint_fb = fixed.SQ(12, 4)  # 16-bit signed with 4 bits subpixel precision
 
-texture_coord_shape = unsigned(12)  # Max 4kx4k textures
+# Normalized depth (0.0..1.0) for viewport min/max depth
+FixedPoint_depth = fixed.UQ(
+    1, 15
+)  # 16-bit unsigned, range [0.0, ~2.0), normalized to [0.0, 1.0]
+
+
+texture_coord_shape = unsigned(10)  # Max 1kx1k textures
 address_shape = unsigned(32)
 
 # The FPGA has hardware multiplier of max 27x27 bits, so we don't want stride at 32bits

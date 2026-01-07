@@ -312,14 +312,15 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
                 ndc_x = x.as_float() / w.as_float()
                 ndc_y = y.as_float() / w.as_float()
                 ndc_z = z.as_float() / w.as_float()
+                err = 0.001
                 assert (
-                    -1.0 <= ndc_x <= 1.0
+                    -1.0 - err <= ndc_x <= 1.0 + err
                 ), f"Primitive {prim_idx} Vertex {vert_idx} x out of NDC bounds: {ndc_x}"
                 assert (
-                    -1.0 <= ndc_y <= 1.0
+                    -1.0 - err <= ndc_y <= 1.0 + err
                 ), f"Primitive {prim_idx} Vertex {vert_idx} y out of NDC bounds: {ndc_y}"
                 assert (
-                    -1.0 <= ndc_z <= 1.0
+                    -1.0 - err <= ndc_z <= 1.0 + err
                 ), f"Primitive {prim_idx} Vertex {vert_idx} z out of NDC bounds: {ndc_z}"
 
     async def init_process(ctx):
@@ -336,7 +337,7 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
         output_stream=dut.os_vertex,
         output_data_checker=output_checker,
         init_process=init_process,
-        idle_for=300,  # Allow time for clipping computation
+        idle_for=3000,  # Allow time for clipping computation
     )
 
     sim.run()

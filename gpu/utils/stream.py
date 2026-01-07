@@ -289,20 +289,16 @@ class AnyDistributor(wiring.Component):
             with m.If(out_s.ready):
                 m.d.sync += out_s.valid.eq(0)
 
-        first_ready = Signal(range(self.num_outputs))
-        any_ready = Signal()
-
-        for i in range(self.num_outputs):
-            with m.If(self.o[i].ready | ~self.o[i].valid):
-                m.d.comb += first_ready.eq(i)
-                m.d.comb += any_ready.eq(1)
-
-        with m.If(any_ready & self.i.valid):
-            m.d.sync += [
-                self.o[first_ready].p.eq(self.i.p),
-                self.o[first_ready].valid.eq(1),
-            ]
-            m.d.comb += self.i.ready.eq(1)
+        with m.If(self.i.valid):
+            with m.If(0):
+                pass  # dummy to simplify Elif chain
+            for o in self.o:
+                with m.Elif(~o.valid | o.ready):
+                    m.d.sync += [
+                        o.p.eq(self.i.p),
+                        o.valid.eq(1),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
 
         return m
 
@@ -324,23 +320,19 @@ class AnyRecombiner(wiring.Component):
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        first_valid = Signal(range(self.num_inputs))
-        any_valid = Signal()
-
-        for i in range(self.num_inputs):
-            with m.If(self.i[i].valid):
-                m.d.comb += first_valid.eq(i)
-                m.d.comb += any_valid.eq(1)
-
         with m.If(self.o.ready):
             m.d.sync += self.o.valid.eq(0)
 
-        with m.If(any_valid & (self.o.ready | ~self.o.valid)):
-            m.d.sync += [
-                self.o.p.eq(self.i[first_valid].p),
-                self.o.valid.eq(1),
-            ]
-            m.d.comb += self.i[first_valid].ready.eq(1)
+        with m.If(~self.o.valid | self.o.ready):
+            with m.If(0):
+                pass  # dummy to simplify Elif chain
+            for i in self.i:
+                with m.Elif(i.valid):
+                    m.d.sync += [
+                        self.o.p.eq(i.p),
+                        self.o.valid.eq(1),
+                    ]
+                    m.d.comb += i.ready.eq(1)
 
         return m
 

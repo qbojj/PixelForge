@@ -52,6 +52,22 @@ class PrimitiveClipper(wiring.Component):
         edge_curr_idx = Signal(range(9))
         edge_next_idx = Signal(range(9))
 
+        # Single shared multiplier for t and interpolation (time-multiplexed)
+        mul_in_a = Signal(FixedPoint)
+        mul_in_b = Signal(FixedPoint)
+        mul_p = Signal(FixedPoint)
+        m.d.comb += mul_p.eq(mul_in_a * mul_in_b)
+
+        t_reg = Signal(FixedPoint)
+        lerp_a_reg = Signal(FixedPoint)
+        lerp_phase = Signal()  # 0=setup multiply, 1=accumulate/write
+        # Number of components to lerp: 4 pos + 4 color + 4*num_textures texcoords
+        total_fields = 8 + 4 * num_textures
+        lerp_stage = Signal(range(max(1, total_fields)))
+        out_count_reg = Signal(range(10))
+        src_reg = Signal()
+        dst_reg = Signal()
+
         # Primitive vertex count based on register
         with m.Switch(self.prim_type):
             with m.Case(PrimitiveType.POINTS):
@@ -347,118 +363,144 @@ class PrimitiveClipper(wiring.Component):
             with m.State("CLIP_INV_WAIT"):
                 m.d.comb += inv.o.ready.eq(1)
                 with m.If(inv.o.valid):
-                    m.d.sync += t_recip.eq(inv.o.p)
-                    m.next = "CLIP_APPLY"
+                    m.d.sync += [
+                        t_recip.eq(inv.o.p),
+                        src_reg.eq(clip_src),
+                        dst_reg.eq(~clip_src),
+                        out_count_reg.eq(clip_count[~clip_src]),
+                    ]
+                    m.next = "CLIP_T_MUL"
 
-            with m.State("CLIP_APPLY"):
-                # Apply intersection using t = t_num * t_recip
-                src = clip_src
-                dst = ~clip_src
+            with m.State("CLIP_T_MUL"):
+                # Multiply t = t_num * t_recip using the shared multiplier
+                m.d.sync += [
+                    mul_in_a.eq(t_num),
+                    mul_in_b.eq(t_recip),
+                ]
+                m.next = "CLIP_T_LATCH"
+
+            with m.State("CLIP_T_LATCH"):
+                # Latch t and prepare for iterative interpolation
+                m.d.sync += [
+                    t_reg.eq(mul_p.reshape(FixedPoint.f_bits)),
+                    lerp_stage.eq(0),
+                    lerp_phase.eq(0),
+                ]
+                m.next = "CLIP_LERP"
+
+            with m.State("CLIP_LERP"):
+                # Iteratively interpolate components using the shared multiplier
+                src = src_reg
+                dst = dst_reg
                 curr_idx = edge_curr_idx
                 next_idx = edge_next_idx
                 curr_v = clip_buf[src][curr_idx]
                 next_v = clip_buf[src][next_idx]
-                out_count = clip_count[dst]
+                out_idx = out_count_reg
 
-                m.d.sync += Print(
-                    Format(
-                        "CLIP_APPLY plane {} src {} dst {} curr {} next {} out {} emit_next {}",
-                        clip_plane,
-                        src,
-                        dst,
-                        curr_idx,
-                        next_idx,
-                        out_count,
-                        emit_next,
+                result = Signal(FixedPoint)
+                m.d.comb += result.eq(
+                    (lerp_a_reg + mul_p.reshape(FixedPoint.f_bits)).reshape(
+                        FixedPoint.f_bits
                     )
                 )
 
-                t = Signal(FixedPoint)
-                t_full = t_num * t_recip
-                # Constrain t back to the base fixed-point width to avoid overflow
-                m.d.comb += t.eq(t_full.reshape(FixedPoint.f_bits))
-
-                def lerp(a, b, t):
-                    # Keep intermediate products at the base fractional precision
-                    a_v = Value.cast(a, FixedPoint.f_bits)
-                    b_v = Value.cast(b, FixedPoint.f_bits)
-                    diff = (b_v - a_v).reshape(FixedPoint.f_bits)
-                    prod = (t * diff).reshape(FixedPoint.f_bits)
-                    return (a_v + prod).reshape(FixedPoint.f_bits)
-
-                def lerp_a(a, b, t, n):
-                    return [lerp(a[i], b[i], t) for i in range(n)]
-
-                pos = lerp_a(curr_v.position_ndc, next_v.position_ndc, t, 4)
-                col = lerp_a(curr_v.color, next_v.color, t, 4)
-
-                # Force the intersected coordinate to lie exactly on the clipping plane
-                # to avoid tiny fixed-point overshoot (e.g. 1.00012 instead of 1.0).
-                pos_clamped = [Signal.like(pos[i]) for i in range(len(pos))]
-                m.d.comb += [
-                    pos_clamped[0].eq(
-                        Mux(
-                            clip_plane == 0,
-                            pos[3],
-                            Mux(clip_plane == 1, -pos[3], pos[0]),
-                        )
-                    ),
-                    pos_clamped[1].eq(
-                        Mux(
-                            clip_plane == 2,
-                            pos[3],
-                            Mux(clip_plane == 3, -pos[3], pos[1]),
-                        )
-                    ),
-                    pos_clamped[2].eq(
-                        Mux(
-                            clip_plane == 4,
-                            pos[3],
-                            Mux(clip_plane == 5, -pos[3], pos[2]),
-                        )
-                    ),
-                    pos_clamped[3].eq(pos[3]),
-                ]
-
-                # Build interpolated texcoords
-                m.d.sync += Print(Format("      t {}", t))
-
-                # Assign individual fields directly
-                for i in range(4):
-                    m.d.sync += (
-                        clip_buf[dst][out_count].position_ndc[i].eq(pos_clamped[i])
-                    )
-                for i in range(4):
-                    m.d.sync += clip_buf[dst][out_count].color[i].eq(col[i])
-                for ti in range(num_textures):
-                    tex = lerp_a(curr_v.texcoords[ti], next_v.texcoords[ti], t, 4)
-                    for i in range(4):
-                        m.d.sync += clip_buf[dst][out_count].texcoords[ti][i].eq(tex[i])
-                m.d.sync += clip_buf[dst][out_count].front_facing.eq(
-                    curr_v.front_facing
-                )
-
-                with m.If(emit_next):
-                    m.d.sync += [
-                        clip_buf[dst][out_count + 1].eq(next_v),
-                        clip_count[dst].eq(out_count + 2),
-                    ]
+                with m.If(lerp_phase == 0):
+                    # Setup multiply for current component
+                    with m.Switch(lerp_stage):
+                        for i in range(4):
+                            with m.Case(i):
+                                a_v = Value.cast(
+                                    curr_v.position_ndc[i], FixedPoint.f_bits
+                                )
+                                b_v = Value.cast(
+                                    next_v.position_ndc[i], FixedPoint.f_bits
+                                )
+                                m.d.sync += [
+                                    lerp_a_reg.eq(a_v),
+                                    mul_in_a.eq(t_reg),
+                                    mul_in_b.eq(b_v - a_v),
+                                ]
+                        for i in range(4):
+                            with m.Case(4 + i):
+                                a_v = Value.cast(curr_v.color[i], FixedPoint.f_bits)
+                                b_v = Value.cast(next_v.color[i], FixedPoint.f_bits)
+                                m.d.sync += [
+                                    lerp_a_reg.eq(a_v),
+                                    mul_in_a.eq(t_reg),
+                                    mul_in_b.eq(b_v - a_v),
+                                ]
+                        if num_textures > 0:
+                            for t_idx in range(num_textures):
+                                for comp in range(4):
+                                    stage_idx = 8 + t_idx * 4 + comp
+                                    with m.Case(stage_idx):
+                                        a_v = Value.cast(
+                                            curr_v.texcoords[t_idx][comp],
+                                            FixedPoint.f_bits,
+                                        )
+                                        b_v = Value.cast(
+                                            next_v.texcoords[t_idx][comp],
+                                            FixedPoint.f_bits,
+                                        )
+                                        m.d.sync += [
+                                            lerp_a_reg.eq(a_v),
+                                            mul_in_a.eq(t_reg),
+                                            mul_in_b.eq(b_v - a_v),
+                                        ]
+                    m.d.sync += lerp_phase.eq(1)
                 with m.Else():
-                    m.d.sync += [
-                        clip_count[dst].eq(out_count + 1),
-                    ]
+                    # Write interpolated component and advance
+                    with m.Switch(lerp_stage):
+                        for i in range(4):
+                            with m.Case(i):
+                                m.d.sync += (
+                                    clip_buf[dst][out_idx].position_ndc[i].eq(result)
+                                )
+                        for i in range(4):
+                            with m.Case(4 + i):
+                                m.d.sync += clip_buf[dst][out_idx].color[i].eq(result)
+                        if num_textures > 0:
+                            for t_idx in range(num_textures):
+                                for comp in range(4):
+                                    stage_idx = 8 + t_idx * 4 + comp
+                                    with m.Case(stage_idx):
+                                        m.d.sync += (
+                                            clip_buf[dst][out_idx]
+                                            .texcoords[t_idx][comp]
+                                            .eq(result)
+                                        )
 
-                # Continue to next edge or next plane
-                with m.If(clip_idx == clip_count[src] - 1):
-                    m.d.sync += clip_src.eq(dst)
-                    with m.If(clip_plane == 5):
-                        m.next = "CLIP_EMIT"
+                    with m.If(lerp_stage == (total_fields - 1)):
+                        # Finished interpolated vertex; finalize bookkeeping
+                        m.d.sync += [
+                            clip_buf[dst][out_idx].front_facing.eq(curr_v.front_facing)
+                        ]
+                        with m.If(emit_next):
+                            m.d.sync += [
+                                clip_buf[dst][out_idx + 1].eq(next_v),
+                                clip_count[dst].eq(out_idx + 2),
+                            ]
+                        with m.Else():
+                            m.d.sync += clip_count[dst].eq(out_idx + 1)
+
+                        # Continue to next edge or plane
+                        with m.If(clip_idx == clip_count[src] - 1):
+                            m.d.sync += clip_src.eq(dst)
+                            with m.If(clip_plane == 5):
+                                m.next = "CLIP_EMIT"
+                            with m.Else():
+                                m.d.sync += clip_plane.eq(clip_plane + 1)
+                                m.next = "CLIP_PLANE"
+                        with m.Else():
+                            m.d.sync += clip_idx.eq(clip_idx + 1)
+                            m.next = "CLIP_EDGE"
+                        m.d.sync += lerp_phase.eq(0)
                     with m.Else():
-                        m.d.sync += clip_plane.eq(clip_plane + 1)
-                        m.next = "CLIP_PLANE"
-                with m.Else():
-                    m.d.sync += clip_idx.eq(clip_idx + 1)
-                    m.next = "CLIP_EDGE"
+                        m.d.sync += [
+                            lerp_stage.eq(lerp_stage + 1),
+                            lerp_phase.eq(0),
+                        ]
 
             with m.State("CLIP_EMIT"):
                 # Emit clipped polygon as triangle fan

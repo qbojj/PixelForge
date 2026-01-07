@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from litex.build.generic_platform import IOStandard, Pins, Subsignal
+from litex.build.generic_platform import Inverted, IOStandard, Pins, Subsignal
 from litex_boards.platforms import terasic_de1soc
 
 # Corrected VGA resource for DE1-SoC
@@ -13,9 +13,9 @@ _vga_io = [
         Subsignal("b", Pins("B13 G13 H13 F14 H14 F15 G15 J14")),
         Subsignal("clk", Pins("A11")),
         Subsignal("be", Pins("F10")),
-        Subsignal("sync_n", Pins("C10")),
-        Subsignal("hsync_n", Pins("B11")),
-        Subsignal("vsync_n", Pins("D11")),
+        Subsignal("sync", Pins("C10"), Inverted()),
+        Subsignal("hsync", Pins("B11"), Inverted()),
+        Subsignal("vsync", Pins("D11"), Inverted()),
         IOStandard("3.3-V LVTTL"),
     ),
 ]

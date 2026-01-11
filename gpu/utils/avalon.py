@@ -316,7 +316,7 @@ class WishboneSlaveToAvalonBridge(Component):
             data_width=unflipped_bus.data_width,
             burst_count_width=None,
             has_byte_enable=has_byte_enable,
-            has_readdatavalid=True,
+            has_readdatavalid=False,
         )
 
         super().__init__({"avl_bus": In(avl_sig)})
@@ -350,16 +350,9 @@ class WishboneSlaveToAvalonBridge(Component):
             m.d.comb += wb_bus.sel.eq(~0)
 
         # Wishbone response -> Avalon response
-        wb_bus.ack & avl_is_write
-        read_ack = wb_bus.ack & ~avl_is_write
-
         m.d.comb += [
             avl.waitrequest.eq(~wb_bus.ack & avl_request),
             avl.readdata.eq(wb_bus.dat_r),
         ]
-
-        # Drive readdatavalid if supported
-        if hasattr(avl, "readdatavalid"):
-            m.d.comb += avl.readdatavalid.eq(read_ack)
 
         return m

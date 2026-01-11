@@ -1,6 +1,7 @@
 from amaranth import *
 from amaranth.lib import data
 
+from . import fixed
 from .types import (
     FixedPoint,
     FixedPoint_depth,
@@ -55,10 +56,23 @@ class RasterizerLayout(data.Struct):
     front_facing: unsigned(1)
 
 
-class FragmentLayout(data.Struct):
-    depth: FixedPoint
+class RasterizerLayoutNDC(data.Struct):
+    """Rasterizer layout with perspective-divided NDC coordinates (1:17 format for 18x18 multipliers)."""
+
+    position_ndc: data.ArrayLayout(
+        fixed.UQ(1, 17), 3
+    )  # x/w, y/w, z/w (perspective-divided, UQ(1,17))
+    w: FixedPoint  # Original w value for perspective correction
+    inv_w: FixedPoint  # 1/w in standard FixedPoint format
     texcoords: texture_coords
-    color: Vector4  # rgba in linear space
+    color: Vector4
+    front_facing: unsigned(1)
+
+
+class FragmentLayout(data.Struct):
+    depth: fixed.UQ(1, 17)
+    texcoords: texture_coords
+    color: data.ArrayLayout(fixed.UQ(1, 17), 4)  # rgba in linear space, UQ(1,17) format
     coord_pos: texture_position
     front_facing: unsigned(1)
 

@@ -17,8 +17,7 @@ class PrimitiveClipper(wiring.Component):
     - Output: stream of `RasterizerLayout` vertices with primitives fully inside the clip volume.
     - Registers: primitive type (point/line/triangle), cull face, winding order.
     - Culling: applied for triangles only (front/back based on area sign and winding).
-        - Clipping: trivial accept/reject against NDC cube (after perspective divide):
-            -1 <= x_ndc,y_ndc,z_ndc <= 1. No polygon splitting.
+    - Clipping: trivial accept/reject against NDC cube.
     """
 
     is_vertex: In(stream.Signature(RasterizerLayout))

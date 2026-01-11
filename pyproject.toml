@@ -28,6 +28,9 @@ build = [
   "litex-boards @ git+https://github.com/litex-hub/litex-boards.git@1cfca3b994cab9ba69ddedec26f22a5a5d82b013",
 ]
 
+[tool.setuptools]
+py-modules= ["gpu"]
+
 [tool.black]
 line-length = 88
 target-version = ['py310']

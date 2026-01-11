@@ -1,7 +1,9 @@
 import pytest
+from amaranth import Module
+from amaranth.lib import wiring
 from amaranth.sim import Simulator
 
-from gpu.rasterizer.rasterizer import TriangleRasterizer
+from gpu.rasterizer.rasterizer import PerspectiveDivide, TriangleRasterizer
 from gpu.utils.layouts import num_textures
 
 from ..utils.streams import stream_testbench
@@ -23,8 +25,11 @@ def make_pa_vertex(pos, color):
 @pytest.mark.parametrize("persp", [True, False])
 def test_rasterizer_single_triangle(persp: bool):
     """Test rasterizing a single triangle"""
-    dut = TriangleRasterizer()
-    t = SimpleTestbench(dut)
+    m = Module()
+    m.submodules.div = div = PerspectiveDivide()
+    m.submodules.rast = dut = TriangleRasterizer()
+    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    t = SimpleTestbench(m)
 
     # Setup framebuffer
     fb_width = 128
@@ -60,7 +65,10 @@ def test_rasterizer_single_triangle(persp: bool):
 
     if persp:
         for i, v in enumerate(triangle_vertices):
-            v["position_ndc"][3] = 0.5 + i * 0.5  # Vary w for perspective interpolation
+            for j in range(4):
+                v["position_ndc"][j] *= (
+                    0.5 + i * 0.5
+                )  # Vary w for perspective interpolation
 
     collected_fragments = []
 
@@ -86,14 +94,14 @@ def test_rasterizer_single_triangle(persp: bool):
 
     async def init_proc(ctx):
         # Set framebuffer info
-        ctx.set(t.dut.fb_info, fb_info)
+        ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=t.dut.is_vertex,
+        input_stream=div.i_vertex,
         input_data=triangle_vertices,
-        output_stream=t.dut.os_fragment,
+        output_stream=dut.os_fragment,
         output_data_checker=collect_output,
         idle_for=100000,  # Wait for rasterization to complete
     )
@@ -131,8 +139,11 @@ def test_rasterizer_single_triangle(persp: bool):
 @pytest.mark.slow
 def test_rasterizer_two_triangles():
     """Test rasterizing two triangles with different colors"""
-    dut = TriangleRasterizer()
-    t = SimpleTestbench(dut)
+    m = Module()
+    m.submodules.div = div = PerspectiveDivide()
+    m.submodules.rast = dut = TriangleRasterizer()
+    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    t = SimpleTestbench(m)
 
     # Setup framebuffer
     fb_width = 128
@@ -200,14 +211,14 @@ def test_rasterizer_two_triangles():
     input_vertices = triangle1 + triangle2
 
     async def init_proc(ctx):
-        ctx.set(t.dut.fb_info, fb_info)
+        ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=t.dut.is_vertex,
+        input_stream=div.i_vertex,
         input_data=input_vertices,
-        output_stream=t.dut.os_fragment,
+        output_stream=dut.os_fragment,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )
@@ -241,8 +252,11 @@ def test_rasterizer_two_triangles():
 @pytest.mark.slow
 def test_rasterizer_depth_interpolation():
     """Test that depth is correctly interpolated"""
-    dut = TriangleRasterizer()
-    t = SimpleTestbench(dut)
+    m = Module()
+    m.submodules.div = div = PerspectiveDivide()
+    m.submodules.rast = dut = TriangleRasterizer()
+    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    t = SimpleTestbench(m)
 
     fb_width = 128
     fb_height = 128
@@ -292,14 +306,14 @@ def test_rasterizer_depth_interpolation():
     sim.add_clock(1e-6)
 
     async def init_proc(ctx):
-        ctx.set(t.dut.fb_info, fb_info)
+        ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=t.dut.is_vertex,
+        input_stream=div.i_vertex,
         input_data=triangle,
-        output_stream=t.dut.os_fragment,
+        output_stream=dut.os_fragment,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )
@@ -334,8 +348,11 @@ def test_rasterizer_depth_interpolation():
 @pytest.mark.parametrize("alpha", [True, False])
 def test_rasterizer_two_overlapping_triangles(alpha: bool):
     """Test rasterizing two overlapping triangles to check fragment generation"""
-    dut = TriangleRasterizer()
-    t = SimpleTestbench(dut)
+    m = Module()
+    m.submodules.div = div = PerspectiveDivide()
+    m.submodules.rast = dut = TriangleRasterizer()
+    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    t = SimpleTestbench(m)
 
     fb_width = 128
     fb_height = 128
@@ -401,14 +418,14 @@ def test_rasterizer_two_overlapping_triangles(alpha: bool):
     input_vertices = triangle1 + triangle2
 
     async def init_proc(ctx):
-        ctx.set(t.dut.fb_info, fb_info)
+        ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=t.dut.is_vertex,
+        input_stream=div.i_vertex,
         input_data=input_vertices,
-        output_stream=t.dut.os_fragment,
+        output_stream=dut.os_fragment,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )

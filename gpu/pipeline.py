@@ -25,7 +25,7 @@ from .primitive_assembly.cores import (
     PrimitiveAssemblyConfigLayout,
 )
 from .rasterizer.cores import PrimitiveClipper
-from .rasterizer.rasterizer import TriangleRasterizer
+from .rasterizer.rasterizer import PerspectiveDivide, TriangleRasterizer
 from .utils import avalon as avl
 from .utils.layouts import (
     FramebufferInfoLayout,
@@ -137,42 +137,48 @@ class GraphicsPipeline(wiring.Component):
 
         m.submodules.pa = pa = PrimitiveAssembly()
         m.submodules.clip = clip = PrimitiveClipper()
-        m.submodules.rast = rast = TriangleRasterizer()
+        m.submodules.div = div = PerspectiveDivide()
+        m.submodules.rast = rast = TriangleRasterizer(num_generators=5)
 
         m.submodules.tex = tex = Texturing()
         m.submodules.ds = ds = DepthStencilTest()
         m.submodules.sc = sc = SwapchainOutput()
 
+        fifo_size_default = 256
+
         # FIFO buffers between stages
         m.submodules.idx_to_topo_fifo = fifo_idx_topo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(topo.is_index.p.shape()).width, depth=8
+            width=Shape.cast(topo.is_index.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.topo_to_ia_fifo = fifo_topo_ia = fifo.SyncFIFOBuffered(
-            width=Shape.cast(ia.is_index.p.shape()).width, depth=8
+            width=Shape.cast(ia.is_index.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.ia_to_vtx_xf_fifo = fifo_ia_vtx_xf = fifo.SyncFIFOBuffered(
-            width=Shape.cast(vtx_xf.is_vertex.p.shape()).width, depth=8
+            width=Shape.cast(vtx_xf.is_vertex.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.vtx_xf_to_vtx_sh_fifo = fifo_vtx_xf_vtx_sh = fifo.SyncFIFOBuffered(
-            width=Shape.cast(vtx_sh.is_vertex.p.shape()).width, depth=8
+            width=Shape.cast(vtx_sh.is_vertex.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.vtx_sh_to_pa_fifo = fifo_vtx_sh_pa = fifo.SyncFIFOBuffered(
-            width=Shape.cast(pa.is_vertex.p.shape()).width, depth=8
+            width=Shape.cast(pa.is_vertex.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.pa_to_clip_fifo = fifo_pa_clip = fifo.SyncFIFOBuffered(
-            width=Shape.cast(clip.is_vertex.p.shape()).width, depth=8
+            width=Shape.cast(clip.is_vertex.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.clip_to_rast_fifo = fifo_clip_rast = fifo.SyncFIFOBuffered(
-            width=Shape.cast(rast.is_vertex.p.shape()).width, depth=32
+        m.submodules.clip_to_div_fifo = fifo_clip_div = fifo.SyncFIFOBuffered(
+            width=Shape.cast(div.i_vertex.p.shape()).width, depth=fifo_size_default
+        )
+        m.submodules.div_to_rast_fifo = fifo_div_rast = fifo.SyncFIFOBuffered(
+            width=Shape.cast(rast.is_vertex.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.rast_to_tex_fifo = fifo_rast_tex = fifo.SyncFIFOBuffered(
-            width=Shape.cast(tex.is_fragment.p.shape()).width, depth=16
+            width=Shape.cast(tex.is_fragment.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.tex_to_ds_fifo = fifo_tex_ds = fifo.SyncFIFOBuffered(
-            width=Shape.cast(ds.is_fragment.p.shape()).width, depth=16
+            width=Shape.cast(ds.is_fragment.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.ds_to_sc_fifo = fifo_ds_sc = fifo.SyncFIFOBuffered(
-            width=Shape.cast(sc.is_fragment.p.shape()).width, depth=16
+            width=Shape.cast(sc.is_fragment.p.shape()).width, depth=fifo_size_default
         )
 
         # Streams wiring: IA chain
@@ -194,9 +200,12 @@ class GraphicsPipeline(wiring.Component):
         wiring.connect(m, pa.os_primitive, fifo_pa_clip.w_stream)
 
         wiring.connect(m, fifo_pa_clip.r_stream, clip.is_vertex)
-        wiring.connect(m, clip.os_vertex, fifo_clip_rast.w_stream)
+        wiring.connect(m, clip.os_vertex, fifo_clip_div.w_stream)
 
-        wiring.connect(m, fifo_clip_rast.r_stream, rast.is_vertex)
+        wiring.connect(m, fifo_clip_div.r_stream, div.i_vertex)
+        wiring.connect(m, div.o_vertex, fifo_div_rast.w_stream)
+
+        wiring.connect(m, fifo_div_rast.r_stream, rast.is_vertex)
         wiring.connect(m, rast.os_fragment, fifo_rast_tex.w_stream)
 
         wiring.connect(m, fifo_rast_tex.r_stream, tex.is_fragment)
@@ -235,7 +244,7 @@ class GraphicsPipeline(wiring.Component):
             pa.ready,
             fifo_pa_clip.level == 0,
             clip.ready,
-            fifo_clip_rast.level == 0,
+            fifo_clip_div.level == 0,
             rast.ready,
         ]
 

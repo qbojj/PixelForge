@@ -390,9 +390,17 @@ static void dump_pixel_shading(volatile uint8_t *csr) {
 
 static void dump_status(volatile uint8_t *csr) {
     uint32_t ready = pf_csr_get_ready(csr);
+    uint32_t ready_components = pf_csr_get_ready_components(csr);
+    uint32_t ready_vec = pf_csr_get_ready_vec(csr);
 
     printf("\n[STATUS]\n");
-    printf("  ready: %u %s\n", ready & 1, (ready & 1) ? "(GPU ready)" : "(GPU busy)");
+    printf("  ready: %u (%s)\n", ready & 1, ready & 1 ? "ready" : "busy");
+    printf("  ia:      (%s)\n", ready_components & 1 ? "ready" : "busy");
+    printf("  vt:      (%s)\n", ready_components & 2 ? "ready" : "busy");
+    printf("  rast:    (%s)\n", ready_components & 4 ? "ready" : "busy");
+    printf("  pix:     (%s)\n", ready_components & 8 ? "ready" : "busy");
+
+    printf("  ready vector:  %0b\n", ready_vec);
 }
 
 int main(int argc, char **argv) {

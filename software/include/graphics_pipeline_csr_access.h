@@ -91,6 +91,8 @@ void pf_csr_get_blend(volatile uint8_t *base, pixelforge_blend_config_t *c);
  * Status
  * ============================= */
 uint32_t pf_csr_get_ready(volatile uint8_t *base);
+uint32_t pf_csr_get_ready_components(volatile uint8_t *base);
+uint32_t pf_csr_get_ready_vec(volatile uint8_t *base);
 
 #ifdef __cplusplus
 }

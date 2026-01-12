@@ -52,6 +52,8 @@ static inline void pf_read_attr_constant(volatile uint8_t *base, uint32_t base_o
 static inline void pf_write_attr_per_vertex(volatile uint8_t *base, uint32_t base_off, const pixelforge_input_attr_t *attr) {
     pf_csr_write32(base, base_off,     attr->info.per_vertex.address);
     pf_csr_write32(base, base_off+4,   (uint32_t)attr->info.per_vertex.stride);
+    pf_csr_write32(base, base_off+8,   0);
+    pf_csr_write32(base, base_off+12,   0);
 }
 static inline void pf_read_attr_per_vertex(volatile uint8_t *base, uint32_t base_off, pixelforge_input_attr_t *attr) {
     attr->info.per_vertex.address = pf_csr_read32(base, base_off);
@@ -122,6 +124,7 @@ void pf_csr_set_vtx_xf(volatile uint8_t *base, const pixelforge_vtx_xf_config_t 
     for (int i = 0; i < 16; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_POSITION_MV + i*4, (uint32_t)cfg->position_mv[i]);
     for (int i = 0; i < 16; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_POSITION_P  + i*4, (uint32_t)cfg->position_p[i]);
     for (int i = 0; i < 9; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_NORMAL_MV_INV_T + i*4, (uint32_t)cfg->normal_mv_inv_t[i]);
+    for (int i = 9; i < 16; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_NORMAL_MV_INV_T + i*4, 0);
 }
 
 void pf_csr_get_vtx_xf(volatile uint8_t *base, pixelforge_vtx_xf_config_t *cfg) {
@@ -137,8 +140,11 @@ void pf_csr_get_vtx_xf(volatile uint8_t *base, pixelforge_vtx_xf_config_t *cfg) 
  * ============================= */
 void pf_csr_set_material(volatile uint8_t *base, const pixelforge_material_t *mat) {
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_AMBIENT + i*4, (uint32_t)mat->ambient[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_AMBIENT + i*4, 0);
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_DIFFUSE + i*4, (uint32_t)mat->diffuse[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_DIFFUSE + i*4, 0);
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_SPECULAR + i*4, (uint32_t)mat->specular[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_SPECULAR + i*4, 0);
     pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_SHININESS, (uint32_t)mat->shininess);
 }
 void pf_csr_get_material(volatile uint8_t *base, pixelforge_material_t *mat) {
@@ -151,8 +157,11 @@ void pf_csr_get_material(volatile uint8_t *base, pixelforge_material_t *mat) {
 void pf_csr_set_light0(volatile uint8_t *base, const pixelforge_light_t *lit) {
     for (int i = 0; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION + i*4, (uint32_t)lit->position[i]);
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT  + i*4, (uint32_t)lit->ambient[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT  + i*4, 0);
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE  + i*4, (uint32_t)lit->diffuse[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE  + i*4, 0);
     for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR + i*4, (uint32_t)lit->specular[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR + i*4, 0);
 }
 void pf_csr_get_light0(volatile uint8_t *base, pixelforge_light_t *lit) {
     for (int i = 0; i < 4; ++i) lit->position[i] = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION + i*4);
@@ -218,30 +227,27 @@ void pf_csr_get_fb(volatile uint8_t *base, pixelforge_framebuffer_config_t *cfg)
 /* =============================
  * Depth/Stencil & Blend helpers
  * ============================= */
-static uint32_t pf_pack_stencil_ops(const pixelforge_stencil_op_config_t *c) {
+static void pf_csr_set_stencil_conf(volatile uint8_t *base, uint32_t off, const pixelforge_stencil_op_config_t *c) {
     uint32_t w = 0;
     w |= ((uint32_t)c->compare_op & 0x7) << 0;
     w |= ((uint32_t)c->pass_op    & 0x7) << 3;
     w |= ((uint32_t)c->fail_op    & 0x7) << 6;
     w |= ((uint32_t)c->depth_fail_op & 0x7) << 9;
-    return w;
+    w |= ((uint32_t)c->reference  & 0xFF) << 16;
+    w |= ((uint32_t)c->mask       & 0xFF) << 24;
+
+    pf_csr_write32(base, off, w);
+    pf_csr_write32(base, off + 4, ((uint32_t)c->write_mask & 0xFF));
 }
-static uint32_t pf_pack_stencil_masks(const pixelforge_stencil_op_config_t *c) {
-    uint32_t w = 0;
-    w |= ((uint32_t)c->reference & 0xFF) << 16;
-    w |= ((uint32_t)c->mask      & 0xFF) << 24;
-    /* write_mask in another 32-bit reg if needed; here we assume single 32-bit */
-    return w;
-}
-static void pf_unpack_stencil_ops(uint32_t w, pixelforge_stencil_op_config_t *c) {
+static void pf_csr_get_stencil_conf(volatile uint8_t *base, uint32_t off, pixelforge_stencil_op_config_t *c) {
+    uint32_t w = pf_csr_read32(base, off);
     c->compare_op    = (uint8_t)((w >> 0) & 0x7);
     c->pass_op       = (uint8_t)((w >> 3) & 0x7);
     c->fail_op       = (uint8_t)((w >> 6) & 0x7);
     c->depth_fail_op = (uint8_t)((w >> 9) & 0x7);
-}
-static void pf_unpack_stencil_masks(uint32_t w, pixelforge_stencil_op_config_t *c) {
-    c->reference = (uint8_t)((w >> 16) & 0xFF);
-    c->mask      = (uint8_t)((w >> 24) & 0xFF);
+    c->reference  = (uint8_t)((w >> 16) & 0xFF);
+    c->mask       = (uint8_t)((w >> 24) & 0xFF);
+    c->write_mask = (uint8_t)(pf_csr_read32(base, off + 4) & 0xFF);
 }
 
 static uint32_t pf_pack_depth_test(const pixelforge_depth_test_config_t *c) {
@@ -281,29 +287,17 @@ static void pf_unpack_blend_config(uint32_t w, pixelforge_blend_config_t *c) {
 }
 
 void pf_csr_set_stencil_front(volatile uint8_t *base, const pixelforge_stencil_op_config_t *c) {
-    uint32_t ops = pf_pack_stencil_ops(c);
-    uint32_t masks = pf_pack_stencil_masks(c);
-    pf_csr_write32(base, PIXELFORGE_CSR_DS_STENCIL_FRONT, ops);
-    pf_csr_write32(base, PIXELFORGE_CSR_DS_STENCIL_FRONT + 4, masks);
+    pf_csr_set_stencil_conf(base, PIXELFORGE_CSR_DS_STENCIL_FRONT, c);
 }
 void pf_csr_get_stencil_front(volatile uint8_t *base, pixelforge_stencil_op_config_t *c) {
-    uint32_t ops   = pf_csr_read32(base, PIXELFORGE_CSR_DS_STENCIL_FRONT);
-    uint32_t masks = pf_csr_read32(base, PIXELFORGE_CSR_DS_STENCIL_FRONT + 4);
-    pf_unpack_stencil_ops(ops, c);
-    pf_unpack_stencil_masks(masks, c);
+    pf_csr_get_stencil_conf(base, PIXELFORGE_CSR_DS_STENCIL_FRONT, c);
 }
 
 void pf_csr_set_stencil_back(volatile uint8_t *base, const pixelforge_stencil_op_config_t *c) {
-    uint32_t ops = pf_pack_stencil_ops(c);
-    uint32_t masks = pf_pack_stencil_masks(c);
-    pf_csr_write32(base, PIXELFORGE_CSR_DS_STENCIL_BACK, ops);
-    pf_csr_write32(base, PIXELFORGE_CSR_DS_STENCIL_BACK + 4, masks);
+    pf_csr_set_stencil_conf(base, PIXELFORGE_CSR_DS_STENCIL_BACK, c);
 }
 void pf_csr_get_stencil_back(volatile uint8_t *base, pixelforge_stencil_op_config_t *c) {
-    uint32_t ops   = pf_csr_read32(base, PIXELFORGE_CSR_DS_STENCIL_BACK);
-    uint32_t masks = pf_csr_read32(base, PIXELFORGE_CSR_DS_STENCIL_BACK + 4);
-    pf_unpack_stencil_ops(ops, c);
-    pf_unpack_stencil_masks(masks, c);
+    pf_csr_get_stencil_conf(base, PIXELFORGE_CSR_DS_STENCIL_BACK, c);
 }
 
 void pf_csr_set_depth(volatile uint8_t *base, const pixelforge_depth_test_config_t *c) {
@@ -326,4 +320,12 @@ void pf_csr_get_blend(volatile uint8_t *base, pixelforge_blend_config_t *c) {
 
 uint32_t pf_csr_get_ready(volatile uint8_t *base) {
     return pf_csr_read32(base, PIXELFORGE_CSR_READY);
+}
+
+uint32_t pf_csr_get_ready_components(volatile uint8_t *base) {
+    return pf_csr_read32(base, PIXELFORGE_CSR_READY_COMPONENTS);
+}
+
+uint32_t pf_csr_get_ready_vec(volatile uint8_t *base) {
+    return pf_csr_read32(base, PIXELFORGE_CSR_READY_VEC);
 }

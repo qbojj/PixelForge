@@ -84,17 +84,9 @@ static bool g_throttle = false;
     if (g_throttle) usleep(300000); \
 } while (0)
 
-/* Platform-specific cache flush */
-#if defined(__arm__) || defined(__aarch64__)
-extern void __clear_cache(void *begin, void *end);
 static void flush_dcache(void *addr, size_t size) {
-    __clear_cache(addr, (char*)addr + size);
+    __builtin___clear_cache(addr, (char*)addr + size);
 }
-#else
-static void flush_dcache(void *addr, size_t size) {
-    (void)addr; (void)size; /* no-op on non-ARM during host builds */
-}
-#endif
 
 static void handle_sigint(int sig) {
     (void)sig;
@@ -184,7 +176,30 @@ pixelforge_dev* pixelforge_open_dev(void) {
         dev->x_resolution, dev->y_resolution,
         dev->front_buffer_address, dev->back_buffer_address);
 
+    /* setup front and back buffers in the DMA controller */
+    dev->dma_regs->back_buffer = dev->front_buffer_address;
+    dev->dma_regs->front_buffer = 1; // trigger swap to load front buffer address
+    while (dev->dma_regs->status.bits.swap_busy && keep_running) {
+        usleep(50);  /* wait for previous swap to complete */
+    }
+    dev->dma_regs->back_buffer = dev->back_buffer_address;
+
     return dev;
+}
+
+/* Report GPU readiness status (components + vector) */
+static void report_ready_status(volatile uint8_t *csr) {
+    uint32_t ready = pf_csr_get_ready(csr);
+    uint32_t comps = pf_csr_get_ready_components(csr);
+    uint32_t vec = pf_csr_get_ready_vec(csr);
+
+    printf("[GPU READY] ready=%u  ia=%s vt=%s rast=%s pix=%s  vec=0x%08x\n",
+           (ready & 1u),
+           (comps & 0x1) ? "ready" : "busy",
+           (comps & 0x2) ? "ready" : "busy",
+           (comps & 0x4) ? "ready" : "busy",
+           (comps & 0x8) ? "ready" : "busy",
+           vec);
 }
 
 /*
@@ -219,14 +234,13 @@ int pixelforge_set_back_buffer(pixelforge_dev *dev, uint32_t new_address) {
 int pixelforge_swap_buffers(pixelforge_dev *dev) {
     if (!dev || !dev->dma_regs) return -1;
 
-    while (dev->dma_regs->status.bits.swap_busy && keep_running) {
-        usleep(50);  /* wait for previous swap to complete */
-    }
-
     uint32_t temp = dev->back_buffer_address;
 
     /* Trigger swap by writing to front register */
     dev->dma_regs->front_buffer = 1;
+    while (dev->dma_regs->status.bits.swap_busy && keep_running) {
+        usleep(50);
+    }
 
     /* Update tracked addresses */
     dev->back_buffer_address = dev->front_buffer_address;
@@ -416,6 +430,18 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     DBG("Vertex attributes set: pos=0x%08x norm=0x%08x col=0x%08x stride=%u",
         pos_addr, norm_addr, col_addr, stride);
 
+    /* test if vertex atts were set */
+    pixelforge_input_attr_t test_attr;
+    pf_csr_get_attr_position(csr, &test_attr);
+    DBG("Verified position attribute: addr=0x%08x stride=%u",
+        test_attr.info.per_vertex.address, test_attr.info.per_vertex.stride);
+    pf_csr_get_attr_normal(csr, &test_attr);
+    DBG("Verified normal attribute: addr=0x%08x stride=%u",
+        test_attr.info.per_vertex.address, test_attr.info.per_vertex.stride);
+    pf_csr_get_attr_color(csr, &test_attr);
+    DBG("Verified color attribute: addr=0x%08x stride=%u",
+        test_attr.info.per_vertex.address, test_attr.info.per_vertex.stride);
+
     /* Identity transforms */
     pixelforge_vtx_xf_config_t xf = {0};
     xf.enabled.normal_enable = true;
@@ -434,7 +460,7 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     for (int i = 0; i < 3; ++i) {
         mat.ambient[i] = fp16_16(0.2f);
         mat.diffuse[i] = fp16_16(0.8f);
-        mat.specular[i] = fp16_16(0.0f);
+        mat.specular[i] = fp16_16(0.2f);
     }
     mat.shininess = fp16_16(1.0f);
     pf_csr_set_material(csr, &mat);
@@ -484,19 +510,27 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     DBG("Framebuffer configured: %ux%u color_addr=0x%08x depthstencil_addr=0x%08x",
         fb.width, fb.height, fb.color_address, fb.depthstencil_address);
 
-    /* Depth/stencil disabled for this demo */
+    /* Depth test disabled, keep compare op defined */
     pixelforge_depth_test_config_t depth_cfg = {
         .test_enabled = false,
         .write_enabled = false,
         .compare_op = PIXELFORGE_CMP_ALWAYS,
     };
     pf_csr_set_depth(csr, &depth_cfg);
-    DBG("Depth/stencil test disabled");
+    DBG("Depth test disabled; compare=ALWAYS");
 
+    /* Stencil: explicitly set masks and compare op to ALWAYS */
     pixelforge_stencil_op_config_t stencil_cfg = {0};
+    stencil_cfg.compare_op = PIXELFORGE_CMP_ALWAYS;
+    stencil_cfg.reference = 0x00;
+    stencil_cfg.mask = 0xFF;        /* read mask */
+    stencil_cfg.write_mask = 0xFF;  /* write mask */
+    stencil_cfg.fail_op = PIXELFORGE_STENCIL_KEEP;
+    stencil_cfg.depth_fail_op = PIXELFORGE_STENCIL_KEEP;
+    stencil_cfg.pass_op = PIXELFORGE_STENCIL_KEEP;
     pf_csr_set_stencil_front(csr, &stencil_cfg);
     pf_csr_set_stencil_back(csr, &stencil_cfg);
-    DBG("Stencil operations disabled");
+    DBG("Stencil set: compare=ALWAYS, masks=FF/FF, ops=KEEP");
 
     /* Blending disabled */
     pixelforge_blend_config_t blend = {
@@ -641,8 +675,8 @@ int main(int argc, char **argv) {
 
         for (int frame = 0; frame < frames && keep_running; ++frame) {
             /* Clear back buffer */
-            pixelforge_screen_fill(dev, 0x00000000, !front);
-            DBG("Frame %d: back buffer cleared", frame);
+            pixelforge_screen_fill(dev, 0x00ff0000, !front);
+            DBG("Frame %d: buffer cleared", frame);
 
             /* Configure pipeline for back buffer */
             configure_gpu_pipeline(dev, idx_addr, idx_count,
@@ -651,8 +685,14 @@ int main(int argc, char **argv) {
                                  ds_block.phys);
             DBG("Frame %d: GPU pipeline configured", frame);
 
+            /* Report readiness before start */
+            report_ready_status(dev->csr_base);
             /* Start rendering */
             pf_csr_start(dev->csr_base);
+
+            for (int i = 0; i < 1000 && keep_running; ++i) {
+                report_ready_status(dev->csr_base);
+            }
             DBG("Frame %d: GPU started", frame);
 
             /* Wait for completion */
@@ -661,6 +701,8 @@ int main(int argc, char **argv) {
                 break;
             }
 
+            /* Report readiness after completion */
+            report_ready_status(dev->csr_base);
             /* Swap buffers */
             if (!front) pixelforge_swap_buffers(dev);
             printf("Frame %d rendered\n", frame);

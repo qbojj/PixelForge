@@ -13,6 +13,8 @@ class InputMode(enum.Enum, shape=1):
 class PerVertexData(data.Struct):
     address: address_shape
     stride: stride_shape
+    _pad0: 16
+    _pad1: 32
     # for now assume format (FixedPoint 16.16) for all attributes
     # with appropriate number of components
 

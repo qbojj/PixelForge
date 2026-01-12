@@ -232,6 +232,14 @@
     "ready": {
       "address": 616,
       "size": 4
+    },
+    "ready_components": {
+      "address": 620,
+      "size": 4
+    },
+    "ready_vec": {
+      "address": 624,
+      "size": 4
     }
   }
 }

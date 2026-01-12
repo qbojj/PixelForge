@@ -117,8 +117,12 @@ class GraphicsPipeline(wiring.Component):
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
 
-    # Backpressure/ready (reflect index generator readiness)
+    # ready (reflect index generator readiness)
     ready: Out(1)
+    ready_components: Out(
+        4
+    )  # [input assembly, vertex transform, rasterizer, pixel pipeline]
+    ready_vec: Out(32)
 
     def elaborate(self, platform):
         m = Module()
@@ -241,6 +245,8 @@ class GraphicsPipeline(wiring.Component):
             fifo_pa_clip.level == 0,
             clip.ready,
             fifo_clip_div.level == 0,
+            div.ready,
+            fifo_div_rast.level == 0,
             rast.ready,
         ]
 
@@ -254,25 +260,36 @@ class GraphicsPipeline(wiring.Component):
         ]
 
         input_assembly_ready = Signal(len(input_assembly_ready_))
-        m.d.comb += input_assembly_ready.eq(Cat(input_assembly_ready_).all())
+        m.d.comb += input_assembly_ready.eq(Cat(input_assembly_ready_))
 
         vertex_transform_ready = Signal(len(vertex_transform_ready_))
-        m.d.comb += vertex_transform_ready.eq(Cat(vertex_transform_ready_).all())
+        m.d.comb += vertex_transform_ready.eq(Cat(vertex_transform_ready_))
 
         raster_ready = Signal(len(raster_ready_))
-        m.d.comb += raster_ready.eq(Cat(raster_ready_).all())
+        m.d.comb += raster_ready.eq(Cat(raster_ready_))
 
         fragment_processing_ready = Signal(len(fragment_processing_ready_))
-        m.d.comb += fragment_processing_ready.eq(Cat(fragment_processing_ready_).all())
+        m.d.comb += fragment_processing_ready.eq(Cat(fragment_processing_ready_))
 
-        m.d.comb += self.ready.eq(
+        m.d.comb += self.ready_vec.eq(
             Cat(
                 input_assembly_ready,
                 vertex_transform_ready,
                 raster_ready,
                 fragment_processing_ready,
-            ).all()
+            )
         )
+
+        m.d.comb += self.ready_components.eq(
+            Cat(
+                input_assembly_ready.all(),
+                vertex_transform_ready.all(),
+                raster_ready.all(),
+                fragment_processing_ready.all(),
+            )
+        )
+
+        m.d.comb += self.ready.eq(self.ready_components.all())
 
         # IndexGenerator configuration
         m.d.comb += [
@@ -646,6 +663,16 @@ class GraphicsPipelineCSR(wiring.Component):
             "ready", csr.Register(csr.Field(csr.action.R, unsigned(1)), "r")
         )
         m.d.comb += ready_reg.f.r_data.eq(pipeline.ready)
+
+        ready_components = bld.add(
+            "ready_components", csr.Register(csr.Field(csr.action.R, unsigned(4)), "r")
+        )
+        m.d.comb += ready_components.f.r_data.eq(pipeline.ready_components)
+
+        ready_vec = bld.add(
+            "ready_vec", csr.Register(csr.Field(csr.action.R, unsigned(32)), "r")
+        )
+        m.d.comb += ready_vec.f.r_data.eq(pipeline.ready_vec)
 
         m.submodules.csr_bus = csr_bus = csr.Bridge(bld.as_memory_map())
         m.submodules.csr_bridge = csr_bridge = WishboneCSRBridge(

@@ -26,6 +26,8 @@ from ..utils.types import CompareOp
 one = fixed.Const(1.0)
 zero = fixed.Const(0.0)
 
+BGRA_MAP = [2, 1, 0, 3]  # Mapping from RGBA to BGRA order
+
 
 class StencilOp(enum.Enum, shape=unsigned(3)):
     """Stencil operations (what to do with stencil value)"""
@@ -155,7 +157,6 @@ class DepthStencilTest(wiring.Component):
                     wb.Signature(
                         addr_width=wb_bus_addr_width,
                         data_width=wb_bus_data_width,
-                        granularity=8,
                     )
                 ),
                 "ready": Out(1),
@@ -167,14 +168,12 @@ class DepthStencilTest(wiring.Component):
 
         v = Signal.like(self.is_fragment.payload)
 
-        stencil_addr = Signal(wb_bus_addr_width)
-        stencil_offset = Signal(range(4))
-
-        depth_addr = Signal(wb_bus_addr_width)
-        depth_offset = Signal(range(4))
+        # Combined depth/stencil buffer (D16_X8_S8 format)
+        depthstencil_addr = Signal(wb_bus_addr_width)
 
         stencil_value = Signal(unsigned(8))
         depth_value = Signal(unsigned(16))
+        depthstencil_data = Signal(unsigned(32))  # Full 32-bit value from memory
 
         d_frag = Signal(unsigned(16))
 
@@ -183,44 +182,9 @@ class DepthStencilTest(wiring.Component):
         s_accepted = Signal()
         d_accepted = Signal()
 
-        stencil_needs_read = Signal()
-        depth_needs_read = Signal()
-
         m.d.comb += s_conf.eq(
             Mux(v.front_facing, self.stencil_conf_front, self.stencil_conf_back)
         )
-
-        with m.Switch(s_conf.compare_op):
-            with m.Case(CompareOp.NEVER):
-                m.d.comb += stencil_needs_read.eq(
-                    (s_conf.write_mask != 0)
-                    & (s_conf.fail_op != StencilOp.ZERO)
-                    & (s_conf.fail_op != StencilOp.REPLACE)
-                )
-            with m.Case(CompareOp.ALWAYS):
-                m.d.comb += stencil_needs_read.eq(
-                    (s_conf.write_mask != 0)
-                    & (
-                        (
-                            (s_conf.pass_op != StencilOp.ZERO)
-                            & (s_conf.pass_op != StencilOp.REPLACE)
-                        )
-                        | (
-                            (s_conf.depth_fail_op != StencilOp.ZERO)
-                            & (s_conf.depth_fail_op != StencilOp.REPLACE)
-                        )
-                    )
-                )
-            with m.Default():
-                m.d.comb += stencil_needs_read.eq(1)
-
-        with m.Switch(self.depth_conf.compare_op):
-            with m.Case(CompareOp.NEVER):
-                m.d.comb += depth_needs_read.eq(0)
-            with m.Case(CompareOp.ALWAYS):
-                m.d.comb += depth_needs_read.eq(0)
-            with m.Default():
-                m.d.comb += depth_needs_read.eq(self.depth_conf.test_enabled)
 
         def perform_compare(op, value, reference):
             """Perform comparison operation (combinational)."""
@@ -261,64 +225,39 @@ class DepthStencilTest(wiring.Component):
                         ((depth_zero_one << 16) - depth_zero_one).round()
                     )
 
-                    m.next = "PREPARE"
-
-            with m.State("PREPARE"):
-                m.d.sync += [
-                    Cat(stencil_offset, stencil_addr).eq(
-                        self.fb_info.stencil_address
-                        + (v.coord_pos[1] * self.fb_info.stencil_pitch)
-                        + v.coord_pos[0]
-                    ),
-                    Cat(depth_offset, depth_addr).eq(
-                        self.fb_info.depth_address
-                        + (v.coord_pos[1] * self.fb_info.depth_pitch)
-                        + (v.coord_pos[0] * 2)
-                    ),
-                ]
-
-                with m.If(stencil_needs_read):
-                    m.next = "READ_STENCIL"
-                with m.Elif(depth_needs_read):
-                    m.next = "READ_DEPTH"
-                with m.Else():
-                    m.next = "OUTPUT_STENCIL"
-
-            with m.State("READ_STENCIL"):
-                m.d.comb += [
-                    self.wb_bus.cyc.eq(1),
-                    self.wb_bus.adr.eq(stencil_addr),
-                    self.wb_bus.we.eq(0),
-                    self.wb_bus.stb.eq(1),
-                    self.wb_bus.sel.eq(0x1 << stencil_offset),
-                ]
-                with m.If(self.wb_bus.ack):
-                    m.d.sync += stencil_value.eq(
-                        self.wb_bus.dat_r.word_select(stencil_offset, 8)
+                    m.d.sync += depthstencil_addr.eq(
+                        self.fb_info.depthstencil_address[2:]
+                        + v.coord_pos[0] * 1
+                        + v.coord_pos[1] * self.fb_info.depthstencil_pitch[2:]
                     )
-                    with m.If(depth_needs_read):
-                        m.next = "READ_DEPTH"
-                    with m.Else():
-                        m.next = "CHECK_DEPTH_STENCIL"
 
-            with m.State("READ_DEPTH"):
+                    m.next = "READ_DEPTHSTENCIL"
+
+            with m.State("READ_DEPTHSTENCIL"):
+                # Read 32-bit combined depth/stencil value
                 m.d.comb += [
                     self.wb_bus.cyc.eq(1),
-                    self.wb_bus.adr.eq(depth_addr),
-                    self.wb_bus.we.eq(0),
                     self.wb_bus.stb.eq(1),
-                    self.wb_bus.sel.eq(0x3 << depth_offset),
+                    self.wb_bus.adr.eq(depthstencil_addr),
+                    self.wb_bus.we.eq(0),
+                    self.wb_bus.sel.eq(~0),
                 ]
                 with m.If(self.wb_bus.ack):
+                    m.d.sync += [
+                        depthstencil_data.eq(self.wb_bus.dat_r),
+                        # Extract: [15:0]=depth, [31:24]=stencil
+                        depth_value.eq(self.wb_bus.dat_r[0:16]),
+                        stencil_value.eq(self.wb_bus.dat_r[24:32]),
+                    ]
                     m.d.sync += Print(
-                        "Reading depth from address:",
-                        depth_addr,
+                        "Reading depth/stencil from address:",
+                        depthstencil_addr,
                         " got: ",
                         self.wb_bus.dat_r,
-                    )
-
-                    m.d.sync += depth_value.eq(
-                        self.wb_bus.dat_r.word_select(depth_offset[1:], 16)
+                        " depth=",
+                        self.wb_bus.dat_r[0:16],
+                        " stencil=",
+                        self.wb_bus.dat_r[24:32],
                     )
                     m.next = "CHECK_DEPTH_STENCIL"
 
@@ -352,11 +291,10 @@ class DepthStencilTest(wiring.Component):
                         )
                     ),
                 ]
-                m.next = "OUTPUT_STENCIL"
+                m.next = "OUTPUT_DEPTHSTENCIL"
 
-            with m.State("OUTPUT_STENCIL"):
-                # perform depth/stencil updates if accepted
-
+            with m.State("OUTPUT_DEPTHSTENCIL"):
+                # Perform depth/stencil updates if accepted
                 stencil_op_to_do = Signal(StencilOp)
                 new_stencil_value = Signal(unsigned(8))
 
@@ -369,7 +307,7 @@ class DepthStencilTest(wiring.Component):
 
                 with m.Switch(stencil_op_to_do):
                     with m.Case(StencilOp.KEEP):
-                        pass
+                        m.d.comb += new_stencil_value.eq(stencil_value)
                     with m.Case(StencilOp.ZERO):
                         m.d.comb += new_stencil_value.eq(0)
                     with m.Case(StencilOp.REPLACE):
@@ -395,70 +333,60 @@ class DepthStencilTest(wiring.Component):
                     )
                 ]
 
+                # Determine if we need to write back
+                need_write = Signal()
+                new_depth_value = Signal(unsigned(16))
+                m.d.comb += new_depth_value.eq(
+                    Mux(d_accepted & self.depth_conf.write_enabled, d_frag, depth_value)
+                )
+                new_depthstencil = Signal(unsigned(32))
+                m.d.comb += new_depthstencil.eq(
+                    Cat(
+                        new_depth_value,
+                        Const(0, 8),  # padding
+                        real_new_stencil_value,
+                    )
+                )
+
+                m.d.comb += need_write.eq(new_depthstencil != depthstencil_data)
+
                 m.d.sync += Print("stencil accepted: ", s_accepted)
                 m.d.sync += Print("depth accepted: ", d_accepted)
                 m.d.sync += Print("Stencil op:", stencil_op_to_do)
-                m.d.sync += Print(Format("Old value: {:#02x}", stencil_value))
-                m.d.sync += Print(Format("New value: {:#02x}", real_new_stencil_value))
+                m.d.sync += Print(Format("Old stencil: {:#02x}", stencil_value))
+                m.d.sync += Print(
+                    Format("New stencil: {:#02x}", real_new_stencil_value)
+                )
+                m.d.sync += Print(Format("Old depth: {}", depth_value))
+                m.d.sync += Print(Format("New depth: {}", new_depth_value))
 
-                with m.If(real_new_stencil_value != stencil_value):
+                with m.If(need_write):
+                    # Build 32-bit value: [15:0]=depth, [23:16]=padding(0), [31:24]=stencil
                     m.d.sync += Print(
                         Format(
-                            "Writing {:#02x} stencil to address {} offset {}",
-                            real_new_stencil_value,
-                            stencil_addr,
-                            stencil_offset,
+                            "Writing depth/stencil {:#08x} to address {}",
+                            new_depthstencil,
+                            depthstencil_addr,
                         )
                     )
                     m.d.comb += [
                         self.wb_bus.cyc.eq(1),
-                        self.wb_bus.adr.eq(stencil_addr),
-                        self.wb_bus.we.eq(1),
                         self.wb_bus.stb.eq(1),
-                        self.wb_bus.sel.eq(0x1 << stencil_offset),
-                        self.wb_bus.dat_w.eq(
-                            real_new_stencil_value << (stencil_offset * 8)
-                        ),
+                        self.wb_bus.adr.eq(depthstencil_addr),
+                        self.wb_bus.we.eq(1),
+                        self.wb_bus.dat_w.eq(new_depthstencil),
+                        self.wb_bus.sel.eq(~0),
                     ]
                     with m.If(self.wb_bus.ack):
                         with m.If(~s_accepted | ~d_accepted):
                             m.next = "IDLE"
-                        with m.Elif(self.depth_conf.write_enabled):
-                            m.next = "OUTPUT_DEPTH"
                         with m.Else():
                             m.next = "SEND"
                 with m.Else():
                     with m.If(~s_accepted | ~d_accepted):
                         m.next = "IDLE"
-                    with m.Elif(self.depth_conf.write_enabled):
-                        m.next = "OUTPUT_DEPTH"
                     with m.Else():
                         m.next = "SEND"
-
-            with m.State("OUTPUT_DEPTH"):
-                m.d.sync += Print(
-                    Format("Writing depth value: {}, {}", v.depth, d_frag)
-                )
-
-                m.d.sync += Print(
-                    Format(
-                        "Writing {} depth to address {} offset {}",
-                        d_frag,
-                        depth_addr,
-                        depth_offset,
-                    )
-                )
-
-                m.d.comb += [
-                    self.wb_bus.cyc.eq(1),
-                    self.wb_bus.adr.eq(depth_addr),
-                    self.wb_bus.we.eq(1),
-                    self.wb_bus.stb.eq(1),
-                    self.wb_bus.sel.eq(0x3 << depth_offset),
-                    self.wb_bus.dat_w.eq(d_frag << (depth_offset * 8)),
-                ]
-                with m.If(self.wb_bus.ack):
-                    m.next = "SEND"
 
             with m.State("SEND"):
                 m.d.comb += self.os_fragment.valid.eq(1)
@@ -577,7 +505,7 @@ class SwapchainOutput(wiring.Component):
                 with m.If(self.wb_bus.ack):
                     plain_fp = [Signal(fixed.UQ(8, 0)) for _ in range(4)]
                     m.d.comb += [
-                        plain_fp[i].eq(self.wb_bus.dat_r.word_select(i, 8))
+                        plain_fp[i].eq(self.wb_bus.dat_r.word_select(BGRA_MAP[i], 8))
                         for i in range(4)
                     ]
                     m.d.sync += [
@@ -675,15 +603,22 @@ class SwapchainOutput(wiring.Component):
                 m.d.comb += [
                     # Convert from fixed-point [0,1] to [0,255] (*256 - 1)
                     # here *256 - /8 as a heuristic to only use 9 bit multiplications
-                    ret_v[i].eq(((out_data[i] << 8) - (out_data[i] >> 3)).round())
+                    ret_v[BGRA_MAP[i]].eq(
+                        ((out_data[i] << 8) - (out_data[i] >> 3)).round()
+                    )
                     for i in range(4)
                 ]
+
+                write_mask_swizzled = Signal(unsigned(4))
+                m.d.comb += write_mask_swizzled.eq(
+                    Cat(self.conf.color_write_mask[b] for b in BGRA_MAP)
+                )
                 m.d.comb += [
                     self.wb_bus.cyc.eq(1),
                     self.wb_bus.adr.eq(color_addr),
                     self.wb_bus.we.eq(1),
                     self.wb_bus.stb.eq(1),
-                    self.wb_bus.sel.eq(self.conf.color_write_mask),
+                    self.wb_bus.sel.eq(write_mask_swizzled),
                     self.wb_bus.dat_w.eq(Cat(ret_v)),
                 ]
                 with m.If(self.wb_bus.ack):

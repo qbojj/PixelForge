@@ -116,14 +116,17 @@ void pf_csr_get_attr_color(volatile uint8_t *base, pixelforge_input_attr_t *attr
  * Vertex Transform
  * ============================= */
 void pf_csr_set_vtx_xf(volatile uint8_t *base, const pixelforge_vtx_xf_config_t *cfg) {
-    pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_ENABLED_NORMAL, (uint32_t)cfg->enabled.normal_enable);
+    uint32_t enabled = 0;
+    enabled |= (uint32_t)cfg->enabled.normal_enable << 0;
+    pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_ENABLED, enabled);
     for (int i = 0; i < 16; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_POSITION_MV + i*4, (uint32_t)cfg->position_mv[i]);
     for (int i = 0; i < 16; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_POSITION_P  + i*4, (uint32_t)cfg->position_p[i]);
     for (int i = 0; i < 9; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_XF_NORMAL_MV_INV_T + i*4, (uint32_t)cfg->normal_mv_inv_t[i]);
 }
 
 void pf_csr_get_vtx_xf(volatile uint8_t *base, pixelforge_vtx_xf_config_t *cfg) {
-    cfg->enabled.normal_enable = (uint8_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_XF_ENABLED_NORMAL);
+    uint32_t enabled = pf_csr_read32(base, PIXELFORGE_CSR_VTX_XF_ENABLED);
+    cfg->enabled.normal_enable = (uint8_t)((enabled >> 0) & 0x1);
     for (int i = 0; i < 16; ++i) cfg->position_mv[i] = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_XF_POSITION_MV + i*4);
     for (int i = 0; i < 16; ++i) cfg->position_p[i]  = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_XF_POSITION_P  + i*4);
     for (int i = 0; i < 9; ++i) cfg->normal_mv_inv_t[i] = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_XF_NORMAL_MV_INV_T + i*4);
@@ -190,10 +193,8 @@ void pf_csr_set_fb(volatile uint8_t *base, const pixelforge_framebuffer_config_t
     pf_csr_write32(base, PIXELFORGE_CSR_FB_SCISSOR_HEIGHT,    (uint32_t)cfg->scissor_height);
     pf_csr_write32(base, PIXELFORGE_CSR_FB_COLOR_ADDRESS, cfg->color_address);
     pf_csr_write32(base, PIXELFORGE_CSR_FB_COLOR_PITCH,   (uint32_t)cfg->color_pitch);
-    pf_csr_write32(base, PIXELFORGE_CSR_FB_DEPTH_ADDRESS, cfg->depth_address);
-    pf_csr_write32(base, PIXELFORGE_CSR_FB_DEPTH_PITCH,   (uint32_t)cfg->depth_pitch);
-    pf_csr_write32(base, PIXELFORGE_CSR_FB_STENCIL_ADDRESS, cfg->stencil_address);
-    pf_csr_write32(base, PIXELFORGE_CSR_FB_STENCIL_PITCH,   (uint32_t)cfg->stencil_pitch);
+    pf_csr_write32(base, PIXELFORGE_CSR_FB_DEPTHSTENCIL_ADDRESS, cfg->depthstencil_address);
+    pf_csr_write32(base, PIXELFORGE_CSR_FB_DEPTHSTENCIL_PITCH,   (uint32_t)cfg->depthstencil_pitch);
 }
 void pf_csr_get_fb(volatile uint8_t *base, pixelforge_framebuffer_config_t *cfg) {
     cfg->width  = (uint16_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_WIDTH);
@@ -210,10 +211,8 @@ void pf_csr_get_fb(volatile uint8_t *base, pixelforge_framebuffer_config_t *cfg)
     cfg->scissor_height    = (uint32_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_SCISSOR_HEIGHT);
     cfg->color_address     = pf_csr_read32(base, PIXELFORGE_CSR_FB_COLOR_ADDRESS);
     cfg->color_pitch       = (uint16_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_COLOR_PITCH);
-    cfg->depth_address     = pf_csr_read32(base, PIXELFORGE_CSR_FB_DEPTH_ADDRESS);
-    cfg->depth_pitch       = (uint16_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_DEPTH_PITCH);
-    cfg->stencil_address   = pf_csr_read32(base, PIXELFORGE_CSR_FB_STENCIL_ADDRESS);
-    cfg->stencil_pitch     = (uint16_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_STENCIL_PITCH);
+    cfg->depthstencil_address = pf_csr_read32(base, PIXELFORGE_CSR_FB_DEPTHSTENCIL_ADDRESS);
+    cfg->depthstencil_pitch   = (uint16_t)pf_csr_read32(base, PIXELFORGE_CSR_FB_DEPTHSTENCIL_PITCH);
 }
 
 /* =============================
@@ -323,4 +322,8 @@ void pf_csr_set_blend(volatile uint8_t *base, const pixelforge_blend_config_t *c
 void pf_csr_get_blend(volatile uint8_t *base, pixelforge_blend_config_t *c) {
     uint32_t w = pf_csr_read32(base, PIXELFORGE_CSR_BLEND_CONFIG);
     pf_unpack_blend_config(w, c);
+}
+
+uint32_t pf_csr_get_ready(volatile uint8_t *base) {
+    return pf_csr_read32(base, PIXELFORGE_CSR_READY);
 }

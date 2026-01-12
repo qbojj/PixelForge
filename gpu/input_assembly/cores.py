@@ -37,11 +37,7 @@ class IndexGenerator(wiring.Component):
     """
 
     os_index: Out(stream.Signature(index_shape))
-    bus: Out(
-        wb.Signature(
-            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
-        )
-    )
+    bus: Out(wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width))
     ready: Out(1)
 
     c_address: In(address_shape)
@@ -111,7 +107,7 @@ class IndexGenerator(wiring.Component):
                     with m.Elif(kind == IndexKind.NOT_INDEXED):
                         m.next = "STREAM_NON_INDEXED"
                     with m.Else():
-                        m.next = "MEM_READ_INIT"
+                        m.next = "MEM_READ"
 
             with m.State("STREAM_NON_INDEXED"):
                 with m.If(~self.os_index.valid | self.os_index.ready):
@@ -123,22 +119,19 @@ class IndexGenerator(wiring.Component):
                     with m.If(cur_idx + 1 == count):  # last index streamed
                         m.next = "WAIT_FLUSH"
 
-            with m.State("MEM_READ_INIT"):
+            with m.State("MEM_READ"):
                 # initiate memory read
-                m.d.sync += [
+                m.d.comb += [
                     self.bus.cyc.eq(1),
                     self.bus.adr.eq(address[len(offset) :]),
                     self.bus.we.eq(0),
                     self.bus.stb.eq(1),
                     self.bus.sel.eq(~0),
                 ]
-                m.next = "MEM_READ_WAIT"
-            with m.State("MEM_READ_WAIT"):
                 with m.If(self.bus.ack):
                     m.d.sync += data_read.eq(self.bus.dat_r)
-                    m.d.sync += self.bus.cyc.eq(0)
-                    m.d.sync += self.bus.stb.eq(0)
                     m.next = "INDEX_SEND"
+
             with m.State("INDEX_SEND"):
                 with m.If(~self.os_index.valid | self.os_index.ready):
                     next_addr = address + index_increment
@@ -153,9 +146,7 @@ class IndexGenerator(wiring.Component):
                     with m.Elif(next_addr[: len(offset)] != 0):
                         m.next = "INDEX_SEND"
                     with m.Else():
-                        m.next = (
-                            "MEM_READ_INIT"  # crossed word boundary -> read next word
-                        )
+                        m.next = "MEM_READ"  # crossed word boundary -> read next word
             with m.State("WAIT_FLUSH"):
                 with m.If(~self.os_index.valid | self.os_index.ready):
                     m.next = "IDLE"
@@ -421,7 +412,11 @@ class InputAssembly(wiring.Component):
                                 attr.data_v[i].eq(config.info.constant_value[i])
                                 for i in range(attr.components)
                             ]
-                            m.next = f"{base_name}_DONE"
+                            if attr_no + 1 < len(attr_info):
+                                m.next = f"FETCH_ATTR_{attr_no + 1}_START"
+                            else:
+                                # all attributes fetched
+                                m.next = "DONE"
                         with m.Case(InputMode.PER_VERTEX):
                             # per-vertex attribute
                             base_addr = config.info.per_vertex.address
@@ -432,27 +427,18 @@ class InputAssembly(wiring.Component):
                 for i in range(attr.components):
                     with m.State(f"{base_name}_MEM_READ_COMPONENT_{i}"):
                         # initiate memory read
-                        m.d.sync += [
+                        m.d.comb += [
                             self.bus.cyc.eq(1),
-                            self.bus.adr.eq(addr // (self.bus.data_width // 8)),
-                            self.bus.we.eq(0),
                             self.bus.stb.eq(1),
+                            self.bus.adr.eq(addr[2:]),
+                            self.bus.we.eq(0),
                             self.bus.sel.eq(~0),
                         ]
-                        m.next = f"{base_name}_MEM_WAIT_{i}"
-
-                    with m.State(f"{base_name}_MEM_WAIT_{i}"):
                         with m.If(self.bus.ack):
                             # parse and store
                             m.d.sync += attr.data_v[i].eq(
                                 FixedPoint_mem(self.bus.dat_r)
                             )
-
-                            # deassert memory access
-                            m.d.sync += [
-                                self.bus.cyc.eq(0),
-                                self.bus.stb.eq(0),
-                            ]
 
                             if i + 1 < attr.components:
                                 # next component
@@ -460,20 +446,18 @@ class InputAssembly(wiring.Component):
                                 # 4 bytes per component (Fixed point 16.16)
                                 m.d.sync += addr.eq(addr + 4)
                                 m.next = f"{base_name}_MEM_READ_COMPONENT_{i + 1}"
+                            elif attr_no + 1 < len(attr_info):
+                                m.next = f"FETCH_ATTR_{attr_no + 1}_START"
                             else:
                                 # all components read
-                                m.next = f"{base_name}_DONE"
+                                m.next = "DONE"
 
-                with m.State(f"{base_name}_DONE"):
-                    if attr_no == len(attr_info) - 1:
-                        # last attribute -> output vertex
-                        with m.If(output_next_free):
-                            m.d.sync += [
-                                self.os_vertex.payload.eq(vtx),
-                                self.os_vertex.valid.eq(1),
-                            ]
-                            m.next = "IDLE"
-                    else:
-                        m.next = f"FETCH_ATTR_{attr_no + 1}_START"
+            with m.State("DONE"):
+                with m.If(output_next_free):
+                    m.d.sync += [
+                        self.os_vertex.payload.eq(vtx),
+                        self.os_vertex.valid.eq(1),
+                    ]
+                    m.next = "IDLE"
 
         return m

@@ -87,6 +87,11 @@ void pf_csr_get_depth(volatile uint8_t *base, pixelforge_depth_test_config_t *c)
 void pf_csr_set_blend(volatile uint8_t *base, const pixelforge_blend_config_t *c);
 void pf_csr_get_blend(volatile uint8_t *base, pixelforge_blend_config_t *c);
 
+/* =============================
+ * Status
+ * ============================= */
+uint32_t pf_csr_get_ready(volatile uint8_t *base);
+
 #ifdef __cplusplus
 }
 #endif

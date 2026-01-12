@@ -105,17 +105,13 @@ class GraphicsPipeline(wiring.Component):
 
     # Wishbone buses (separate for simplicity)
     wb_index: Out(
-        wb.Signature(
-            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
-        )
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_vertex: Out(
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_depthstencil: Out(
-        wb.Signature(
-            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
-        )
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_color: Out(
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
@@ -346,17 +342,13 @@ class GraphicsPipelineCSR(wiring.Component):
     ready: Out(1)
 
     wb_index: Out(
-        wb.Signature(
-            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
-        )
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_vertex: Out(
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_depthstencil: Out(
-        wb.Signature(
-            addr_width=wb_bus_addr_width, data_width=wb_bus_data_width, granularity=8
-        )
+        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
     wb_color: Out(
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
@@ -574,38 +566,55 @@ class GraphicsPipelineCSR(wiring.Component):
             fb_color_pitch = bld.add(
                 "color_pitch", RWReg(pipeline.fb_info.color_pitch.shape())
             )
-            fb_depth_addr = bld.add(
-                "depth_address", RWReg(pipeline.fb_info.depth_address.shape())
+            fb_depthstencil_addr = bld.add(
+                "depthstencil_address",
+                RWReg(pipeline.fb_info.depthstencil_address.shape()),
             )
-            fb_depth_pitch = bld.add(
-                "depth_pitch", RWReg(pipeline.fb_info.depth_pitch.shape())
-            )
-            fb_stencil_addr = bld.add(
-                "stencil_address", RWReg(pipeline.fb_info.stencil_address.shape())
-            )
-            fb_stencil_pitch = bld.add(
-                "stencil_pitch", RWReg(pipeline.fb_info.stencil_pitch.shape())
+            fb_depthstencil_pitch = bld.add(
+                "depthstencil_pitch", RWReg(pipeline.fb_info.depthstencil_pitch.shape())
             )
 
             m.d.comb += [
                 pipeline.fb_info.width.eq(fb_width.f.data),
                 pipeline.fb_info.height.eq(fb_height.f.data),
-                pipeline.fb_info.viewport_x.eq(FixedPoint_mem(fb_vx.f.data)),
-                pipeline.fb_info.viewport_y.eq(FixedPoint_mem(fb_vy.f.data)),
-                pipeline.fb_info.viewport_width.eq(FixedPoint_mem(fb_vw.f.data)),
-                pipeline.fb_info.viewport_height.eq(FixedPoint_mem(fb_vh.f.data)),
-                pipeline.fb_info.viewport_min_depth.eq(FixedPoint_mem(fb_min_d.f.data)),
-                pipeline.fb_info.viewport_max_depth.eq(FixedPoint_mem(fb_max_d.f.data)),
+                pipeline.fb_info.viewport_x.eq(
+                    FixedPoint_mem(fb_vx.f.data).saturate(
+                        pipeline.fb_info.viewport_x.shape()
+                    )
+                ),
+                pipeline.fb_info.viewport_y.eq(
+                    FixedPoint_mem(fb_vy.f.data).saturate(
+                        pipeline.fb_info.viewport_y.shape()
+                    )
+                ),
+                pipeline.fb_info.viewport_width.eq(
+                    FixedPoint_mem(fb_vw.f.data).saturate(
+                        pipeline.fb_info.viewport_width.shape()
+                    )
+                ),
+                pipeline.fb_info.viewport_height.eq(
+                    FixedPoint_mem(fb_vh.f.data).saturate(
+                        pipeline.fb_info.viewport_height.shape()
+                    )
+                ),
+                pipeline.fb_info.viewport_min_depth.eq(
+                    FixedPoint_mem(fb_min_d.f.data).saturate(
+                        pipeline.fb_info.viewport_min_depth.shape()
+                    )
+                ),
+                pipeline.fb_info.viewport_max_depth.eq(
+                    FixedPoint_mem(fb_max_d.f.data).saturate(
+                        pipeline.fb_info.viewport_max_depth.shape()
+                    )
+                ),
                 pipeline.fb_info.scissor_offset_x.eq(fb_sc_x.f.data),
                 pipeline.fb_info.scissor_offset_y.eq(fb_sc_y.f.data),
                 pipeline.fb_info.scissor_width.eq(fb_sc_w.f.data),
                 pipeline.fb_info.scissor_height.eq(fb_sc_h.f.data),
                 pipeline.fb_info.color_address.eq(fb_color_addr.f.data),
                 pipeline.fb_info.color_pitch.eq(fb_color_pitch.f.data),
-                pipeline.fb_info.depth_address.eq(fb_depth_addr.f.data),
-                pipeline.fb_info.depth_pitch.eq(fb_depth_pitch.f.data),
-                pipeline.fb_info.stencil_address.eq(fb_stencil_addr.f.data),
-                pipeline.fb_info.stencil_pitch.eq(fb_stencil_pitch.f.data),
+                pipeline.fb_info.depthstencil_address.eq(fb_depthstencil_addr.f.data),
+                pipeline.fb_info.depthstencil_pitch.eq(fb_depthstencil_pitch.f.data),
             ]
 
         with bld.Cluster("ds"):
@@ -631,6 +640,12 @@ class GraphicsPipelineCSR(wiring.Component):
         with bld.Cluster("blend"):
             blend_cfg = bld.add("config", RWReg(pipeline.blend_conf.shape()))
             m.d.comb += pipeline.blend_conf.eq(blend_cfg.f.data)
+
+        # Status register exposing pipeline readiness
+        ready_reg = bld.add(
+            "ready", csr.Register(csr.Field(csr.action.R, unsigned(1)), "r")
+        )
+        m.d.comb += ready_reg.f.r_data.eq(pipeline.ready)
 
         m.submodules.csr_bus = csr_bus = csr.Bridge(bld.as_memory_map())
         m.submodules.csr_bridge = csr_bridge = WishboneCSRBridge(

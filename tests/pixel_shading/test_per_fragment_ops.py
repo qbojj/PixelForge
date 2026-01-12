@@ -31,8 +31,7 @@ def make_fb_info(base_addr=0):
     width = 8
     height = 8
     color_pitch = width * 4
-    depth_pitch = width * 2
-    stencil_pitch = width
+    depthstencil_pitch = width * 4  # D16_X8_S8 combined buffer
 
     return {
         "width": width,
@@ -49,10 +48,8 @@ def make_fb_info(base_addr=0):
         "scissor_height": height,
         "color_address": base_addr,
         "color_pitch": color_pitch,
-        "depth_address": base_addr + 0x100,
-        "depth_pitch": depth_pitch,
-        "stencil_address": base_addr + 0x200,
-        "stencil_pitch": stencil_pitch,
+        "depthstencil_address": base_addr + 0x100,
+        "depthstencil_pitch": depthstencil_pitch,
     }
 
 
@@ -93,8 +90,12 @@ def test_depth_stencil_pass_and_depth_write():
 
     async def check_output(ctx, results):
         assert len(results) == len(fragments)
-        depth_bytes = await t.dbg_access.read_bytes(ctx, fb_info["depth_address"], 2)
-        stencil_byte = await t.dbg_access.read_bytes(ctx, fb_info["stencil_address"], 1)
+        depth_bytes = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"], 2
+        )
+        stencil_byte = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"] + 3, 1
+        )
         stored_depth = int.from_bytes(depth_bytes, "little")
         stored_stencil = stencil_byte[0]
 
@@ -148,12 +149,9 @@ def test_depth_stencil_depth_fail():
     sim.add_clock(1e-6)
 
     async def init_proc(ctx):
-        # Pre-fill depth buffer
-        await t.initialize_memory(
-            ctx, fb_info["depth_address"], initial_depth.to_bytes(2, "little")
-        )
-        # Pre-fill stencil with 5
-        await t.initialize_memory(ctx, fb_info["stencil_address"], b"\x05")
+        # Pre-fill combined depth/stencil buffer: [depth_lo, depth_hi, 0x00, stencil]
+        combined = initial_depth.to_bytes(2, "little") + b"\x00" + b"\x05"
+        await t.initialize_memory(ctx, fb_info["depthstencil_address"], combined)
 
         ctx.set(t.dut.fb_info, fb_info)
         ctx.set(t.dut.stencil_conf_front, stencil_conf)
@@ -166,13 +164,15 @@ def test_depth_stencil_depth_fail():
 
         # Depth should remain unchanged
         depth_bytes_read = await t.dbg_access.read_bytes(
-            ctx, fb_info["depth_address"], 2
+            ctx, fb_info["depthstencil_address"], 2
         )
         stored_depth = int.from_bytes(depth_bytes_read, "little")
         assert stored_depth == initial_depth
 
         # Stencil should be decremented (depth_fail_op)
-        stencil_byte = await t.dbg_access.read_bytes(ctx, fb_info["stencil_address"], 1)
+        stencil_byte = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"] + 3, 1
+        )
         assert stencil_byte[0] == 4
 
     stream_testbench(
@@ -228,7 +228,9 @@ def test_depth_stencil_stencil_fail():
         assert len(results) == 0
 
         # Stencil should be incremented (fail_op)
-        stencil_byte = await t.dbg_access.read_bytes(ctx, fb_info["stencil_address"], 1)
+        stencil_byte = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"] + 3, 1
+        )
         assert stencil_byte[0] == 1
 
     stream_testbench(
@@ -326,8 +328,10 @@ def test_depth_stencil_stencil_replace():
     sim.add_clock(1e-6)
 
     async def init_proc(ctx):
-        # Pre-fill stencil with 0xFF
-        await t.initialize_memory(ctx, fb_info["stencil_address"], b"\xff")
+        # Pre-fill stencil with 0xFF (keep depth 0)
+        await t.initialize_memory(
+            ctx, fb_info["depthstencil_address"], b"\x00\x00\x00\xff"
+        )
 
         ctx.set(t.dut.fb_info, fb_info)
         ctx.set(t.dut.stencil_conf_front, stencil_conf)
@@ -338,7 +342,9 @@ def test_depth_stencil_stencil_replace():
         assert len(results) == 1
 
         # Stencil should be replaced with reference value
-        stencil_byte = await t.dbg_access.read_bytes(ctx, fb_info["stencil_address"], 1)
+        stencil_byte = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"] + 3, 1
+        )
         assert stencil_byte[0] == 42
 
     stream_testbench(
@@ -384,8 +390,10 @@ def test_depth_stencil_stencil_write_mask():
     sim.add_clock(1e-6)
 
     async def init_proc(ctx):
-        # Pre-fill stencil with 0xF0
-        await t.initialize_memory(ctx, fb_info["stencil_address"], b"\xf0")
+        # Pre-fill stencil with 0xF0 (keep depth 0)
+        await t.initialize_memory(
+            ctx, fb_info["depthstencil_address"], b"\x00\x00\x00\xf0"
+        )
 
         ctx.set(t.dut.fb_info, fb_info)
         ctx.set(t.dut.stencil_conf_front, stencil_conf)
@@ -396,7 +404,9 @@ def test_depth_stencil_stencil_write_mask():
         assert len(results) == 1
 
         # Should have written 0x0F into lower bits, keeping upper bits as 0xF0
-        stencil_byte = await t.dbg_access.read_bytes(ctx, fb_info["stencil_address"], 1)
+        stencil_byte = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"] + 3, 1
+        )
         assert stencil_byte[0] == 0xFF  # 0xF0 | 0x0F = 0xFF
 
     stream_testbench(
@@ -542,7 +552,9 @@ def test_swapchain_output(blend_conf, fragments, expected_color, dst_color):
     sim.add_clock(1e-6)
 
     async def init_proc(ctx):
-        color_bytes = bytes([int(c * 255) for c in dst_color])
+        # Initialize destination color in BGRA order to match core
+        bgra = [dst_color[2], dst_color[1], dst_color[0], dst_color[3]]
+        color_bytes = bytes([int(c * 255) for c in bgra])
         await t.initialize_memory(ctx, fb_info["color_address"], color_bytes)
         ctx.set(t.dut.fb_info, fb_info)
         ctx.set(t.dut.conf, blend_conf)
@@ -550,7 +562,9 @@ def test_swapchain_output(blend_conf, fragments, expected_color, dst_color):
     async def verify_memory(ctx):
         color_bytes = await t.dbg_access.read_bytes(ctx, fb_info["color_address"], 4)
 
-        color_values = [int(b) / 255.0 for b in color_bytes]
+        # Convert BGRA bytes back to RGBA for comparison
+        bgra_values = [int(b) / 255.0 for b in color_bytes]
+        color_values = [bgra_values[2], bgra_values[1], bgra_values[0], bgra_values[3]]
         expected_values = expected_color
 
         assert color_values == pytest.approx(

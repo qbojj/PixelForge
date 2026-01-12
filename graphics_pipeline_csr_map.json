@@ -200,42 +200,38 @@
         "address": 576,
         "size": 4
       },
-      "depth_address": {
+      "depthstencil_address": {
         "address": 580,
         "size": 4
       },
-      "depth_pitch": {
+      "depthstencil_pitch": {
         "address": 584,
-        "size": 4
-      },
-      "stencil_address": {
-        "address": 588,
-        "size": 4
-      },
-      "stencil_pitch": {
-        "address": 592,
         "size": 4
       }
     },
     "ds": {
       "stencil_front": {
-        "address": 600,
+        "address": 592,
         "size": 8
       },
       "stencil_back": {
-        "address": 608,
+        "address": 600,
         "size": 8
       },
       "depth": {
-        "address": 616,
+        "address": 608,
         "size": 4
       }
     },
     "blend": {
       "config": {
-        "address": 620,
+        "address": 612,
         "size": 4
       }
+    },
+    "ready": {
+      "address": 616,
+      "size": 4
     }
   }
 }

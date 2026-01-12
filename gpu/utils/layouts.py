@@ -98,7 +98,5 @@ class FramebufferInfoLayout(data.Struct):
 
     color_address: address_shape  # assume R8G8B8A8
     color_pitch: stride_shape  # in bytes
-    depth_address: address_shape  # assume D16
-    depth_pitch: stride_shape  # in bytes
-    stencil_address: address_shape  # S8
-    stencil_pitch: stride_shape  # in bytes
+    depthstencil_address: address_shape  # D16_X8_S8 format (32-bit: [15:0]=depth, [23:16]=padding, [31:24]=stencil)
+    depthstencil_pitch: stride_shape  # in bytes

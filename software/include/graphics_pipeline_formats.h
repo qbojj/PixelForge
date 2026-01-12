@@ -268,10 +268,8 @@ typedef struct {
 
     uint32_t color_address;
     uint16_t color_pitch;
-    uint32_t depth_address;
-    uint16_t depth_pitch;
-    uint32_t stencil_address;
-    uint16_t stencil_pitch;
+    uint32_t depthstencil_address;  /* combined D16_X8_S8 packed buffer */
+    uint16_t depthstencil_pitch;    /* bytes per row (4 bytes per pixel) */
 } pixelforge_framebuffer_config_t;
 
 #endif /* PIXELFORGE_FORMATS_H */

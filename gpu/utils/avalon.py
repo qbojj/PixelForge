@@ -32,7 +32,7 @@ class Signature(WiringSignature):
         data_width: int,
         burst_count_width: int | None = None,
         has_byte_enable: bool = True,
-        has_readdatavalid: bool = True,
+        has_readdatavalid: bool = False,
     ) -> None:
         if not isinstance(addr_width, int) or addr_width < 0:
             raise TypeError(
@@ -123,69 +123,6 @@ class Signature(WiringSignature):
         return f"avalon.Signature({self.members!r})"
 
 
-class WishboneMasterToAvalonBridge(Component):
-    """Wishbone initiator to Avalon-MM master bridge."""
-
-    def __init__(self, bus: wb.Interface):
-        if isinstance(bus, wiring.FlippedInterface):
-            unflipped_bus = wiring.flipped(bus)
-        else:
-            unflipped_bus = bus
-
-        if not isinstance(unflipped_bus, wb.Interface):
-            raise TypeError(f"bus must be a Wishbone Interface, not {unflipped_bus!r}")
-
-        if len(unflipped_bus.features) != 0:
-            raise ValueError("Wishbone features are not supported by Avalon bridge")
-
-        self._addr_width = unflipped_bus.signature.addr_width
-        self._data_width = unflipped_bus.signature.data_width
-        self._granularity = unflipped_bus.signature.granularity
-        self._shift_bits = exact_log2(unflipped_bus.signature.data_width // 8)
-        self._has_byte_enable = (
-            self._granularity < self._data_width and self._data_width != 8
-        )
-
-        avl_signature = Signature(
-            addr_width=self._addr_width + self._shift_bits,
-            data_width=self._data_width,
-            has_byte_enable=self._has_byte_enable,
-            has_readdatavalid=True,
-        )
-
-        super().__init__({"avl_bus": Out(avl_signature)})
-        self._bus = bus
-
-    def elaborate(self, platform):
-        m = Module()
-
-        wb_bus = self._bus
-        avl = self.avl_bus
-
-        # Word-addressed WB -> byte-addressed Avalon
-        addr_bytes = Cat(Const(0, self._shift_bits), wb_bus.adr)
-
-        write_req = wb_bus.cyc & wb_bus.stb & wb_bus.we
-        read_req = wb_bus.cyc & wb_bus.stb & ~wb_bus.we
-        write_fire = write_req & ~avl.waitrequest
-        read_fire_addr = read_req & ~avl.waitrequest
-        read_fire_data = read_req & avl.readdatavalid
-
-        m.d.comb += [
-            avl.address.eq(addr_bytes),
-            avl.writedata.eq(wb_bus.dat_w),
-            avl.write.eq(write_fire),
-            avl.read.eq(read_fire_addr),
-        ]
-
-        m.d.comb += [
-            wb_bus.ack.eq(write_fire | read_fire_data),
-            wb_bus.dat_r.eq(avl.readdata),
-        ]
-
-        return m
-
-
 class Interface(wiring.PureInterface):
     """Avalon-MM interface using the Avalon signature."""
 
@@ -271,11 +208,73 @@ class Interface(wiring.PureInterface):
         return f"avalon.Interface({self.signature!r})"
 
 
+class WishboneMasterToAvalonBridge(Component):
+    """Wishbone initiator to Avalon-MM master bridge."""
+
+    def __init__(self, bus: wb.Interface):
+        if isinstance(bus, wiring.FlippedInterface):
+            unflipped_bus = wiring.flipped(bus)
+        else:
+            unflipped_bus = bus
+
+        if not isinstance(unflipped_bus, wb.Interface):
+            raise TypeError(f"bus must be a Wishbone Interface, not {unflipped_bus!r}")
+
+        if len(unflipped_bus.features) != 0:
+            raise ValueError("Wishbone features are not supported by Avalon bridge")
+
+        self._addr_width = unflipped_bus.signature.addr_width
+        self._data_width = unflipped_bus.signature.data_width
+        self._granularity = unflipped_bus.signature.granularity
+        self._shift_bits = exact_log2(unflipped_bus.signature.data_width // 8)
+        self._has_byte_enable = (
+            self._granularity < self._data_width and self._granularity == 8
+        )
+
+        if self._granularity != 8 and self._granularity != self._data_width:
+            raise ValueError(
+                "Unsupported Wishbone granularity for Avalon bridge: "
+                f"data_width={self._data_width}, granularity={self._granularity}"
+            )
+
+        avl_signature = Signature(
+            addr_width=self._addr_width + self._shift_bits,
+            data_width=self._data_width,
+            has_byte_enable=self._has_byte_enable,
+        )
+
+        super().__init__({"avl_bus": Out(avl_signature)})
+        self._bus = bus
+
+    def elaborate(self, platform):
+        m = Module()
+
+        wb_bus = self._bus
+        avl = self.avl_bus
+
+        op_send = Signal()
+        m.d.comb += op_send.eq(wb_bus.cyc & wb_bus.stb)
+
+        m.d.comb += [
+            avl.address.eq(Cat(Const(0, self._shift_bits), wb_bus.adr)),
+            avl.writedata.eq(wb_bus.dat_w),
+            wb_bus.dat_r.eq(avl.readdata),
+            avl.write.eq(op_send & wb_bus.we),
+            avl.read.eq(op_send & ~wb_bus.we),
+            wb_bus.ack.eq(op_send & ~avl.waitrequest),
+        ]
+
+        if self._has_byte_enable:
+            m.d.comb += avl.byteenable.eq(wb_bus.sel)
+
+        return m
+
+
 class WishboneSlaveToAvalonBridge(Component):
     """Bridge a Wishbone target (slave) to an Avalon-MM target (slave).
 
     Accepts Avalon transactions and issues Wishbone responses with ack backpressure.
-    Both sides are word-addressed, so no address translation is needed.
+    Avalon is word-addressed for slaves
 
     Parameters
     ----------
@@ -296,6 +295,9 @@ class WishboneSlaveToAvalonBridge(Component):
                 f"wb_bus must be a Wishbone Interface, not {unflipped_bus!r}"
             )
 
+        if len(unflipped_bus.features) != 0:
+            raise ValueError("Wishbone features are not supported by Avalon bridge")
+
         if unflipped_bus.data_width == unflipped_bus.granularity:
             has_byte_enable = False
         elif unflipped_bus.granularity == 8:
@@ -306,17 +308,12 @@ class WishboneSlaveToAvalonBridge(Component):
                 f"data_width={unflipped_bus.data_width}, granularity={unflipped_bus.granularity}"
             )
 
-        if len(unflipped_bus.features) != 0:
-            raise ValueError("Wishbone features are not supported by Avalon bridge")
-
         # Create Avalon signature with same address and data widths (word-addressed on both sides)
         # Derive byteenable from Wishbone granularity
         avl_sig = Signature(
             addr_width=unflipped_bus.addr_width,
             data_width=unflipped_bus.data_width,
-            burst_count_width=None,
             has_byte_enable=has_byte_enable,
-            has_readdatavalid=False,
         )
 
         super().__init__({"avl_bus": In(avl_sig)})
@@ -328,31 +325,21 @@ class WishboneSlaveToAvalonBridge(Component):
         avl = self.avl_bus
         wb_bus = self._wb_bus
 
-        # Both sides are word-addressed, direct address pass-through
-        m.d.comb += wb_bus.adr.eq(avl.address)
-
-        # Avalon request control -> Wishbone request control
-        avl_request = avl.write | avl.read
-        avl_is_write = avl.write
+        send_op = Signal()
+        m.d.comb += send_op.eq(avl.read | avl.write)
 
         m.d.comb += [
-            wb_bus.cyc.eq(avl_request),
-            wb_bus.stb.eq(avl_request),
+            wb_bus.cyc.eq(send_op),
+            wb_bus.stb.eq(send_op),
+            wb_bus.we.eq(avl.write),
             wb_bus.dat_w.eq(avl.writedata),
-            wb_bus.we.eq(avl_is_write),
+            avl.readdata.eq(wb_bus.dat_r),
+            avl.waitrequest.eq(send_op & ~wb_bus.ack),
         ]
 
-        # Handle byteenable - map Avalon byteenable to Wishbone sel
-        if hasattr(avl, "byteenable"):
+        if self.avl_bus.has_byte_enable:
             m.d.comb += wb_bus.sel.eq(avl.byteenable)
         else:
-            # No byteenable in Avalon - full word write enable
             m.d.comb += wb_bus.sel.eq(~0)
-
-        # Wishbone response -> Avalon response
-        m.d.comb += [
-            avl.waitrequest.eq(~wb_bus.ack & avl_request),
-            avl.readdata.eq(wb_bus.dat_r),
-        ]
 
         return m

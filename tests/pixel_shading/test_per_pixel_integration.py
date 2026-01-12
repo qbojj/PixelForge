@@ -29,12 +29,14 @@ def make_fragment(x, y, depth, color, front_facing=1):
     }
 
 
+BGRA_SWIZZLE = [2, 1, 0, 3]
+
+
 def make_fb_info(base_addr=0):
     width = 4
     height = 4
-    color_pitch = width * 4
-    depth_pitch = width * 2
-    stencil_pitch = width
+    color_pitch = width * 4  # BGRA8
+    depthstencil_pitch = width * 4  # D16_X8_S8 combined buffer
 
     return {
         "width": width,
@@ -51,10 +53,8 @@ def make_fb_info(base_addr=0):
         "scissor_height": height,
         "color_address": base_addr,
         "color_pitch": color_pitch,
-        "depth_address": base_addr + 0x100,
-        "depth_pitch": depth_pitch,
-        "stencil_address": base_addr + 0x200,
-        "stencil_pitch": stencil_pitch,
+        "depthstencil_address": base_addr + 0x100,
+        "depthstencil_pitch": depthstencil_pitch,
     }
 
 
@@ -135,8 +135,8 @@ def test_per_pixel_pipeline_end_to_end():
 
     async def init_proc(ctx):
         await t.initialize_memory(ctx, fb_info["color_address"], b"\x00" * 64)
-        await t.initialize_memory(ctx, fb_info["depth_address"], b"\x00" * 32)
-        await t.initialize_memory(ctx, fb_info["stencil_address"], b"\x00" * 16)
+        # Initialize combined depth/stencil buffer
+        await t.initialize_memory(ctx, fb_info["depthstencil_address"], b"\x00" * 64)
 
         ctx.set(pipeline.fb_info, fb_info)
         ctx.set(pipeline.stencil_conf_front, stencil_conf)
@@ -146,15 +146,19 @@ def test_per_pixel_pipeline_end_to_end():
 
     async def final_checker(ctx):
         color_bytes = await t.dbg_access.read_bytes(ctx, fb_info["color_address"], 4)
-        color_values = [c / 255.0 for c in color_bytes]
+        # Convert BGRA bytes back to RGBA for comparison
+        bgra_values = [c / 255.0 for c in color_bytes]
+        color_values = [bgra_values[2], bgra_values[1], bgra_values[0], bgra_values[3]]
         assert color_values == pytest.approx(expected_color, abs=1 / 255)
-
-        depth_bytes = await t.dbg_access.read_bytes(ctx, fb_info["depth_address"], 2)
+        # Depth is lower 16 bits of combined 32-bit word
+        depth_bytes = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"], 2
+        )
         depth_value = (int.from_bytes(depth_bytes, "little") / 65535.0) * 2.0 - 1.0
         assert depth_value == pytest.approx(expected_depth, abs=1 / 65535)
-
+        # Stencil is the upper byte of combined word (offset +3)
         stencil_bytes = await t.dbg_access.read_bytes(
-            ctx, fb_info["stencil_address"], 1
+            ctx, fb_info["depthstencil_address"] + 3, 1
         )
         assert stencil_bytes[0] == 0  # increment then decrement
 

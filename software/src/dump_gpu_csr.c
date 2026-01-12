@@ -14,8 +14,8 @@
 #define MAP_ALIGN(v)    (((v) + PAGE_SIZE - 1u) & ~(PAGE_SIZE - 1u))
 
 /* Physical base addresses */
-#define PF_CSR_BASE_PHYS     0xF0000800u
-#define PF_CSR_MAP_SIZE      0x1000u
+#define PF_CSR_BASE_PHYS     0xFF200000u
+#define PF_CSR_MAP_SIZE      0x4000u
 
 static void* map_physical(int memfd, uint32_t phys, size_t length) {
     uint32_t aligned_phys = PAGE_ALIGN_DOWN(phys);
@@ -45,6 +45,8 @@ static void dump_idx_config(volatile uint8_t *csr) {
     printf("  count:    %u\n", cfg.count);
     printf("  kind:     %u ", cfg.kind);
     switch (cfg.kind) {
+        case PIXELFORGE_INDEX_NOT_INDEXED: printf("(NOT_INDEXED)\n"); break;
+        case PIXELFORGE_INDEX_U8:  printf("(U8)\n"); break;
         case PIXELFORGE_INDEX_U16: printf("(U16)\n"); break;
         case PIXELFORGE_INDEX_U32: printf("(U32)\n"); break;
         default: printf("(unknown)\n");
@@ -58,8 +60,17 @@ static void dump_topology_config(volatile uint8_t *csr) {
     printf("\n[TOPOLOGY]\n");
     printf("  input_topology:           %u ", cfg.input_topology);
     switch (cfg.input_topology) {
+        case PIXELFORGE_TOPOLOGY_POINT_LIST: printf("(POINT_LIST)\n"); break;
+        case PIXELFORGE_TOPOLOGY_LINE_LIST: printf("(LINE_LIST)\n"); break;
+        case PIXELFORGE_TOPOLOGY_LINE_STRIP: printf("(LINE_STRIP)\n"); break;
         case PIXELFORGE_TOPOLOGY_TRIANGLE_LIST: printf("(TRIANGLE_LIST)\n"); break;
         case PIXELFORGE_TOPOLOGY_TRIANGLE_STRIP: printf("(TRIANGLE_STRIP)\n"); break;
+        case PIXELFORGE_TOPOLOGY_TRIANGLE_FAN: printf("(TRIANGLE_FAN)\n"); break;
+        case PIXELFORGE_TOPOLOGY_LINE_LIST_ADJACENCY: printf("(LINE_LIST_ADJACENCY)\n"); break;
+        case PIXELFORGE_TOPOLOGY_LINE_STRIP_ADJACENCY: printf("(LINE_STRIP_ADJACENCY)\n"); break;
+        case PIXELFORGE_TOPOLOGY_TRIANGLE_LIST_ADJACENCY: printf("(TRIANGLE_LIST_ADJACENCY)\n"); break;
+        case PIXELFORGE_TOPOLOGY_TRIANGLE_STRIP_ADJACENCY: printf("(TRIANGLE_STRIP_ADJACENCY)\n"); break;
+        case PIXELFORGE_TOPOLOGY_PATCH_LIST: printf("(PATCH_LIST)\n"); break;
         default: printf("(unknown)\n");
     }
     printf("  primitive_restart_enable: %u\n", cfg.primitive_restart_enable);
@@ -209,6 +220,7 @@ static const char *cull_mode_str(uint32_t cull) {
         case PIXELFORGE_CULL_NONE: return "NONE";
         case PIXELFORGE_CULL_FRONT: return "FRONT";
         case PIXELFORGE_CULL_BACK: return "BACK";
+        case PIXELFORGE_CULL_FRONT_AND_BACK: return "FRONT_AND_BACK";
         default: return "unknown";
     }
 }

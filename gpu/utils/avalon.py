@@ -335,6 +335,7 @@ class WishboneSlaveToAvalonBridge(Component):
             wb_bus.dat_w.eq(avl.writedata),
             avl.readdata.eq(wb_bus.dat_r),
             avl.waitrequest.eq(send_op & ~wb_bus.ack),
+            wb_bus.adr.eq(avl.address),
         ]
 
         if self.avl_bus.has_byte_enable:

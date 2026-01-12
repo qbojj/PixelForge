@@ -37,8 +37,8 @@
 #define PAGE_OFFSET(a)  ((a) & ~PAGE_MASK)
 
 /* Physical base addresses */
-#define PF_CSR_BASE_PHYS     0xF0000800u
-#define PF_CSR_MAP_SIZE      0x1000u
+#define PF_CSR_BASE_PHYS     0xFF200000u
+#define PF_CSR_MAP_SIZE      0x4000u
 #define VRAM_BASE_PHYS       0x3C000000u  /* reserved VRAM carveout */
 #define VRAM_SIZE            0x04000000u  /* 64MB */
 #define VB_REGION_SIZE       0x00010000u
@@ -641,13 +641,13 @@ int main(int argc, char **argv) {
 
         for (int frame = 0; frame < frames && keep_running; ++frame) {
             /* Clear back buffer */
-            pixelforge_screen_fill(dev, 0x00000000, 1);
+            pixelforge_screen_fill(dev, 0x00000000, !front);
             DBG("Frame %d: back buffer cleared", frame);
 
             /* Configure pipeline for back buffer */
             configure_gpu_pipeline(dev, idx_addr, idx_count,
                                  pos_addr, norm_addr, col_addr, stride,
-                                 dev->back_buffer_address,
+                                 front ? dev->front_buffer_address : dev->back_buffer_address,
                                  ds_block.phys);
             DBG("Frame %d: GPU pipeline configured", frame);
 
@@ -662,7 +662,7 @@ int main(int argc, char **argv) {
             }
 
             /* Swap buffers */
-            pixelforge_swap_buffers(dev);
+            if (!front) pixelforge_swap_buffers(dev);
             printf("Frame %d rendered\n", frame);
         }
 

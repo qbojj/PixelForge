@@ -74,7 +74,7 @@ def generate_header(json_path: Path, prefix: str) -> str:
     lines.append("")
     lines.append(f"#endif /* {guard} */")
 
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: List[str]) -> int:

@@ -1,2 +1,4 @@
 set_instance_assignment -name PLL_COMPENSATION_MODE DIRECT -to "*soc_system_gpu_pll*|altera_pll:altera_pll_i*|*"
-set_instance_assignment -name UNFORCE_MERGE_PLL_OUTPUT_COUNTER ON -to "*soc_system_gpu_pll*|altera_pll:altera_pll_i*|*"
+
+set_instance_assignment -name PLL_AUTO_RESET OFF -to "*soc_system_gpu_pll*|altera_pll:altera_pll_i*|*"
+set_instance_assignment -name PLL_BANDWIDTH_PRESET AUTO -to "*soc_system_gpu_pll*|altera_pll:altera_pll_i*|*"

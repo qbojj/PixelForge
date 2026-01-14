@@ -154,7 +154,7 @@ pixelforge_dev* pixelforge_open_dev(void) {
         free(dev);
         return NULL;
     }
-    dev->vram_base_phys = VRAM_BASE_PHYS + 0x4000;
+    dev->vram_base_phys = VRAM_BASE_PHYS;
     dev->vram_size = VRAM_SIZE;
     vram_allocator_init(&dev->vram, dev->vram_base_virt, dev->vram_base_phys, dev->vram_size);
 
@@ -217,11 +217,12 @@ void pixelforge_close_dev(pixelforge_dev *dev) {
 /*
  * Set the back buffer address (similar to alt_up_video_dma_ctrl_set_bb_addr)
  */
-int pixelforge_set_back_buffer(pixelforge_dev *dev, uint32_t new_address) {
+int pixelforge_set_back_buffer(pixelforge_dev *dev, uint32_t new_address, void *new_virt) {
     if (!dev || !dev->dma_regs) return -1;
 
     dev->dma_regs->back_buffer = new_address;
-    dev->back_buffer_address = dev->dma_regs->back_buffer;
+    dev->back_buffer_address = new_address;
+    dev->back_buffer_virt = new_virt;
 
     DBG("Set back buffer: 0x%08x", dev->back_buffer_address);
     return 0;
@@ -234,15 +235,14 @@ int pixelforge_set_back_buffer(pixelforge_dev *dev, uint32_t new_address) {
 int pixelforge_swap_buffers(pixelforge_dev *dev) {
     if (!dev || !dev->dma_regs) return -1;
 
-    uint32_t temp = dev->back_buffer_address;
-
     /* Trigger swap by writing to front register */
     dev->dma_regs->front_buffer = 1;
     while (dev->dma_regs->status.bits.swap_busy && keep_running) {
-        usleep(50);
+        usleep(10);
     }
 
     /* Update tracked addresses */
+    uint32_t temp = dev->back_buffer_address;
     dev->back_buffer_address = dev->front_buffer_address;
     dev->front_buffer_address = temp;
 
@@ -255,6 +255,13 @@ int pixelforge_swap_buffers(pixelforge_dev *dev) {
         dev->front_buffer_address, dev->back_buffer_address);
 
     return 0;
+}
+
+int pixelforge_swap_buffers_to(pixelforge_dev *dev, uint32_t address, void *virt) {
+    int ret;
+    ret = pixelforge_set_back_buffer(dev, address, virt);
+    if (ret < 0) return ret;
+    return pixelforge_swap_buffers(dev);
 }
 
 /*
@@ -369,20 +376,26 @@ static void setup_triangle_geometry(pixelforge_dev *dev, uint32_t vb_phys, uint8
         {fp16_16(0.0f), fp16_16(0.0f), fp16_16(1.0f)},
         {fp16_16(0.0f), fp16_16(0.0f), fp16_16(1.0f), fp16_16(1.0f)},
     };
+    v[3] = (struct vertex){
+        {fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f), fp16_16(1.0f)},
+        {fp16_16(0.0f), fp16_16(0.0f), fp16_16(1.0f)},
+        {fp16_16(1.0f), fp16_16(1.0f), fp16_16(1.0f), fp16_16(1.0f)},
+    };
 
-    uint16_t *indices = (uint16_t*)(vb_virt + sizeof(struct vertex) * 3);
+    uint16_t *indices = (uint16_t*)(vb_virt + sizeof(struct vertex) * 4);
     indices[0] = 0;
     indices[1] = 1;
     indices[2] = 2;
+    indices[3] = 3;
 
-    *idx_addr = vb_phys + sizeof(struct vertex) * 3;
-    *idx_count = 3;
+    *idx_addr = vb_phys + sizeof(struct vertex) * 4;
+    *idx_count = 4;
     *stride = sizeof(struct vertex);
     *pos_addr = vb_phys + offsetof(struct vertex, pos);
     *norm_addr = vb_phys + offsetof(struct vertex, norm);
     *col_addr = vb_phys + offsetof(struct vertex, col);
 
-    flush_dcache(vb_virt, sizeof(struct vertex) * 3 + sizeof(uint16_t) * 3);
+    flush_dcache(vb_virt, sizeof(struct vertex) * 4 + sizeof(uint16_t) * 4);
 }
 
 /*
@@ -406,7 +419,7 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
 
     /* Topology */
     pixelforge_topo_config_t topo = {
-        .input_topology = PIXELFORGE_TOPOLOGY_TRIANGLE_LIST,
+        .input_topology = PIXELFORGE_TOPOLOGY_TRIANGLE_STRIP,
         .primitive_restart_enable = false,
         .primitive_restart_index = 0,
         .base_vertex = 0,
@@ -458,13 +471,13 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     /* Material and lighting */
     pixelforge_material_t mat = {0};
     for (int i = 0; i < 3; ++i) {
-        mat.ambient[i] = fp16_16(0.2f);
-        mat.diffuse[i] = fp16_16(0.8f);
-        mat.specular[i] = fp16_16(0.2f);
+        mat.ambient[i] = fp16_16(1.0f);
+        mat.diffuse[i] = fp16_16(0.0f);
+        mat.specular[i] = fp16_16(0.0f);
     }
     mat.shininess = fp16_16(1.0f);
     pf_csr_set_material(csr, &mat);
-    DBG("Material set: ambient=0.2 diffuse=0.8 specular=0.0 shininess=1.0");
+    DBG("Material set: ambient=1.0 diffuse=0.0 specular=0.0 shininess=1.0");
 
     pixelforge_light_t light = {0};
     light.position[0] = fp16_16(0.0f);
@@ -472,12 +485,12 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     light.position[2] = fp16_16(1.0f);
     light.position[3] = fp16_16(1.0f);
     for (int i = 0; i < 3; ++i) {
-        light.ambient[i] = fp16_16(0.2f);
-        light.diffuse[i] = fp16_16(0.8f);
-        light.specular[i] = fp16_16(0.2f);
+        light.ambient[i] = fp16_16(1.0f);
+        light.diffuse[i] = fp16_16(0.0f);
+        light.specular[i] = fp16_16(0.0f);
     }
     pf_csr_set_light0(csr, &light);
-    DBG("Light 0 set: pos=(0,0,1) ambient=0.2 diffuse=0.8 specular=0.2");
+    DBG("Light 0 set: pos=(0,0,1) ambient=1.0 diffuse=0.0 specular=0.0");
 
     /* Primitive config */
     pixelforge_prim_config_t prim = {
@@ -615,8 +628,7 @@ int main(int argc, char **argv) {
 
         if (front) {
             printf("Operating on FRONT buffer\n");
-            pixelforge_set_back_buffer(dev, dev->front_buffer_address);
-            pixelforge_swap_buffers(dev);
+            pixelforge_swap_buffers_to(dev, dev->front_buffer_address, dev->front_buffer_virt);
         }
 
         if (xor_test) {
@@ -626,18 +638,17 @@ int main(int argc, char **argv) {
                     uint8_t g = (x * 3) ^ (y * 7);
                     uint8_t b = (x * 5) ^ (y * 11);
                     pixels[y * dev->x_resolution + x] =
-                        (0xFF << 24) | (b << 16) | (g << 8) | r;
+                        (0xFF << 24) | (r << 16) | (g << 8) | b;
                 }
             }
         } else {
             memset(pixels, 0, dev->buffer_size);
         }
 
-        flush_dcache(front ? dev->front_buffer_virt : dev->back_buffer_virt, dev->buffer_size);
+        flush_dcache(pixels, dev->buffer_size);
 
         if (!front) {
-            pixelforge_set_back_buffer(dev, dev->back_buffer_address);
-            pixelforge_swap_buffers(dev);
+            pixelforge_swap_buffers_to(dev, dev->back_buffer_address, dev->back_buffer_virt);
         }
         printf("Pattern written and buffer swapped\n");
         pixelforge_close_dev(dev);
@@ -675,24 +686,20 @@ int main(int argc, char **argv) {
 
         for (int frame = 0; frame < frames && keep_running; ++frame) {
             /* Clear back buffer */
-            pixelforge_screen_fill(dev, 0x00ff0000, !front);
+            pixelforge_screen_fill(dev, 0x00000000, 1);
             DBG("Frame %d: buffer cleared", frame);
 
             /* Configure pipeline for back buffer */
             configure_gpu_pipeline(dev, idx_addr, idx_count,
                                  pos_addr, norm_addr, col_addr, stride,
-                                 front ? dev->front_buffer_address : dev->back_buffer_address,
+                                 dev->back_buffer_address,
                                  ds_block.phys);
             DBG("Frame %d: GPU pipeline configured", frame);
+            DBG("Drawing to %x08x", dev->back_buffer_address);
 
-            /* Report readiness before start */
-            report_ready_status(dev->csr_base);
             /* Start rendering */
             pf_csr_start(dev->csr_base);
 
-            for (int i = 0; i < 1000 && keep_running; ++i) {
-                report_ready_status(dev->csr_base);
-            }
             DBG("Frame %d: GPU started", frame);
 
             /* Wait for completion */
@@ -701,10 +708,8 @@ int main(int argc, char **argv) {
                 break;
             }
 
-            /* Report readiness after completion */
-            report_ready_status(dev->csr_base);
             /* Swap buffers */
-            if (!front) pixelforge_swap_buffers(dev);
+            pixelforge_swap_buffers(dev);
             printf("Frame %d rendered\n", frame);
         }
 

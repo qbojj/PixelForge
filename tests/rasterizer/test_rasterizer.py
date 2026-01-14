@@ -281,6 +281,7 @@ def test_rasterizer_single_triangle(persp: bool):
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
+    sim.add_clock(1e-6, domain="pixel")
 
     async def init_proc(ctx):
         # Set framebuffer info
@@ -397,6 +398,7 @@ def test_rasterizer_two_triangles():
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
+    sim.add_clock(1e-6, domain="pixel")
 
     input_vertices = triangle1 + triangle2
 
@@ -494,6 +496,7 @@ def test_rasterizer_depth_interpolation():
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
+    sim.add_clock(1e-6, domain="pixel")
 
     async def init_proc(ctx):
         ctx.set(dut.fb_info, fb_info)
@@ -605,6 +608,7 @@ def test_rasterizer_two_overlapping_triangles(alpha: bool):
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
+    sim.add_clock(1e-6, domain="pixel")
     input_vertices = triangle1 + triangle2
 
     async def init_proc(ctx):

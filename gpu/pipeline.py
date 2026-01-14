@@ -181,7 +181,6 @@ class GraphicsPipeline(wiring.Component):
             width=Shape.cast(sc.is_fragment.p.shape()).width, depth=fifo_size_default
         )
 
-        # Streams wiring: IA chain
         wiring.connect(m, idx.os_index, fifo_idx_topo.w_stream)
 
         wiring.connect(m, fifo_idx_topo.r_stream, topo.is_index)
@@ -303,6 +302,7 @@ class GraphicsPipeline(wiring.Component):
             topo.c_primitive_restart_enable.eq(self.c_primitive_restart_enable),
             topo.c_primitive_restart_index.eq(self.c_primitive_restart_index),
             topo.c_base_vertex.eq(self.c_base_vertex),
+            topo.start.eq(idx.start_stb),
         ]
 
         # Input Assembly configuration

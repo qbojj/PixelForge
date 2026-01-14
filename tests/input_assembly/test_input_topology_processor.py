@@ -24,6 +24,10 @@ def make_test_input_topology_processor(
         ctx.set(dut.c_primitive_restart_enable, 1 if restart_index is not None else 0)
         ctx.set(dut.c_primitive_restart_index, restart_index or 0)
         ctx.set(dut.c_base_vertex, base_vertex)
+        await ctx.tick()
+        ctx.set(dut.start, 1)
+        await ctx.tick()
+        ctx.set(dut.start, 0)
 
     sim = Simulator(t)
     sim.add_clock(1e-9)
@@ -80,7 +84,7 @@ def test_triangle_strip():
         test_name="test_triangle_strip",
         input_topology=InputTopology.TRIANGLE_STRIP,
         input=[0, 1, 2, 3, 4],
-        expected=[0, 1, 2, 2, 1, 3, 3, 2, 4],
+        expected=[0, 1, 2, 2, 1, 3, 2, 3, 4],
     )
 
 

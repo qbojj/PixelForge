@@ -37,7 +37,7 @@
    {
       datum _sortIndex
       {
-         value = "6";
+         value = "5";
          type = "int";
       }
    }
@@ -95,22 +95,6 @@
       {
          value = "-6750055";
          type = "int";
-      }
-   }
-   element gpu_pll_reconfig
-   {
-      datum _sortIndex
-      {
-         value = "5";
-         type = "int";
-      }
-   }
-   element gpu_pll_reconfig.mgmt_avalon_slave
-   {
-      datum baseAddress
-      {
-         value = "327680";
-         type = "String";
       }
    }
    element hps_0
@@ -197,7 +181,7 @@
    {
       datum _sortIndex
       {
-         value = "7";
+         value = "6";
          type = "int";
       }
    }
@@ -402,7 +386,7 @@
   <parameter name="gui_en_adv_params" value="false" />
   <parameter name="gui_en_dps_ports" value="false" />
   <parameter name="gui_en_phout_ports" value="false" />
-  <parameter name="gui_en_reconf" value="true" />
+  <parameter name="gui_en_reconf" value="false" />
   <parameter name="gui_enable_cascade_in" value="false" />
   <parameter name="gui_enable_cascade_out" value="false" />
   <parameter name="gui_enable_mif_dps" value="false" />
@@ -411,7 +395,7 @@
   <parameter name="gui_fractional_cout" value="32" />
   <parameter name="gui_mif_generate" value="false" />
   <parameter name="gui_multiply_factor" value="1" />
-  <parameter name="gui_number_of_clocks" value="2" />
+  <parameter name="gui_number_of_clocks" value="1" />
   <parameter name="gui_operation_mode" value="direct" />
   <parameter name="gui_output_clock_frequency0" value="30.0" />
   <parameter name="gui_output_clock_frequency1" value="50.0" />
@@ -496,16 +480,6 @@
   <parameter name="gui_switchover_delay" value="0" />
   <parameter name="gui_switchover_mode">Automatic Switchover</parameter>
   <parameter name="gui_use_locked" value="false" />
- </module>
- <module
-   name="gpu_pll_reconfig"
-   kind="altera_pll_reconfig"
-   version="24.1"
-   enabled="1">
-  <parameter name="ENABLE_BYTEENABLE" value="false" />
-  <parameter name="ENABLE_MIF" value="false" />
-  <parameter name="MIF_FILE_NAME" value="" />
-  <parameter name="device_family" value="Cyclone V" />
  </module>
  <module name="hps_0" kind="altera_hps" version="24.1" enabled="1">
   <parameter name="ABSTRACT_REAL_COMPARE_TEST" value="false" />
@@ -1089,15 +1063,6 @@
  <connection
    kind="avalon"
    version="24.1"
-   start="gpu.avl_depthstencil"
-   end="hps_0.f2h_axi_slave">
-  <parameter name="arbitrationPriority" value="1" />
-  <parameter name="baseAddress" value="0x0000" />
-  <parameter name="defaultConnection" value="false" />
- </connection>
- <connection
-   kind="avalon"
-   version="24.1"
    start="gpu.avl_index"
    end="hps_0.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
@@ -1129,15 +1094,6 @@
    end="vga.dma_csr">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x00030000" />
-  <parameter name="defaultConnection" value="false" />
- </connection>
- <connection
-   kind="avalon"
-   version="24.1"
-   start="hps_0.h2f_lw_axi_master"
-   end="gpu_pll_reconfig.mgmt_avalon_slave">
-  <parameter name="arbitrationPriority" value="1" />
-  <parameter name="baseAddress" value="0x00050000" />
   <parameter name="defaultConnection" value="false" />
  </connection>
  <connection
@@ -1185,15 +1141,6 @@
    kind="avalon"
    version="24.1"
    start="jtag_fpga.master"
-   end="gpu_pll_reconfig.mgmt_avalon_slave">
-  <parameter name="arbitrationPriority" value="1" />
-  <parameter name="baseAddress" value="0x00050000" />
-  <parameter name="defaultConnection" value="false" />
- </connection>
- <connection
-   kind="avalon"
-   version="24.1"
-   start="jtag_fpga.master"
    end="vga.resampler_csr">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x00040000" />
@@ -1212,35 +1159,8 @@
    version="24.1"
    start="clk_0.clk"
    end="hps_0.h2f_lw_axi_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="clk_0.clk"
-   end="gpu_pll_reconfig.mgmt_clk" />
  <connection kind="clock" version="24.1" start="clk_0.clk" end="gpu_pll.refclk" />
  <connection kind="clock" version="24.1" start="gpu_pll.outclk0" end="gpu.clock" />
- <connection
-   kind="conduit"
-   version="24.1"
-   start="gpu_pll_reconfig.reconfig_from_pll"
-   end="gpu_pll.reconfig_from_pll">
-  <parameter name="endPort" value="" />
-  <parameter name="endPortLSB" value="0" />
-  <parameter name="startPort" value="" />
-  <parameter name="startPortLSB" value="0" />
-  <parameter name="width" value="0" />
- </connection>
- <connection
-   kind="conduit"
-   version="24.1"
-   start="gpu_pll_reconfig.reconfig_to_pll"
-   end="gpu_pll.reconfig_to_pll">
-  <parameter name="endPort" value="" />
-  <parameter name="endPortLSB" value="0" />
-  <parameter name="startPort" value="" />
-  <parameter name="startPortLSB" value="0" />
-  <parameter name="width" value="0" />
- </connection>
  <connection
    kind="interrupt"
    version="24.1"
@@ -1258,11 +1178,6 @@
    version="24.1"
    start="clk_0.clk_reset"
    end="jtag_fpga.clk_reset" />
- <connection
-   kind="reset"
-   version="24.1"
-   start="clk_0.clk_reset"
-   end="gpu_pll_reconfig.mgmt_reset" />
  <connection
    kind="reset"
    version="24.1"

@@ -1,5 +1,6 @@
 from amaranth import *
 from amaranth.lib import stream, wiring
+from amaranth.lib.memory import Memory as Mem
 from amaranth.lib.wiring import In, Out
 
 from . import fixed
@@ -46,7 +47,7 @@ class FixedPointInvSmallDomain(wiring.Component):
     Result will be in (0.5, 1.0]
     """
 
-    def __init__(self, type: fixed.Shape, steps: int = 4):
+    def __init__(self, type: fixed.Shape, steps: int = 4, initial_guess_bits: int = 4):
         super().__init__(
             {
                 "i": In(stream.Signature(type)),
@@ -55,6 +56,7 @@ class FixedPointInvSmallDomain(wiring.Component):
         )
         self._steps = steps
         self._type = type
+        self._initial_guess_bits = min(initial_guess_bits, type.f_bits)
 
     def elaborate(self, platform) -> Module:
         m = Module()
@@ -63,7 +65,17 @@ class FixedPointInvSmallDomain(wiring.Component):
         # x_{n+1}=x_n(2−value∗x_n)
         # x_{n+1}=2*x_n - value*x_n*x_n
 
-        initial_guess = fixed.Const(0.75, self._type)
+        # Use upper 4 bits of fractional part for initial guess refinement
+        initial_guess_bits = self._initial_guess_bits
+        initial_guess_size = 2**initial_guess_bits
+        m.submodules.rom = rom = Mem(
+            shape=self._type, depth=initial_guess_size, init=[]
+        )
+        for i in range(initial_guess_size):
+            value = 1.0 + (i + 0.5) / initial_guess_size
+            rom.init[i] = fixed.Const(1.0 / value, self._type)
+
+        initial_guess = rom.read_port()
 
         x = Signal(self._type)
         x2 = Signal(self._type)
@@ -74,18 +86,32 @@ class FixedPointInvSmallDomain(wiring.Component):
         mul_result = Signal(self._type)
         m.d.comb += mul_result.eq(mul_a * mul_b)
 
-        iter = Signal(range(self._steps))
+        p = Signal.like(self.i.p)
 
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
+        iter = Signal(range(self._steps))
 
         with m.FSM():
             with m.State("IDLE"):
+                m.d.comb += self.i.ready.eq(1)
+                m.d.comb += initial_guess.addr.eq(
+                    self.i.p.reshape(f_bits=initial_guess_bits)
+                    .as_value()
+                    .as_unsigned()[:initial_guess_bits]
+                )
                 with m.If(self.i.valid):
-                    m.d.sync += [
-                        x.eq(initial_guess),
-                        iter.eq(0),
+                    m.d.sync += p.eq(self.i.p)
+                    m.next = "INITIAL_GUESS"
+            with m.State("INITIAL_GUESS"):
+                with m.If(p == fixed.Const(1.0)):
+                    m.d.comb += [
+                        self.o.p.eq(1.0),
+                        self.o.valid.eq(1),
                     ]
+                    with m.If(self.o.ready):
+                        m.next = "IDLE"
+                with m.Else():
+                    m.d.sync += x.eq(self._type(initial_guess.data))
+                    m.d.sync += iter.eq(0)
                     m.next = "STEP_0"
             with m.State("STEP_0"):
                 m.d.comb += [
@@ -98,7 +124,7 @@ class FixedPointInvSmallDomain(wiring.Component):
                 m.next = "STEP_1"
             with m.State("STEP_1"):
                 m.d.comb += [
-                    mul_a.eq(self.i.p),
+                    mul_a.eq(p),
                     mul_b.eq(x2),
                 ]
                 m.d.sync += [
@@ -114,14 +140,13 @@ class FixedPointInvSmallDomain(wiring.Component):
                 with m.If(iter < self._steps - 1):
                     m.next = "STEP_0"
                 with m.Else():
-                    m.d.comb += self.i.ready.eq(1)
                     m.next = "SEND_RESULT"
             with m.State("SEND_RESULT"):
-                with m.If(self.o.ready | ~self.o.valid):
-                    m.d.sync += [
-                        self.o.p.eq(x),
-                        self.o.valid.eq(1),
-                    ]
+                m.d.comb += [
+                    self.o.p.eq(x),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
                     m.next = "IDLE"
 
         return m
@@ -247,7 +272,7 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
     Result will be (0.7, 1.0]
     """
 
-    def __init__(self, type: fixed.Shape, steps: int = 2):
+    def __init__(self, type: fixed.Shape, steps: int = 2, initial_guess_bits: int = 4):
         super().__init__(
             {
                 "i": In(stream.Signature(type)),
@@ -258,6 +283,7 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
         self._type = type
         assert not type.signed
         assert type.i_bits > 0
+        self._initial_guess_bits = min(initial_guess_bits, type.f_bits)
 
     def elaborate(self, platform) -> Module:
         m = Module()
@@ -270,6 +296,17 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
 
         initial_guess = fixed.Const(0.88, self._type)
 
+        initial_guess_bits = self._initial_guess_bits
+        initial_guess_size = 2**initial_guess_bits
+
+        m.submodules.rom = rom = Mem(
+            shape=self._type, depth=initial_guess_size, init=[]
+        )
+        for i in range(initial_guess_size):
+            value = 1.0 + (i + 0.5) / initial_guess_size
+            rom.init[i] = fixed.Const(1.0 / (value**0.5), self._type)
+        initial_guess = rom.read_port()
+
         three_halfs_x = Signal(self._type)
         ax = Signal(self._type)
         x2 = Signal(self._type)
@@ -281,13 +318,30 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
 
         iter = Signal(range(self._steps))
 
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
+        p = Signal.like(self.i.p)
 
         with m.FSM():
             with m.State("IDLE"):
+                m.d.comb += self.i.ready.eq(1)
+                m.d.comb += initial_guess.addr.eq(
+                    self.i.p.reshape(f_bits=initial_guess_bits)
+                    .as_value()
+                    .as_unsigned()[:initial_guess_bits]
+                )
                 with m.If(self.i.valid):
-                    m.d.sync += x.eq(initial_guess)
+                    m.d.sync += p.eq(self.i.p)
+                    m.next = "INITIAL_GUESS"
+            with m.State("INITIAL_GUESS"):
+                with m.If(p == fixed.Const(1.0)):
+                    m.d.comb += [
+                        self.o.p.eq(1.0),
+                        self.o.valid.eq(1),
+                    ]
+                    with m.If(self.o.ready):
+                        m.next = "IDLE"
+                with m.Else():
+                    m.d.sync += x.eq(self._type(initial_guess.data))
+                    m.d.sync += iter.eq(0)
                     m.next = "STEP_0"
             with m.State("STEP_0"):
                 m.d.comb += [
@@ -324,11 +378,11 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
                     m.d.comb += self.i.ready.eq(1)
                     m.next = "SEND_RESULT"
             with m.State("SEND_RESULT"):
-                with m.If(self.o.ready | ~self.o.valid):
-                    m.d.sync += [
-                        self.o.p.eq(x),
-                        self.o.valid.eq(1),
-                    ]
+                m.d.comb += [
+                    self.o.p.eq(x),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
                     m.next = "IDLE"
 
         return m

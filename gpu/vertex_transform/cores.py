@@ -2,15 +2,12 @@ from amaranth import *
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 
-from gpu.utils.math import FixedPointInv, SimpleOpModule
-from gpu.utils.stream import StreamToVector, VectorToStream
-
 from ..utils.layouts import (
     ShadingVertexLayout,
     VertexLayout,
     num_textures,
 )
-from ..utils.types import FixedPoint, FixedPoint_mem, Vector3
+from ..utils.types import FixedPoint, FixedPoint_mem
 
 
 class VertexTransformEnablementLayout(data.Struct):
@@ -103,9 +100,6 @@ class VertexTransform(wiring.Component):
             for i in range(num_textures)
         ]
 
-        with m.If(self.os_vertex.ready):
-            m.d.sync += self.os_vertex.valid.eq(0)
-
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.ready.eq(1)
@@ -113,7 +107,13 @@ class VertexTransform(wiring.Component):
                     m.d.comb += self.is_vertex.ready.eq(1)
                     m.d.sync += [
                         i_data.eq(self.is_vertex.payload),
+                        o_data.normal_view.eq(self.is_vertex.p.normal),
+                        o_data.texcoords.eq(self.is_vertex.p.texcoords),
+                        o_data.color.eq(self.is_vertex.p.color),
                     ]
+                    m.d.sync += Print(
+                        "VertexTransform vtx in: ", self.is_vertex.payload
+                    )
                     m.next = f"{attr_info[0]['name']}_INIT"
 
             for i, attr in enumerate(attr_info):
@@ -158,84 +158,11 @@ class VertexTransform(wiring.Component):
                         )
 
             with m.State("SEND"):
-                with m.If(~self.os_vertex.valid | self.os_vertex.ready):
-                    m.d.sync += [
-                        self.os_vertex.payload.eq(o_data),
-                        self.os_vertex.valid.eq(1),
-                    ]
-                    m.next = "IDLE"
-
-        return m
-
-
-class PerspectiveDivide(wiring.Component):
-    """
-    Performs (x', y', z', w') = (x/w, y/w, z/w, 1/w) for position
-
-    Result will be in NDC space.
-    """
-
-    i: In(stream.Signature(ShadingVertexLayout))
-    o: Out(stream.Signature(ShadingVertexLayout))
-
-    def enaborate(self, platorm) -> Module:
-        m = Module()
-
-        m.submodule.v2s_a = v2s_a = VectorToStream(Vector3)
-        m.submodule.dup = dup = wiring.DuplicateStream(FixedPoint, 3)
-        m.submodule.mul = mul = SimpleOpModule(lambda a, b: a * b, FixedPoint)
-        m.submodule.s2v = s2v = StreamToVector(Vector3)
-        m.submodule.inverse = inverse = FixedPointInv(FixedPoint)
-
-        wiring.connect(m, v2s_a.o, mul.a)
-        wiring.connect(m, mul.o, s2v.i)
-
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
-
-        with m.If(inverse.i.ready):
-            m.d.sync += inverse.i.valid.eq(0)
-
-        with m.If(v2s_a.i.ready):
-            m.d.sync += v2s_a.i.valid.eq(0)
-
-        with m.FSM():
-            with m.State("IDLE"):
-                with m.If(self.i.valid):
-                    m.d.sync += [
-                        v2s_a.i.payload.eq(Cat(self.i.payload.position_proj[:3])),
-                        v2s_a.i.valid.eq(1),
-                        inverse.i.payload.eq(self.i.payload.position_proj[3]),
-                        inverse.i.valid.eq(1),
-                    ]
-                    m.next = "CALC_INV_W"
-            with m.State("CALC_INV_W"):
-                with m.If(inverse.o.valid):
-                    m.d.sync += [
-                        dup.i.p.eq(inverse.o.p),
-                        dup.i.valid.eq(1),
-                    ]
-                    m.next = "DIVIDE"
-            with m.State("DIVIDE"):
-                # calculate x*1/w, y*1/w, z*1/w, 1/w
-                with m.If(s2v.o.valid & (self.o.ready | ~self.o.valid)):
-                    m.d.comb += [
-                        dup.o.ready.eq(1),
-                        s2v.o.ready.eq(1),
-                        inverse.i.ready.eq(1),
-                        self.i.ready.eq(1),
-                    ]
-
-                    m.d.sync += [
-                        self.o.p.position_view.eq(self.i.payload.position_view),
-                        self.o.p.position_proj[:3].eq(s2v.o.p),
-                        self.o.p.position_proj[3].eq(inverse.o.p),
-                        self.o.p.normal_view.eq(self.i.payload.normal_view),
-                        self.o.p.texcoords.eq(self.i.payload.texcoords),
-                        self.o.p.color.eq(self.i.payload.color),
-                        self.o.valid.eq(1),
-                    ]
-
+                m.d.comb += [
+                    self.os_vertex.payload.eq(o_data),
+                    self.os_vertex.valid.eq(1),
+                ]
+                with m.If(self.os_vertex.ready):
                     m.next = "IDLE"
 
         return m

@@ -289,16 +289,20 @@ class AnyDistributor(wiring.Component):
             with m.If(out_s.ready):
                 m.d.sync += out_s.valid.eq(0)
 
+        sel = Signal(range(self.num_outputs + 1), reset=self.num_outputs)
+
+        for i, o in enumerate(self.o):
+            with m.If(~o.valid | o.ready):
+                m.d.comb += sel.eq(i)
+
+        m.d.comb += self.i.ready.eq(sel != self.num_outputs)
         with m.If(self.i.valid):
-            with m.If(0):
-                pass  # dummy to simplify Elif chain
-            for o in self.o:
-                with m.Elif(~o.valid | o.ready):
+            for i in range(self.num_outputs):
+                with m.If(sel == i):
                     m.d.sync += [
-                        o.p.eq(self.i.p),
-                        o.valid.eq(1),
+                        self.o[i].p.eq(self.i.p),
+                        self.o[i].valid.eq(1),
                     ]
-                    m.d.comb += self.i.ready.eq(1)
 
         return m
 
@@ -323,16 +327,19 @@ class AnyRecombiner(wiring.Component):
         with m.If(self.o.ready):
             m.d.sync += self.o.valid.eq(0)
 
+        sel = Signal(range(self.num_inputs + 1), reset=self.num_inputs)
+        for i, inp in enumerate(self.i):
+            with m.If(inp.valid):
+                m.d.comb += sel.eq(i)
+
         with m.If(~self.o.valid | self.o.ready):
-            with m.If(0):
-                pass  # dummy to simplify Elif chain
-            for i in self.i:
-                with m.Elif(i.valid):
+            for i in range(self.num_inputs):
+                with m.If(sel == i):
                     m.d.sync += [
-                        self.o.p.eq(i.p),
+                        self.o.p.eq(self.i[i].p),
                         self.o.valid.eq(1),
                     ]
-                    m.d.comb += i.ready.eq(1)
+                    m.d.comb += self.i[i].ready.eq(1)
 
         return m
 
@@ -343,10 +350,15 @@ class WideStreamOutput(wiring.Component):
     """
 
     def __init__(self, shape: ShapeCastable, max_width: int):
+        sig = data.StructLayout(
+            {
+                "data": data.ArrayLayout(shape, max_width),
+                "n": range(max_width + 1),
+            }
+        )
         super().__init__(
             {
-                "i": In(stream.Signature(data.ArrayLayout(shape, max_width))),
-                "n": In(stream.Signature(range(max_width + 1))),
+                "i": In(stream.Signature(sig)),
                 "o": Out(stream.Signature(shape)),
             }
         )
@@ -354,23 +366,20 @@ class WideStreamOutput(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        n = Signal.like(self.n.p)
-        i = Signal.like(self.n.p)
-        p = Signal.like(self.i.p)
+        n = Signal.like(self.i.p.n)
+        i = Signal.like(self.i.p.n)
+        p = Signal.like(self.i.p.data)
 
         with m.FSM():
             with m.State("IDLE"):
-                with m.If(self.i.valid & self.n.valid):
-                    m.d.comb += [
-                        self.i.ready.eq(1),
-                        self.n.ready.eq(1),
-                    ]
-                    with m.If(self.n.p > 0):
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    with m.If(self.i.p.n > 0):
                         m.d.sync += [
-                            n.eq(self.n.p),
+                            n.eq(self.i.p.n),
                             i.eq(0),
-                            p.eq(self.i.p),
-                            self.o.p.eq(self.i.p[0]),
+                            p.eq(self.i.p.data),
+                            self.o.p.eq(self.i.p.data[0]),
                             self.o.valid.eq(1),
                         ]
                         m.next = "SEND"
@@ -379,7 +388,7 @@ class WideStreamOutput(wiring.Component):
                     with m.If(i + 1 < n):
                         m.d.sync += [
                             i.eq(i + 1),
-                            p.eq(p[i + 1]),
+                            self.o.p.eq(p[i + 1]),
                         ]
                     with m.Else():
                         m.d.sync += self.o.valid.eq(0)

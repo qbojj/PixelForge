@@ -79,16 +79,16 @@ class PrimitiveClipper(wiring.Component):
         m.submodules.w_out = w_out = WideStreamOutput(self.os_vertex.p.shape(), 3)
         wiring.connect(m, wiring.flipped(self.os_vertex), w_out.o)
 
-        with m.If(w_out.i.ready):
-            m.d.sync += w_out.i.valid.eq(0)
-        with m.If(w_out.n.ready):
-            m.d.sync += w_out.n.valid.eq(0)
+        with m.If(w_out.o.ready & w_out.o.valid):
+            m.d.sync += Print("clipper vtx out: ", w_out.o.p)
 
         with m.FSM():
             with m.State("COLLECT"):
-                m.d.comb += [self.is_vertex.ready.eq(1), self.ready.eq(1)]
+                m.d.comb += self.ready.eq((idx == 0) & w_out.i.ready)
+                m.d.comb += self.is_vertex.ready.eq(1)
                 with m.If(self.is_vertex.valid):
                     m.d.sync += buf[idx].eq(self.is_vertex.payload)
+                    m.d.sync += Print("clipper vtx in: ", self.is_vertex.payload)
                     with m.If(idx == (needed - 1)):
                         m.d.sync += idx.eq(0)
                         m.next = "CHECK"
@@ -138,16 +138,15 @@ class PrimitiveClipper(wiring.Component):
                     m.next = "COLLECT"
                 with m.Elif((codes[0] | codes[1] | codes[2]) == 0):
                     # Fully inside; forward primitive.
-                    with m.If(~w_out.i.valid & ~w_out.n.valid):
+                    m.d.comb += [
+                        w_out.i.p.data[0].eq(buf[0]),
+                        w_out.i.p.data[1].eq(buf[1]),
+                        w_out.i.p.data[2].eq(buf[2]),
+                        w_out.i.p.n.eq(needed),
+                        w_out.i.valid.eq(1),
+                    ]
+                    with m.If(w_out.i.ready):
                         m.d.sync += Print("Trivial accept")
-                        m.d.sync += [
-                            w_out.i.p[0].eq(buf[0]),
-                            w_out.i.p[1].eq(buf[1]),
-                            w_out.i.p[2].eq(buf[2]),
-                            w_out.n.p.eq(needed),
-                            w_out.i.valid.eq(1),
-                            w_out.n.valid.eq(1),
-                        ]
                         m.next = "COLLECT"
                 with m.Else():
                     # Needs clipping (only triangles and lines should reach here).
@@ -528,20 +527,14 @@ class PrimitiveClipper(wiring.Component):
                 final_buf = clip_src
                 final_count = clip_count[final_buf]
 
-                with m.If(~w_out.i.valid & ~w_out.n.valid):
-                    out_vertices = Signal.like(w_out.i.p)
-                    m.d.comb += [
-                        out_vertices[0].eq(clip_buf[final_buf][0]),
-                        out_vertices[1].eq(clip_buf[final_buf][clip_idx - 1]),
-                        out_vertices[2].eq(clip_buf[final_buf][clip_idx]),
-                    ]
-                    m.d.sync += [
-                        w_out.i.p.eq(out_vertices),
-                        w_out.i.valid.eq(1),
-                        w_out.n.p.eq(3),
-                        w_out.n.valid.eq(1),
-                    ]
-
+                m.d.comb += [
+                    w_out.i.p.data[0].eq(clip_buf[final_buf][0]),
+                    w_out.i.p.data[1].eq(clip_buf[final_buf][clip_idx - 1]),
+                    w_out.i.p.data[2].eq(clip_buf[final_buf][clip_idx]),
+                    w_out.i.p.n.eq(3),
+                    w_out.i.valid.eq(1),
+                ]
+                with m.If(w_out.i.ready):
                     # Check if this is the last triangle
                     with m.If(clip_idx == final_count - 1):
                         # Done, go back to COLLECT

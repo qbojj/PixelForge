@@ -9,8 +9,9 @@ LIB := libpixelforgecsr.a
 DEMO := pixelforge_demo
 DUMP_VGA := dump_vga_dma
 DUMP_GPU_CSR := dump_gpu_csr
+RELEASE_SDRAM := release_sdram
 
-all: $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR)
+all: $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR) $(RELEASE_SDRAM)
 
 $(LIB): $(OBJ)
 	$(AR) rcs $@ $(OBJ)
@@ -27,7 +28,10 @@ $(DUMP_VGA): src/dump_vga_dma.c include/vga_dma.h
 $(DUMP_GPU_CSR): $(LIB) src/dump_gpu_csr.c include/graphics_pipeline_csr_access.h
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ src/dump_gpu_csr.c $(LIB)
 
+$(RELEASE_SDRAM): src/release_sdram.c
+	$(CC) $(CFLAGS) $(INCLUDE) -o $@ src/release_sdram.c
+
 clean:
-	rm -f $(OBJ) $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR)
+	rm -f $(OBJ) $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR) $(RELEASE_SDRAM)
 
 .PHONY: all clean

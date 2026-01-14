@@ -154,7 +154,7 @@ pixelforge_dev* pixelforge_open_dev(void) {
         free(dev);
         return NULL;
     }
-    dev->vram_base_phys = VRAM_BASE_PHYS;
+    dev->vram_base_phys = VRAM_BASE_PHYS + 0x4000;
     dev->vram_size = VRAM_SIZE;
     vram_allocator_init(&dev->vram, dev->vram_base_virt, dev->vram_base_phys, dev->vram_size);
 

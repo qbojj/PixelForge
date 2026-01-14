@@ -45,17 +45,17 @@ class VertexShading(wiring.Component):
     TODO: for now only directional lights are supported
     """
 
-    is_vertex: In(stream.Signature(ShadingVertexLayout))
-    os_vertex: Out(stream.Signature(PrimitiveAssemblyLayout))
-
-    material: In(MaterialPropertyLayout)
-    lights: In(LightPropertyLayout).array(1)
-
-    ready: Out(1)
-
     def __init__(self, num_lights=1):
-        self.num_lights = num_lights
-        super().__init__()
+        self._num_lights = num_lights
+        super().__init__(
+            {
+                "is_vertex": In(stream.Signature(ShadingVertexLayout)),
+                "os_vertex": Out(stream.Signature(PrimitiveAssemblyLayout)),
+                "material": In(MaterialPropertyLayout),
+                "lights": In(LightPropertyLayout).array(num_lights),
+                "ready": Out(1),
+            }
+        )
 
     def elaborate(self, platform):
         m = Module()
@@ -81,9 +81,6 @@ class VertexShading(wiring.Component):
         # Output color (accumulated across all lights)
         out_color = Signal.like(self.os_vertex.p.color)
 
-        # Determine number of lights
-        num_lights = len(self.lights)
-
         with m.If(self.os_vertex.ready):
             m.d.sync += self.os_vertex.valid.eq(0)
 
@@ -105,10 +102,11 @@ class VertexShading(wiring.Component):
                         out_color.eq(0),  # Initialize accumulated color
                     ]
                     m.d.sync += dot_accum.eq(0)
+                    m.d.sync += Print("Shading vtx in: ", self.is_vertex.p)
                     m.next = "DOT_0_LIGHT_0"
 
             # Nested loops: for each light, compute dot product and per-channel shading
-            for light_idx in range(num_lights):
+            for light_idx in range(self._num_lights):
                 # Dot product computation for this light (3 cycles)
                 with m.State(f"DOT_0_LIGHT_{light_idx}"):
                     m.d.comb += [
@@ -144,7 +142,7 @@ class VertexShading(wiring.Component):
                         next_state_name = f"COLOR_AMBIENT_{next_ch}_LIGHT_{light_idx}"
                     else:
                         # Last channel of this light
-                        if light_idx + 1 < num_lights:
+                        if light_idx + 1 < self._num_lights:
                             # Move to next light
                             next_state_name = f"DOT_0_LIGHT_{light_idx + 1}"
                         else:

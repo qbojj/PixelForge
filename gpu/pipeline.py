@@ -224,38 +224,36 @@ class GraphicsPipeline(wiring.Component):
 
         input_assembly_ready_ = [
             idx.ready,
-            fifo_idx_topo.level == 0,
+            (fifo_idx_topo.level == 0) & ~fifo_idx_topo.w_en,
             topo.ready,
-            fifo_topo_ia.level == 0,
+            (fifo_topo_ia.level == 0) & ~fifo_topo_ia.w_en,
             ia.ready,
         ]
 
         vertex_transform_ready_ = [
-            fifo_topo_ia.level == 0,
-            ia.ready,
-            fifo_ia_vtx_xf.level == 0,
+            (fifo_ia_vtx_xf.level == 0) & ~fifo_ia_vtx_xf.w_en,
             vtx_xf.ready,
-            fifo_vtx_xf_vtx_sh.level == 0,
+            (fifo_vtx_xf_vtx_sh.level == 0) & ~fifo_vtx_xf_vtx_sh.w_en,
             vtx_sh.ready,
         ]
 
         raster_ready_ = [
-            fifo_vtx_sh_pa.level == 0,
+            (fifo_vtx_sh_pa.level == 0) & ~fifo_vtx_sh_pa.w_en,
             pa.ready,
-            fifo_pa_clip.level == 0,
+            (fifo_pa_clip.level == 0) & ~fifo_pa_clip.w_en,
             clip.ready,
-            fifo_clip_div.level == 0,
+            (fifo_clip_div.level == 0) & ~fifo_clip_div.w_en,
             div.ready,
-            fifo_div_rast.level == 0,
+            (fifo_div_rast.level == 0) & ~fifo_div_rast.w_en,
             rast.ready,
         ]
 
         fragment_processing_ready_ = [
-            fifo_rast_tex.level == 0,
+            (fifo_rast_tex.level == 0) & ~fifo_rast_tex.w_en,
             tex.ready,
-            fifo_tex_ds.level == 0,
+            (fifo_tex_ds.level == 0) & ~fifo_tex_ds.w_en,
             ds.ready,
-            fifo_ds_sc.level == 0,
+            (fifo_ds_sc.level == 0) & ~fifo_ds_sc.w_en,
             sc.ready,
         ]
 

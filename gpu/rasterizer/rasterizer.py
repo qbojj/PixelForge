@@ -112,8 +112,8 @@ class PerspectiveDivide(wiring.Component):
                     self.o_vertex.p.front_facing.eq(vtx_buf.front_facing),
                 ]
                 with m.If(self.o_vertex.ready):
-                    m.d.sync += Print("vtx in: ", vtx_buf)
-                    m.d.sync += Print("vtx out: ", self.o_vertex.p)
+                    m.d.sync += Print("Input vertex: ", vtx_buf)
+                    m.d.sync += Print("Output vertex: ", self.o_vertex.p)
                     m.next = "IDLE"
 
         return m
@@ -332,6 +332,8 @@ class TrianglePrep(wiring.Component):
             with m.State("WAIT_CONSUME"):
                 with m.If(self.o_ctx.ready):
                     m.d.sync += self.o_ctx.valid.eq(0)
+                    m.d.sync += Print("Output ctx: ", self.o_ctx.p)
+                    m.d.sync += Print("Input vtx: ", *vtx)
                     m.next = "COLLECT"
 
         return m
@@ -603,7 +605,7 @@ class FragmentGenerator(wiring.Component):
                 m.d.sync += weight_persp[1].eq((weight_mul_p).clamp(zero, one))
 
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[0].color[0]),
+                    mul_a_interp.eq(self.ctx.vtx[0].color[0].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[0]),
                 ]
                 m.d.sync += color_sat[0].eq(mul_p_interp.saturate(_persp_div_shape))
@@ -614,7 +616,7 @@ class FragmentGenerator(wiring.Component):
                 m.d.sync += weight_persp[2].eq(one - weight_persp[0] - weight_persp[1])
 
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[1].color[0]),
+                    mul_a_interp.eq(self.ctx.vtx[1].color[0].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[1]),
                 ]
                 m.d.sync += color_sat[0].eq(
@@ -627,7 +629,7 @@ class FragmentGenerator(wiring.Component):
                 m.d.sync += Print("Weights persp ", *weight_persp)
 
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[2].color[0]),
+                    mul_a_interp.eq(self.ctx.vtx[2].color[0].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[2]),
                 ]
                 m.d.sync += color_sat[0].eq(
@@ -637,7 +639,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_1"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[0].color[1]),
+                    mul_a_interp.eq(self.ctx.vtx[0].color[1].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[0]),
                 ]
                 m.d.sync += color_sat[1].eq(mul_p_interp.saturate(_persp_div_shape))
@@ -645,7 +647,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_1_1"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[1].color[1]),
+                    mul_a_interp.eq(self.ctx.vtx[1].color[1].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[1]),
                 ]
                 m.d.sync += color_sat[1].eq(
@@ -655,7 +657,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_1_2"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[2].color[1]),
+                    mul_a_interp.eq(self.ctx.vtx[2].color[1].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[2]),
                 ]
                 m.d.sync += color_sat[1].eq(
@@ -665,7 +667,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_2"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[0].color[2]),
+                    mul_a_interp.eq(self.ctx.vtx[0].color[2].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[0]),
                 ]
                 m.d.sync += color_sat[2].eq(mul_p_interp.saturate(_persp_div_shape))
@@ -673,7 +675,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_2_1"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[1].color[2]),
+                    mul_a_interp.eq(self.ctx.vtx[1].color[2].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[1]),
                 ]
                 m.d.sync += color_sat[2].eq(
@@ -683,7 +685,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_2_2"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[2].color[2]),
+                    mul_a_interp.eq(self.ctx.vtx[2].color[2].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[2]),
                 ]
                 m.d.sync += color_sat[2].eq(
@@ -693,7 +695,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_3"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[0].color[3]),
+                    mul_a_interp.eq(self.ctx.vtx[0].color[3].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[0]),
                 ]
                 m.d.sync += color_sat[3].eq(mul_p_interp.saturate(_persp_div_shape))
@@ -701,7 +703,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_3_1"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[1].color[3]),
+                    mul_a_interp.eq(self.ctx.vtx[1].color[3].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[1]),
                 ]
                 m.d.sync += color_sat[3].eq(
@@ -711,7 +713,7 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("INTERP_COLOR_3_2"):
                 m.d.comb += [
-                    mul_a_interp.eq(self.ctx.vtx[2].color[3]),
+                    mul_a_interp.eq(self.ctx.vtx[2].color[3].clamp(zero, one)),
                     mul_b_interp.eq(weight_persp[2]),
                 ]
                 m.d.sync += color_sat[3].eq(
@@ -771,7 +773,7 @@ class TriangleRasterizer(wiring.Component):
         ctx_buf = Signal(TriangleContext)
         ctx_active = Signal()
         tasks_done = Signal()
-        inflight = Signal(range(self._num_generators + 1))
+        inflight = Signal(range(8 * self._num_generators + 1))
 
         px = Signal(unsigned(FixedPoint_fb.i_bits))
         py = Signal(unsigned(FixedPoint_fb.i_bits))
@@ -821,7 +823,6 @@ class TriangleRasterizer(wiring.Component):
         m.d.comb += issue.eq(distrib.i.valid & distrib.i.ready)
 
         with m.If(issue):
-            m.d.sync += inflight.eq(inflight + 1)
             with m.If(~task_last_x):
                 m.d.sync += px.eq(px + 1)
             with m.Elif(~task_last_y):
@@ -849,14 +850,9 @@ class TriangleRasterizer(wiring.Component):
             done_signals.append(fg.o_done)
 
         m.d.comb += done_total.eq(sum_value(*done_signals))
+        m.d.sync += inflight.eq(inflight + issue - done_total)
 
-        inflight_after = Signal.like(inflight)
-        m.d.comb += inflight_after.eq(inflight + issue - done_total)
-
-        with m.If(issue | (done_total > 0)):
-            m.d.sync += inflight.eq(inflight_after)
-
-        with m.If(tasks_done & (inflight_after == 0)):
+        with m.If(tasks_done & (inflight == 0)):
             m.d.sync += ctx_active.eq(0)
 
         wiring.connect(m, recomb.o, wiring.flipped(self.os_fragment))

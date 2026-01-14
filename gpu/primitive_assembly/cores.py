@@ -71,8 +71,14 @@ class PrimitiveAssembly(wiring.Component):
 
                 with m.FSM():
                     with m.State("WAIT_VERTEX"):
-                        m.d.comb += [self.is_vertex.ready.eq(1), self.ready.eq(1)]
+                        m.d.comb += [
+                            self.is_vertex.ready.eq(1),
+                            self.ready.eq(idx == 0),
+                        ]
                         with m.If(self.is_vertex.valid):
+                            m.d.sync += Print(
+                                "PA Received vertex: ", self.is_vertex.payload
+                            )
                             m.d.sync += [
                                 trinagle[idx].eq(self.is_vertex.payload),
                                 idx.eq(idx + 1),

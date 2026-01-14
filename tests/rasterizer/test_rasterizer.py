@@ -1,10 +1,31 @@
+import struct
+
 import pytest
 from amaranth import Module
 from amaranth.lib import wiring
 from amaranth.sim import Simulator
 
+from gpu.input_assembly.cores import (
+    IndexGenerator,
+    InputAssembly,
+    InputTopologyProcessor,
+)
+from gpu.input_assembly.layouts import InputData, InputMode
+from gpu.primitive_assembly.cores import PrimitiveAssembly
+from gpu.rasterizer.cores import PrimitiveClipper
 from gpu.rasterizer.rasterizer import PerspectiveDivide, TriangleRasterizer
-from gpu.utils.layouts import num_textures
+from gpu.utils.layouts import num_lights, num_textures
+from gpu.utils.types import (
+    CullFace,
+    FrontFace,
+    IndexKind,
+    InputTopology,
+    PrimitiveType,
+)
+from gpu.vertex_shading.cores import (
+    VertexShading,
+)
+from gpu.vertex_transform.cores import VertexTransform
 
 from ..utils.streams import stream_testbench
 from ..utils.testbench import SimpleTestbench
@@ -19,6 +40,175 @@ def make_pa_vertex(pos, color):
         "color": color,
         "front_facing": 1,
     }
+
+
+def fp16_16(v: float) -> int:
+    return int(round(v * (1 << 16)))
+
+
+def build_vertex_memory(base_addr: int):
+    vertices = [
+        {
+            "pos": [-0.5, -0.5, 0.2, 1.0],
+            "norm": [0.0, 0.0, 1.0],
+            "col": [1.0, 0.2, 0.1, 1.0],
+        },
+        {
+            "pos": [0.6, -0.4, 0.2, 1.0],
+            "norm": [0.0, 0.0, 1.0],
+            "col": [0.1, 0.9, 0.2, 1.0],
+        },
+        {
+            "pos": [0.0, 0.7, 0.2, 1.0],
+            "norm": [0.0, 0.0, 1.0],
+            "col": [0.2, 0.3, 0.95, 1.0],
+        },
+    ]
+
+    stride = 44  # 4 pos + 3 norm + 4 color, all 32-bit
+    vb_data = bytearray()
+    for v in vertices:
+        for val in v["pos"]:
+            vb_data.extend(struct.pack("<i", fp16_16(val)))
+        for val in v["norm"]:
+            vb_data.extend(struct.pack("<i", fp16_16(val)))
+        for val in v["col"]:
+            vb_data.extend(struct.pack("<i", fp16_16(val)))
+
+    idx_data = struct.pack("<HHH", 0, 1, 2)
+    memory = vb_data + idx_data
+
+    pos_addr = base_addr
+    norm_addr = base_addr + 16
+    col_addr = base_addr + 28
+    idx_addr = base_addr + len(vb_data)
+
+    return {
+        "idx_addr": idx_addr,
+        "idx_count": 3,
+        "pos_addr": pos_addr,
+        "norm_addr": norm_addr,
+        "col_addr": col_addr,
+        "stride": stride,
+        "memory": memory,
+        "colors": [v["col"] for v in vertices],
+    }
+
+
+def test_clip_to_perspective_divide_colors():
+    """Run clipper + perspective divide and log colors of vertices that pass."""
+    m = Module()
+    m.submodules.idx = idx = IndexGenerator()
+    m.submodules.topo = topo = InputTopologyProcessor()
+    m.submodules.ia = ia = InputAssembly()
+    m.submodules.vtx_xf = vtx_xf = VertexTransform()
+    m.submodules.vtx_sh = vtx_sh = VertexShading(num_lights)
+    m.submodules.pa = pa = PrimitiveAssembly()
+    m.submodules.clip = clip = PrimitiveClipper()
+    m.submodules.div = div = PerspectiveDivide()
+
+    wiring.connect(m, idx.os_index, topo.is_index)
+    wiring.connect(m, topo.os_index, ia.is_index)
+    wiring.connect(m, ia.os_vertex, vtx_xf.is_vertex)
+    wiring.connect(m, vtx_xf.os_vertex, vtx_sh.is_vertex)
+    wiring.connect(m, vtx_sh.os_vertex, pa.is_vertex)
+    wiring.connect(m, pa.os_primitive, clip.is_vertex)
+    wiring.connect(m, clip.os_vertex, div.i_vertex)
+
+    t = SimpleTestbench(m)
+    t.arbiter.add(idx.bus)
+    t.arbiter.add(ia.bus)
+
+    vb_base = 0x80000000
+    geom = build_vertex_memory(vb_base)
+
+    logged_colors: list[tuple[float, float, float, float]] = []
+
+    async def testbench(ctx):
+        await t.initialize_memory(ctx, vb_base, geom["memory"])
+
+        ctx.set(idx.c_address, geom["idx_addr"])
+        ctx.set(idx.c_count, geom["idx_count"])
+        ctx.set(idx.c_kind, IndexKind.U16)
+
+        ctx.set(topo.c_input_topology, InputTopology.TRIANGLE_LIST)
+        ctx.set(topo.c_primitive_restart_enable, 0)
+        ctx.set(topo.c_primitive_restart_index, 0)
+        ctx.set(topo.c_base_vertex, 0)
+
+        ctx.set(ia.c_pos.mode, InputMode.PER_VERTEX)
+        ctx.set(
+            ia.c_pos.info,
+            InputData.const(
+                {"per_vertex": {"address": geom["pos_addr"], "stride": geom["stride"]}}
+            ),
+        )
+        ctx.set(ia.c_norm.mode, InputMode.PER_VERTEX)
+        ctx.set(
+            ia.c_norm.info,
+            InputData.const(
+                {"per_vertex": {"address": geom["norm_addr"], "stride": geom["stride"]}}
+            ),
+        )
+        ctx.set(ia.c_col.mode, InputMode.PER_VERTEX)
+        ctx.set(
+            ia.c_col.info,
+            InputData.const(
+                {"per_vertex": {"address": geom["col_addr"], "stride": geom["stride"]}}
+            ),
+        )
+
+        identity_4x4 = [1.0 if i % 5 == 0 else 0.0 for i in range(16)]
+        identity_3x3 = [1.0 if i % 4 == 0 else 0.0 for i in range(9)]
+        ctx.set(vtx_xf.enabled.normal, 1)
+        ctx.set(vtx_xf.position_mv, identity_4x4)
+        ctx.set(vtx_xf.position_p, identity_4x4)
+        ctx.set(vtx_xf.normal_mv_inv_t, identity_3x3)
+
+        # Ambient-only lighting so vertex colors pass through modulation unchanged
+        ctx.set(vtx_sh.material.ambient, [1.0, 1.0, 1.0])
+        ctx.set(vtx_sh.material.diffuse, [0.0, 0.0, 0.0])
+        ctx.set(vtx_sh.material.specular, [0.0, 0.0, 0.0])
+        ctx.set(vtx_sh.material.shininess, 0)
+
+        ctx.set(vtx_sh.lights[0].position, [0.0, 0.0, 1.0, 0.0])
+        ctx.set(vtx_sh.lights[0].ambient, [1.0, 1.0, 1.0])
+        ctx.set(vtx_sh.lights[0].diffuse, [0.0, 0.0, 0.0])
+        ctx.set(vtx_sh.lights[0].specular, [0.0, 0.0, 0.0])
+
+        ctx.set(pa.config.type, PrimitiveType.TRIANGLES)
+        ctx.set(pa.config.cull, CullFace.NONE)
+        ctx.set(pa.config.winding, FrontFace.CCW)
+
+        ctx.set(clip.prim_type, PrimitiveType.TRIANGLES)
+
+        await ctx.tick().repeat(2)
+
+        ctx.set(idx.start, 1)
+        await ctx.tick()
+        ctx.set(idx.start, 0)
+
+        for _ in range(2000):
+            ctx.set(div.o_vertex.ready, 1)
+            await ctx.tick()
+            if ctx.get(div.o_vertex.valid):
+                vtx = ctx.get(div.o_vertex.payload)
+                color = tuple(comp.as_float() for comp in vtx.color)
+                logged_colors.append(color)
+                print(f"Passing vertex {len(logged_colors)-1} color: {color}")
+                if len(logged_colors) == geom["idx_count"]:
+                    break
+
+    sim = Simulator(t)
+    sim.add_clock(1e-6)
+    sim.add_testbench(testbench)
+    sim.run()
+
+    assert logged_colors, "Expected to log passing vertex colors"
+    assert len(logged_colors) == geom["idx_count"]
+    print("Logged colors:", logged_colors)
+    for color in logged_colors:
+        assert any(color == pytest.approx(c, abs=1 / 255) for c in geom["colors"])
 
 
 @pytest.mark.slow

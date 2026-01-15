@@ -92,13 +92,19 @@ module soc_system (
 		output wire [7:0]  vga_B                                  //                          .B
 	);
 
-	wire          gpu_pll_outclk0_clk;                           // gpu_pll:outclk_0 -> [gpu:clk, mm_interconnect_0:gpu_pll_outclk0_clk, mm_interconnect_1:gpu_pll_outclk0_clk, rst_controller:clk]
+	wire          gpu_pll_outclk0_clk;                           // gpu_pll:outclk_0 -> [gpu:clk, gpu:pixel_clk, mm_interconnect_0:gpu_pll_outclk0_clk, mm_interconnect_1:gpu_pll_outclk0_clk, rst_controller:clk]
 	wire   [31:0] gpu_avl_color_readdata;                        // mm_interconnect_0:gpu_avl_color_readdata -> gpu:avl_color__readdata
 	wire          gpu_avl_color_waitrequest;                     // mm_interconnect_0:gpu_avl_color_waitrequest -> gpu:avl_color__waitrequest
 	wire   [31:0] gpu_avl_color_address;                         // gpu:avl_color__address -> mm_interconnect_0:gpu_avl_color_address
 	wire          gpu_avl_color_read;                            // gpu:avl_color__read -> mm_interconnect_0:gpu_avl_color_read
 	wire          gpu_avl_color_write;                           // gpu:avl_color__write -> mm_interconnect_0:gpu_avl_color_write
 	wire   [31:0] gpu_avl_color_writedata;                       // gpu:avl_color__writedata -> mm_interconnect_0:gpu_avl_color_writedata
+	wire   [31:0] gpu_avl_depthstencil_readdata;                 // mm_interconnect_0:gpu_avl_depthstencil_readdata -> gpu:avl_depthstencil__readdata
+	wire          gpu_avl_depthstencil_waitrequest;              // mm_interconnect_0:gpu_avl_depthstencil_waitrequest -> gpu:avl_depthstencil__waitrequest
+	wire   [31:0] gpu_avl_depthstencil_address;                  // gpu:avl_depthstencil__address -> mm_interconnect_0:gpu_avl_depthstencil_address
+	wire          gpu_avl_depthstencil_read;                     // gpu:avl_depthstencil__read -> mm_interconnect_0:gpu_avl_depthstencil_read
+	wire          gpu_avl_depthstencil_write;                    // gpu:avl_depthstencil__write -> mm_interconnect_0:gpu_avl_depthstencil_write
+	wire   [31:0] gpu_avl_depthstencil_writedata;                // gpu:avl_depthstencil__writedata -> mm_interconnect_0:gpu_avl_depthstencil_writedata
 	wire   [31:0] gpu_avl_index_readdata;                        // mm_interconnect_0:gpu_avl_index_readdata -> gpu:avl_index__readdata
 	wire          gpu_avl_index_waitrequest;                     // mm_interconnect_0:gpu_avl_index_waitrequest -> gpu:avl_index__waitrequest
 	wire   [31:0] gpu_avl_index_address;                         // gpu:avl_index__address -> mm_interconnect_0:gpu_avl_index_address
@@ -111,14 +117,6 @@ module soc_system (
 	wire          gpu_avl_vertex_read;                           // gpu:avl_vertex__read -> mm_interconnect_0:gpu_avl_vertex_read
 	wire          gpu_avl_vertex_write;                          // gpu:avl_vertex__write -> mm_interconnect_0:gpu_avl_vertex_write
 	wire   [31:0] gpu_avl_vertex_writedata;                      // gpu:avl_vertex__writedata -> mm_interconnect_0:gpu_avl_vertex_writedata
-	wire   [31:0] jtag_hps_master_readdata;                      // mm_interconnect_0:jtag_hps_master_readdata -> jtag_hps:master_readdata
-	wire          jtag_hps_master_waitrequest;                   // mm_interconnect_0:jtag_hps_master_waitrequest -> jtag_hps:master_waitrequest
-	wire   [31:0] jtag_hps_master_address;                       // jtag_hps:master_address -> mm_interconnect_0:jtag_hps_master_address
-	wire          jtag_hps_master_read;                          // jtag_hps:master_read -> mm_interconnect_0:jtag_hps_master_read
-	wire    [3:0] jtag_hps_master_byteenable;                    // jtag_hps:master_byteenable -> mm_interconnect_0:jtag_hps_master_byteenable
-	wire          jtag_hps_master_readdatavalid;                 // mm_interconnect_0:jtag_hps_master_readdatavalid -> jtag_hps:master_readdatavalid
-	wire          jtag_hps_master_write;                         // jtag_hps:master_write -> mm_interconnect_0:jtag_hps_master_write
-	wire   [31:0] jtag_hps_master_writedata;                     // jtag_hps:master_writedata -> mm_interconnect_0:jtag_hps_master_writedata
 	wire          vga_master_waitrequest;                        // mm_interconnect_0:vga_master_waitrequest -> vga:master_waitrequest
 	wire   [31:0] vga_master_readdata;                           // mm_interconnect_0:vga_master_readdata -> vga:master_readdata
 	wire   [31:0] vga_master_address;                            // vga:master_address -> mm_interconnect_0:vga_master_address
@@ -199,14 +197,6 @@ module soc_system (
 	wire    [2:0] hps_0_h2f_lw_axi_master_awsize;                // hps_0:h2f_lw_AWSIZE -> mm_interconnect_1:hps_0_h2f_lw_axi_master_awsize
 	wire          hps_0_h2f_lw_axi_master_awvalid;               // hps_0:h2f_lw_AWVALID -> mm_interconnect_1:hps_0_h2f_lw_axi_master_awvalid
 	wire          hps_0_h2f_lw_axi_master_rvalid;                // mm_interconnect_1:hps_0_h2f_lw_axi_master_rvalid -> hps_0:h2f_lw_RVALID
-	wire   [31:0] jtag_fpga_master_readdata;                     // mm_interconnect_1:jtag_fpga_master_readdata -> jtag_fpga:master_readdata
-	wire          jtag_fpga_master_waitrequest;                  // mm_interconnect_1:jtag_fpga_master_waitrequest -> jtag_fpga:master_waitrequest
-	wire   [31:0] jtag_fpga_master_address;                      // jtag_fpga:master_address -> mm_interconnect_1:jtag_fpga_master_address
-	wire          jtag_fpga_master_read;                         // jtag_fpga:master_read -> mm_interconnect_1:jtag_fpga_master_read
-	wire    [3:0] jtag_fpga_master_byteenable;                   // jtag_fpga:master_byteenable -> mm_interconnect_1:jtag_fpga_master_byteenable
-	wire          jtag_fpga_master_readdatavalid;                // mm_interconnect_1:jtag_fpga_master_readdatavalid -> jtag_fpga:master_readdatavalid
-	wire          jtag_fpga_master_write;                        // jtag_fpga:master_write -> mm_interconnect_1:jtag_fpga_master_write
-	wire   [31:0] jtag_fpga_master_writedata;                    // jtag_fpga:master_writedata -> mm_interconnect_1:jtag_fpga_master_writedata
 	wire   [31:0] mm_interconnect_1_gpu_csr_readdata;            // gpu:avl_csr__readdata -> mm_interconnect_1:gpu_csr_readdata
 	wire          mm_interconnect_1_gpu_csr_waitrequest;         // gpu:avl_csr__waitrequest -> mm_interconnect_1:gpu_csr_waitrequest
 	wire   [11:0] mm_interconnect_1_gpu_csr_address;             // mm_interconnect_1:gpu_csr_address -> gpu:avl_csr__address
@@ -224,9 +214,9 @@ module soc_system (
 	wire          irq_mapper_receiver0_irq;                      // gpu:ready -> irq_mapper:receiver0_irq
 	wire   [31:0] hps_0_f2h_irq0_irq;                            // irq_mapper:sender_irq -> hps_0:f2h_irq_p0
 	wire   [31:0] hps_0_f2h_irq1_irq;                            // irq_mapper_001:sender_irq -> hps_0:f2h_irq_p1
-	wire          rst_controller_reset_out_reset;                // rst_controller:reset_out -> [gpu:rst, mm_interconnect_0:gpu_reset_reset_bridge_in_reset_reset, mm_interconnect_1:gpu_reset_reset_bridge_in_reset_reset]
+	wire          rst_controller_reset_out_reset;                // rst_controller:reset_out -> [gpu:pixel_rst, gpu:rst, mm_interconnect_0:gpu_pixel_reset_reset_bridge_in_reset_reset, mm_interconnect_1:gpu_reset_reset_bridge_in_reset_reset]
 	wire          rst_controller_001_reset_out_reset;            // rst_controller_001:reset_out -> [mm_interconnect_0:hps_0_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset, mm_interconnect_1:hps_0_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset]
-	wire          rst_controller_002_reset_out_reset;            // rst_controller_002:reset_out -> [mm_interconnect_0:jtag_hps_clk_reset_reset_bridge_in_reset_reset, mm_interconnect_0:jtag_hps_master_translator_reset_reset_bridge_in_reset_reset, mm_interconnect_1:jtag_fpga_clk_reset_reset_bridge_in_reset_reset, mm_interconnect_1:jtag_fpga_master_translator_reset_reset_bridge_in_reset_reset]
+	wire          rst_controller_002_reset_out_reset;            // rst_controller_002:reset_out -> [mm_interconnect_0:vga_master_translator_reset_reset_bridge_in_reset_reset, mm_interconnect_0:vga_reset_reset_bridge_in_reset_reset, mm_interconnect_1:vga_dma_csr_translator_reset_reset_bridge_in_reset_reset, mm_interconnect_1:vga_reset_reset_bridge_in_reset_reset]
 
 	top gpu (
 		.avl_index__address            (gpu_avl_index_address),                 //        avl_index.address
@@ -247,12 +237,12 @@ module soc_system (
 		.avl_color__writedata          (gpu_avl_color_writedata),               //                 .writedata
 		.avl_color__readdata           (gpu_avl_color_readdata),                //                 .readdata
 		.avl_color__waitrequest        (gpu_avl_color_waitrequest),             //                 .waitrequest
-		.avl_depthstencil__address     (),                                      // avl_depthstencil.address
-		.avl_depthstencil__write       (),                                      //                 .write
-		.avl_depthstencil__read        (),                                      //                 .read
-		.avl_depthstencil__writedata   (),                                      //                 .writedata
-		.avl_depthstencil__readdata    (),                                      //                 .readdata
-		.avl_depthstencil__waitrequest (),                                      //                 .waitrequest
+		.avl_depthstencil__address     (gpu_avl_depthstencil_address),          // avl_depthstencil.address
+		.avl_depthstencil__write       (gpu_avl_depthstencil_write),            //                 .write
+		.avl_depthstencil__read        (gpu_avl_depthstencil_read),             //                 .read
+		.avl_depthstencil__writedata   (gpu_avl_depthstencil_writedata),        //                 .writedata
+		.avl_depthstencil__readdata    (gpu_avl_depthstencil_readdata),         //                 .readdata
+		.avl_depthstencil__waitrequest (gpu_avl_depthstencil_waitrequest),      //                 .waitrequest
 		.clk                           (gpu_pll_outclk0_clk),                   //            clock.clk
 		.ready                         (irq_mapper_receiver0_irq),              //            ready.irq
 		.avl_csr__address              (mm_interconnect_1_gpu_csr_address),     //              csr.address
@@ -261,13 +251,16 @@ module soc_system (
 		.avl_csr__writedata            (mm_interconnect_1_gpu_csr_writedata),   //                 .writedata
 		.avl_csr__readdata             (mm_interconnect_1_gpu_csr_readdata),    //                 .readdata
 		.avl_csr__waitrequest          (mm_interconnect_1_gpu_csr_waitrequest), //                 .waitrequest
-		.rst                           (rst_controller_reset_out_reset)         //            reset.reset
+		.rst                           (rst_controller_reset_out_reset),        //            reset.reset
+		.pixel_clk                     (gpu_pll_outclk0_clk),                   //      pixel_clock.clk
+		.pixel_rst                     (rst_controller_reset_out_reset)         //      pixel_reset.reset
 	);
 
 	soc_system_gpu_pll gpu_pll (
 		.refclk   (clk_clk),             //  refclk.clk
 		.rst      (~reset_reset_n),      //   reset.reset
 		.outclk_0 (gpu_pll_outclk0_clk), // outclk0.clk
+		.outclk_1 (),                    // outclk1.clk
 		.locked   ()                     // (terminated)
 	);
 
@@ -431,42 +424,6 @@ module soc_system (
 		.f2h_irq_p1               (hps_0_f2h_irq1_irq)                             //            f2h_irq1.irq
 	);
 
-	soc_system_jtag_fpga #(
-		.USE_PLI     (0),
-		.PLI_PORT    (50000),
-		.FIFO_DEPTHS (2)
-	) jtag_fpga (
-		.clk_clk              (clk_clk),                        //          clk.clk
-		.clk_reset_reset      (~reset_reset_n),                 //    clk_reset.reset
-		.master_address       (jtag_fpga_master_address),       //       master.address
-		.master_readdata      (jtag_fpga_master_readdata),      //             .readdata
-		.master_read          (jtag_fpga_master_read),          //             .read
-		.master_write         (jtag_fpga_master_write),         //             .write
-		.master_writedata     (jtag_fpga_master_writedata),     //             .writedata
-		.master_waitrequest   (jtag_fpga_master_waitrequest),   //             .waitrequest
-		.master_readdatavalid (jtag_fpga_master_readdatavalid), //             .readdatavalid
-		.master_byteenable    (jtag_fpga_master_byteenable),    //             .byteenable
-		.master_reset_reset   ()                                // master_reset.reset
-	);
-
-	soc_system_jtag_fpga #(
-		.USE_PLI     (0),
-		.PLI_PORT    (50000),
-		.FIFO_DEPTHS (2)
-	) jtag_hps (
-		.clk_clk              (clk_clk),                       //          clk.clk
-		.clk_reset_reset      (~reset_reset_n),                //    clk_reset.reset
-		.master_address       (jtag_hps_master_address),       //       master.address
-		.master_readdata      (jtag_hps_master_readdata),      //             .readdata
-		.master_read          (jtag_hps_master_read),          //             .read
-		.master_write         (jtag_hps_master_write),         //             .write
-		.master_writedata     (jtag_hps_master_writedata),     //             .writedata
-		.master_waitrequest   (jtag_hps_master_waitrequest),   //             .waitrequest
-		.master_readdatavalid (jtag_hps_master_readdatavalid), //             .readdatavalid
-		.master_byteenable    (jtag_hps_master_byteenable),    //             .byteenable
-		.master_reset_reset   ()                               // master_reset.reset
-	);
-
 	soc_system_vga vga (
 		.clk_clk                (clk_clk),                                      //           clk.clk
 		.dma_csr_address        (mm_interconnect_1_vga_dma_csr_address),        //       dma_csr.address
@@ -535,16 +492,22 @@ module soc_system (
 		.hps_0_f2h_axi_slave_rready                                       (mm_interconnect_0_hps_0_f2h_axi_slave_rready),  //                                                           .rready
 		.clk_0_clk_clk                                                    (clk_clk),                                       //                                                  clk_0_clk.clk
 		.gpu_pll_outclk0_clk                                              (gpu_pll_outclk0_clk),                           //                                            gpu_pll_outclk0.clk
-		.gpu_reset_reset_bridge_in_reset_reset                            (rst_controller_reset_out_reset),                //                            gpu_reset_reset_bridge_in_reset.reset
+		.gpu_pixel_reset_reset_bridge_in_reset_reset                      (rst_controller_reset_out_reset),                //                      gpu_pixel_reset_reset_bridge_in_reset.reset
 		.hps_0_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset (rst_controller_001_reset_out_reset),            // hps_0_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset.reset
-		.jtag_hps_clk_reset_reset_bridge_in_reset_reset                   (rst_controller_002_reset_out_reset),            //                   jtag_hps_clk_reset_reset_bridge_in_reset.reset
-		.jtag_hps_master_translator_reset_reset_bridge_in_reset_reset     (rst_controller_002_reset_out_reset),            //     jtag_hps_master_translator_reset_reset_bridge_in_reset.reset
+		.vga_master_translator_reset_reset_bridge_in_reset_reset          (rst_controller_002_reset_out_reset),            //          vga_master_translator_reset_reset_bridge_in_reset.reset
+		.vga_reset_reset_bridge_in_reset_reset                            (rst_controller_002_reset_out_reset),            //                            vga_reset_reset_bridge_in_reset.reset
 		.gpu_avl_color_address                                            (gpu_avl_color_address),                         //                                              gpu_avl_color.address
 		.gpu_avl_color_waitrequest                                        (gpu_avl_color_waitrequest),                     //                                                           .waitrequest
 		.gpu_avl_color_read                                               (gpu_avl_color_read),                            //                                                           .read
 		.gpu_avl_color_readdata                                           (gpu_avl_color_readdata),                        //                                                           .readdata
 		.gpu_avl_color_write                                              (gpu_avl_color_write),                           //                                                           .write
 		.gpu_avl_color_writedata                                          (gpu_avl_color_writedata),                       //                                                           .writedata
+		.gpu_avl_depthstencil_address                                     (gpu_avl_depthstencil_address),                  //                                       gpu_avl_depthstencil.address
+		.gpu_avl_depthstencil_waitrequest                                 (gpu_avl_depthstencil_waitrequest),              //                                                           .waitrequest
+		.gpu_avl_depthstencil_read                                        (gpu_avl_depthstencil_read),                     //                                                           .read
+		.gpu_avl_depthstencil_readdata                                    (gpu_avl_depthstencil_readdata),                 //                                                           .readdata
+		.gpu_avl_depthstencil_write                                       (gpu_avl_depthstencil_write),                    //                                                           .write
+		.gpu_avl_depthstencil_writedata                                   (gpu_avl_depthstencil_writedata),                //                                                           .writedata
 		.gpu_avl_index_address                                            (gpu_avl_index_address),                         //                                              gpu_avl_index.address
 		.gpu_avl_index_waitrequest                                        (gpu_avl_index_waitrequest),                     //                                                           .waitrequest
 		.gpu_avl_index_read                                               (gpu_avl_index_read),                            //                                                           .read
@@ -557,14 +520,6 @@ module soc_system (
 		.gpu_avl_vertex_readdata                                          (gpu_avl_vertex_readdata),                       //                                                           .readdata
 		.gpu_avl_vertex_write                                             (gpu_avl_vertex_write),                          //                                                           .write
 		.gpu_avl_vertex_writedata                                         (gpu_avl_vertex_writedata),                      //                                                           .writedata
-		.jtag_hps_master_address                                          (jtag_hps_master_address),                       //                                            jtag_hps_master.address
-		.jtag_hps_master_waitrequest                                      (jtag_hps_master_waitrequest),                   //                                                           .waitrequest
-		.jtag_hps_master_byteenable                                       (jtag_hps_master_byteenable),                    //                                                           .byteenable
-		.jtag_hps_master_read                                             (jtag_hps_master_read),                          //                                                           .read
-		.jtag_hps_master_readdata                                         (jtag_hps_master_readdata),                      //                                                           .readdata
-		.jtag_hps_master_readdatavalid                                    (jtag_hps_master_readdatavalid),                 //                                                           .readdatavalid
-		.jtag_hps_master_write                                            (jtag_hps_master_write),                         //                                                           .write
-		.jtag_hps_master_writedata                                        (jtag_hps_master_writedata),                     //                                                           .writedata
 		.vga_master_address                                               (vga_master_address),                            //                                                 vga_master.address
 		.vga_master_waitrequest                                           (vga_master_waitrequest),                        //                                                           .waitrequest
 		.vga_master_read                                                  (vga_master_read),                               //                                                           .read
@@ -614,16 +569,8 @@ module soc_system (
 		.gpu_pll_outclk0_clk                                                 (gpu_pll_outclk0_clk),                          //                                               gpu_pll_outclk0.clk
 		.gpu_reset_reset_bridge_in_reset_reset                               (rst_controller_reset_out_reset),               //                               gpu_reset_reset_bridge_in_reset.reset
 		.hps_0_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset (rst_controller_001_reset_out_reset),           // hps_0_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset.reset
-		.jtag_fpga_clk_reset_reset_bridge_in_reset_reset                     (rst_controller_002_reset_out_reset),           //                     jtag_fpga_clk_reset_reset_bridge_in_reset.reset
-		.jtag_fpga_master_translator_reset_reset_bridge_in_reset_reset       (rst_controller_002_reset_out_reset),           //       jtag_fpga_master_translator_reset_reset_bridge_in_reset.reset
-		.jtag_fpga_master_address                                            (jtag_fpga_master_address),                     //                                              jtag_fpga_master.address
-		.jtag_fpga_master_waitrequest                                        (jtag_fpga_master_waitrequest),                 //                                                              .waitrequest
-		.jtag_fpga_master_byteenable                                         (jtag_fpga_master_byteenable),                  //                                                              .byteenable
-		.jtag_fpga_master_read                                               (jtag_fpga_master_read),                        //                                                              .read
-		.jtag_fpga_master_readdata                                           (jtag_fpga_master_readdata),                    //                                                              .readdata
-		.jtag_fpga_master_readdatavalid                                      (jtag_fpga_master_readdatavalid),               //                                                              .readdatavalid
-		.jtag_fpga_master_write                                              (jtag_fpga_master_write),                       //                                                              .write
-		.jtag_fpga_master_writedata                                          (jtag_fpga_master_writedata),                   //                                                              .writedata
+		.vga_dma_csr_translator_reset_reset_bridge_in_reset_reset            (rst_controller_002_reset_out_reset),           //            vga_dma_csr_translator_reset_reset_bridge_in_reset.reset
+		.vga_reset_reset_bridge_in_reset_reset                               (rst_controller_002_reset_out_reset),           //                               vga_reset_reset_bridge_in_reset.reset
 		.gpu_csr_address                                                     (mm_interconnect_1_gpu_csr_address),            //                                                       gpu_csr.address
 		.gpu_csr_write                                                       (mm_interconnect_1_gpu_csr_write),              //                                                              .write
 		.gpu_csr_read                                                        (mm_interconnect_1_gpu_csr_read),               //                                                              .read

@@ -43,8 +43,8 @@
 //   ARBITRATION_SHARES:  1 1 1
 //   ARBITRATION_SCHEME   "no-arb"
 //   PIPELINE_ARB:        0
-//   PKT_TRANS_LOCK:      72 (arbitration locking enabled)
-//   ST_DATA_W:           125
+//   PKT_TRANS_LOCK:      61 (arbitration locking enabled)
+//   ST_DATA_W:           114
 //   ST_CHANNEL_W:        3
 // ------------------------------------------
 
@@ -54,21 +54,21 @@ module soc_system_mm_interconnect_1_rsp_mux
     // Sinks
     // ----------------------
     input                       sink0_valid,
-    input [125-1   : 0]  sink0_data,
+    input [114-1   : 0]  sink0_data,
     input [3-1: 0]  sink0_channel,
     input                       sink0_startofpacket,
     input                       sink0_endofpacket,
     output                      sink0_ready,
 
     input                       sink1_valid,
-    input [125-1   : 0]  sink1_data,
+    input [114-1   : 0]  sink1_data,
     input [3-1: 0]  sink1_channel,
     input                       sink1_startofpacket,
     input                       sink1_endofpacket,
     output                      sink1_ready,
 
     input                       sink2_valid,
-    input [125-1   : 0]  sink2_data,
+    input [114-1   : 0]  sink2_data,
     input [3-1: 0]  sink2_channel,
     input                       sink2_startofpacket,
     input                       sink2_endofpacket,
@@ -79,7 +79,7 @@ module soc_system_mm_interconnect_1_rsp_mux
     // Source
     // ----------------------
     output                      src_valid,
-    output [125-1    : 0] src_data,
+    output [114-1    : 0] src_data,
     output [3-1 : 0] src_channel,
     output                      src_startofpacket,
     output                      src_endofpacket,
@@ -91,13 +91,13 @@ module soc_system_mm_interconnect_1_rsp_mux
     input clk,
     input reset
 );
-    localparam PAYLOAD_W        = 125 + 3 + 2;
+    localparam PAYLOAD_W        = 114 + 3 + 2;
     localparam NUM_INPUTS       = 3;
     localparam SHARE_COUNTER_W  = 1;
     localparam PIPELINE_ARB     = 0;
-    localparam ST_DATA_W        = 125;
+    localparam ST_DATA_W        = 114;
     localparam ST_CHANNEL_W     = 3;
-    localparam PKT_TRANS_LOCK   = 72;
+    localparam PKT_TRANS_LOCK   = 61;
 
     // ------------------------------------------
     // Signals
@@ -128,9 +128,9 @@ module soc_system_mm_interconnect_1_rsp_mux
     // ------------------------------------------
     reg [NUM_INPUTS - 1 : 0] lock;
     always @* begin
-      lock[0] = sink0_data[72];
-      lock[1] = sink1_data[72];
-      lock[2] = sink2_data[72];
+      lock[0] = sink0_data[61];
+      lock[1] = sink1_data[61];
+      lock[2] = sink2_data[61];
     end
 
     assign last_cycle = src_valid & src_ready & src_endofpacket & ~(|(lock & grant));

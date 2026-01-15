@@ -77,7 +77,7 @@ def test_depth_stencil_pass_and_depth_write():
     }
 
     fragments = [make_fragment(0, 0, 0.75, [0.2, 0.2, 0.2, 1.0])]
-    expected_depth = int((1.0 + 0.75) / 2.0 * ((1 << 16) - 1))
+    expected_depth = int(0.75 * ((1 << 16) - 1))
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
@@ -104,9 +104,9 @@ def test_depth_stencil_pass_and_depth_write():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -124,7 +124,7 @@ def test_depth_stencil_depth_fail():
     fb_info = make_fb_info()
 
     # Pre-fill depth buffer with 0.5
-    initial_depth = round((0.5 + 1.0) / 2.0 * ((1 << 16) - 1))
+    initial_depth = round(0.5 * ((1 << 16) - 1))
 
     stencil_conf = {
         "compare_op": CompareOp.ALWAYS,
@@ -177,9 +177,9 @@ def test_depth_stencil_depth_fail():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -235,9 +235,9 @@ def test_depth_stencil_stencil_fail():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -287,9 +287,9 @@ def test_depth_stencil_depth_never():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -349,9 +349,9 @@ def test_depth_stencil_stencil_replace():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -411,9 +411,9 @@ def test_depth_stencil_stencil_write_mask():
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=check_output,
         init_process=init_proc,
         idle_for=1000,
@@ -573,7 +573,7 @@ def test_swapchain_output(blend_conf, fragments, expected_color, dst_color):
 
     stream_testbench(
         sim,
-        input_stream=dut.is_fragment,
+        input_stream=dut.i,
         input_data=fragments,
         init_process=init_proc,
         final_checker=verify_memory,

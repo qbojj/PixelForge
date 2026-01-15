@@ -11,7 +11,7 @@ from ..utils.layouts import (
     RasterizerLayoutNDC,
 )
 from ..utils.stream import AnyDistributor, AnyRecombiner
-from ..utils.transactron_utils import max_value, min_value, sum_value
+from ..utils.transactron_utils import max_value, min_value, popcount
 from ..utils.types import FixedPoint, FixedPoint_fb
 
 _weight_shape = fixed.SQ(2 * FixedPoint_fb.i_bits + 1, FixedPoint_fb.f_bits)
@@ -28,8 +28,8 @@ class PerspectiveDivide(wiring.Component):
 
     ready: Out(1)
 
-    i_vertex: In(stream.Signature(RasterizerLayout))
-    o_vertex: Out(stream.Signature(RasterizerLayoutNDC))
+    i: In(stream.Signature(RasterizerLayout))
+    o: Out(stream.Signature(RasterizerLayoutNDC))
 
     def __init__(self, inv_steps: int = 4):
         super().__init__()
@@ -64,9 +64,9 @@ class PerspectiveDivide(wiring.Component):
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.ready.eq(1)
-                m.d.comb += self.i_vertex.ready.eq(1)
-                with m.If(self.i_vertex.valid):
-                    m.d.sync += vtx_buf.eq(self.i_vertex.payload)
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.sync += vtx_buf.eq(self.i.payload)
                     m.next = "START_INV"
 
             with m.State("START_INV"):
@@ -100,20 +100,20 @@ class PerspectiveDivide(wiring.Component):
                 m.next = "OUTPUT"
 
             with m.State("OUTPUT"):
-                m.d.comb += self.o_vertex.valid.eq(1)
+                m.d.comb += self.o.valid.eq(1)
                 m.d.comb += [
-                    self.o_vertex.p.position_ndc[0].eq(div_x),
-                    self.o_vertex.p.position_ndc[1].eq(div_y),
-                    self.o_vertex.p.position_ndc[2].eq(div_z),
-                    self.o_vertex.p.w.eq(vtx_buf.position_ndc[3]),
-                    self.o_vertex.p.inv_w.eq(inv_w),
-                    self.o_vertex.p.color.eq(vtx_buf.color),
-                    self.o_vertex.p.texcoords.eq(vtx_buf.texcoords),
-                    self.o_vertex.p.front_facing.eq(vtx_buf.front_facing),
+                    self.o.p.position_ndc[0].eq(div_x),
+                    self.o.p.position_ndc[1].eq(div_y),
+                    self.o.p.position_ndc[2].eq(div_z),
+                    self.o.p.w.eq(vtx_buf.position_ndc[3]),
+                    self.o.p.inv_w.eq(inv_w),
+                    self.o.p.color.eq(vtx_buf.color),
+                    self.o.p.texcoords.eq(vtx_buf.texcoords),
+                    self.o.p.front_facing.eq(vtx_buf.front_facing),
                 ]
-                with m.If(self.o_vertex.ready):
+                with m.If(self.o.ready):
                     m.d.sync += Print("Input vertex: ", vtx_buf)
-                    m.d.sync += Print("Output vertex: ", self.o_vertex.p)
+                    m.d.sync += Print("Output vertex: ", self.o.p)
                     m.next = "IDLE"
 
         return m
@@ -139,8 +139,8 @@ class PixelTask(data.Struct):
 class TrianglePrep(wiring.Component):
     """Triangle setup: collects 3 vertices, applies viewport/scissor and outputs context."""
 
-    is_vertex: In(stream.Signature(RasterizerLayoutNDC))
-    o_ctx: Out(stream.Signature(TriangleContext))
+    i: In(stream.Signature(RasterizerLayoutNDC))
+    o: Out(stream.Signature(TriangleContext))
 
     fb_info: In(FramebufferInfoLayout)
     ready: Out(1)
@@ -196,9 +196,9 @@ class TrianglePrep(wiring.Component):
 
         with m.FSM():
             with m.State("COLLECT"):
-                m.d.comb += [self.is_vertex.ready.eq(1), self.ready.eq(vtx_idx == 0)]
-                with m.If(self.is_vertex.valid):
-                    m.d.sync += vtx[vtx_idx].eq(self.is_vertex.p)
+                m.d.comb += [self.i.ready.eq(1), self.ready.eq(vtx_idx == 0)]
+                with m.If(self.i.valid):
+                    m.d.sync += vtx[vtx_idx].eq(self.i.p)
                     with m.If(vtx_idx == 2):
                         m.d.sync += vtx_idx.eq(0)
                         m.d.sync += calc_screen_idx.eq(0)
@@ -310,8 +310,8 @@ class TrianglePrep(wiring.Component):
                     m.next = "OUTPUT_CTX"
 
             with m.State("OUTPUT_CTX"):
-                with m.If(self.o_ctx.ready | ~self.o_ctx.valid):
-                    ctx = self.o_ctx.p
+                with m.If(self.o.ready | ~self.o.valid):
+                    ctx = self.o.p
                     m.d.sync += [
                         ctx.area.eq(area),
                         ctx.area_recip.eq(area_recip),
@@ -326,13 +326,13 @@ class TrianglePrep(wiring.Component):
                             ctx.screen_x[i].eq(screen_x[i]),
                             ctx.screen_y[i].eq(screen_y[i]),
                         ]
-                    m.d.sync += self.o_ctx.valid.eq(1)
+                    m.d.sync += self.o.valid.eq(1)
                     m.next = "WAIT_CONSUME"
 
             with m.State("WAIT_CONSUME"):
-                with m.If(self.o_ctx.ready):
-                    m.d.sync += self.o_ctx.valid.eq(0)
-                    m.d.sync += Print("Output ctx: ", self.o_ctx.p)
+                with m.If(self.o.ready):
+                    m.d.sync += self.o.valid.eq(0)
+                    m.d.sync += Print("Output ctx: ", self.o.p)
                     m.d.sync += Print("Input vtx: ", *vtx)
                     m.next = "COLLECT"
 
@@ -342,10 +342,10 @@ class TrianglePrep(wiring.Component):
 class FragmentGenerator(wiring.Component):
     """Fragment generator: barycentric test + interpolation for a single pixel."""
 
-    i_pxpy: In(stream.Signature(PixelTask))
+    i: In(stream.Signature(PixelTask))
+    o: Out(stream.Signature(FragmentLayout))
+
     ctx: In(TriangleContext)
-    ctx_valid: In(1)
-    o_fragment: Out(stream.Signature(FragmentLayout))
     o_done: Out(1)
 
     def __init__(self, inv_steps: int = 4):
@@ -426,24 +426,24 @@ class FragmentGenerator(wiring.Component):
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += self.i_pxpy.ready.eq(self.ctx_valid)
-                with m.If(self.i_pxpy.valid & self.ctx_valid):
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
                     m.d.sync += [
-                        px_lat.eq(self.i_pxpy.payload.px),
-                        py_lat.eq(self.i_pxpy.payload.py),
-                        px_fp_reg.eq(self.i_pxpy.payload.px + fixed.Const(0.5)),
-                        py_fp_reg.eq(self.i_pxpy.payload.py + fixed.Const(0.5)),
+                        px_lat.eq(self.i.payload.px),
+                        py_lat.eq(self.i.payload.py),
+                        px_fp_reg.eq(self.i.payload.px + fixed.Const(0.5)),
+                        py_fp_reg.eq(self.i.payload.py + fixed.Const(0.5)),
                     ]
                     # Precompute differences for edge 0: A=V1, B=V2, P=(px,py)
                     m.d.sync += [
                         d0_ba_x.eq(self.ctx.screen_x[2] - self.ctx.screen_x[1]),
                         d0_ba_y.eq(self.ctx.screen_y[2] - self.ctx.screen_y[1]),
                         d0_pa_x.eq(
-                            (self.i_pxpy.payload.px + fixed.Const(0.5))
+                            (self.i.payload.px + fixed.Const(0.5))
                             - self.ctx.screen_x[1]
                         ),
                         d0_pa_y.eq(
-                            (self.i_pxpy.payload.py + fixed.Const(0.5))
+                            (self.i.payload.py + fixed.Const(0.5))
                             - self.ctx.screen_y[1]
                         ),
                     ]
@@ -723,18 +723,18 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("OUTPUT"):
                 m.d.comb += [
-                    self.o_fragment.p.coord_pos[0].eq(px_lat),
-                    self.o_fragment.p.coord_pos[1].eq(py_lat),
-                    self.o_fragment.p.depth.eq(depth_sat.clamp(zero, one)),
-                    self.o_fragment.p.color[0].eq(color_sat[0].clamp(zero, one)),
-                    self.o_fragment.p.color[1].eq(color_sat[1].clamp(zero, one)),
-                    self.o_fragment.p.color[2].eq(color_sat[2].clamp(zero, one)),
-                    self.o_fragment.p.color[3].eq(color_sat[3].clamp(zero, one)),
-                    self.o_fragment.p.front_facing.eq(self.ctx.vtx[0].front_facing),
+                    self.o.p.coord_pos[0].eq(px_lat),
+                    self.o.p.coord_pos[1].eq(py_lat),
+                    self.o.p.depth.eq(depth_sat.clamp(zero, one)),
+                    self.o.p.color[0].eq(color_sat[0].clamp(zero, one)),
+                    self.o.p.color[1].eq(color_sat[1].clamp(zero, one)),
+                    self.o.p.color[2].eq(color_sat[2].clamp(zero, one)),
+                    self.o.p.color[3].eq(color_sat[3].clamp(zero, one)),
+                    self.o.p.front_facing.eq(self.ctx.vtx[0].front_facing),
                 ]
 
-                m.d.comb += self.o_fragment.valid.eq(1)
-                with m.If(self.o_fragment.ready):
+                m.d.comb += self.o.valid.eq(1)
+                with m.If(self.o.ready):
                     m.d.comb += self.o_done.eq(1)
                     m.next = "IDLE"
 
@@ -752,8 +752,8 @@ class TriangleRasterizer(wiring.Component):
     TODO: support for lines and points (for now only triangles)
     """
 
-    is_vertex: In(stream.Signature(RasterizerLayoutNDC))
-    os_fragment: Out(stream.Signature(FragmentLayout))
+    i: In(stream.Signature(TriangleContext))
+    o: Out(stream.Signature(FragmentLayout))
 
     # Framebuffer configuration
     fb_info: In(FramebufferInfoLayout)
@@ -768,37 +768,11 @@ class TriangleRasterizer(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        m.submodules.setup = setup = TrianglePrep(inv_steps=self._inv_steps)
-
         ctx_buf = Signal(TriangleContext)
-        ctx_active = Signal()
-        tasks_done = Signal()
         inflight = Signal(range(8 * self._num_generators + 1))
 
         px = Signal(unsigned(FixedPoint_fb.i_bits))
         py = Signal(unsigned(FixedPoint_fb.i_bits))
-
-        m.d.comb += setup.fb_info.eq(self.fb_info)
-
-        allow_new_triangle = ~ctx_active
-
-        m.d.comb += [
-            setup.is_vertex.valid.eq(self.is_vertex.valid & allow_new_triangle),
-            setup.is_vertex.payload.eq(self.is_vertex.payload),
-            self.is_vertex.ready.eq(setup.is_vertex.ready & allow_new_triangle),
-            self.ready.eq(setup.ready & allow_new_triangle),
-        ]
-
-        m.d.comb += setup.o_ctx.ready.eq(~ctx_active)
-        with m.If(setup.o_ctx.valid & setup.o_ctx.ready):
-            m.d.sync += [
-                ctx_buf.eq(setup.o_ctx.payload),
-                ctx_active.eq(1),
-                tasks_done.eq(0),
-                inflight.eq(0),
-                px.eq(setup.o_ctx.payload.min_x),
-                py.eq(setup.o_ctx.payload.min_y),
-            ]
 
         task_last_x = Signal()
         task_last_y = Signal()
@@ -812,49 +786,59 @@ class TriangleRasterizer(wiring.Component):
             FragmentLayout, self._num_generators
         )
 
-        tasks_avail = ctx_active & ~tasks_done
-        m.d.comb += [
-            distrib.i.valid.eq(tasks_avail),
-            distrib.i.payload.px.eq(px),
-            distrib.i.payload.py.eq(py),
-        ]
+        inflight_reset = Signal()
+        inflight_inc = Signal()
 
-        issue = Signal()
-        m.d.comb += issue.eq(distrib.i.valid & distrib.i.ready)
+        with m.FSM():
+            with m.State("IDLE"):
+                m.d.comb += self.ready.eq(1)
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.comb += inflight_reset.eq(1)
+                    m.d.sync += [
+                        ctx_buf.eq(self.i.payload),
+                        px.eq(self.i.payload.min_x),
+                        py.eq(self.i.payload.min_y),
+                    ]
+                    m.next = "RASTERIZE"
 
-        with m.If(issue):
-            with m.If(~task_last_x):
-                m.d.sync += px.eq(px + 1)
-            with m.Elif(~task_last_y):
-                m.d.sync += [px.eq(ctx_buf.min_x), py.eq(py + 1)]
-            with m.Else():
-                m.d.sync += tasks_done.eq(1)
-
-        done_total = Signal(range(self._num_generators + 1))
+            with m.State("RASTERIZE"):
+                m.d.comb += [
+                    distrib.i.valid.eq(1),
+                    distrib.i.p.px.eq(px),
+                    distrib.i.p.py.eq(py),
+                ]
+                with m.If(distrib.i.ready):
+                    m.d.comb += inflight_inc.eq(1)
+                    with m.If(~task_last_x):
+                        m.d.sync += px.eq(px + 1)
+                    with m.Elif(~task_last_y):
+                        m.d.sync += [px.eq(ctx_buf.min_x), py.eq(py + 1)]
+                    with m.Else():
+                        m.next = "WAIT_DONE"
+            with m.State("WAIT_DONE"):
+                with m.If(inflight == 0):
+                    m.next = "IDLE"
 
         fragments = []
-        done_signals = []
+        done_vec = Signal(self._num_generators)
         for idx in range(self._num_generators):
             m.submodules[f"fg_{idx}"] = fg = FragmentGenerator(
                 inv_steps=self._inv_steps
             )
             fragments.append(fg)
 
-            wiring.connect(m, distrib.o[idx], fg.i_pxpy)
-            m.d.comb += [
-                fg.ctx.eq(ctx_buf),
-                fg.ctx_valid.eq(ctx_active),
-            ]
+            wiring.connect(m, distrib.o[idx], fg.i)
+            m.d.comb += fg.ctx.eq(ctx_buf)
 
-            wiring.connect(m, fg.o_fragment, recomb.i[idx])
-            done_signals.append(fg.o_done)
+            wiring.connect(m, fg.o, recomb.i[idx])
+            m.d.comb += done_vec[idx].eq(fg.o_done)
 
-        m.d.comb += done_total.eq(sum_value(*done_signals))
-        m.d.sync += inflight.eq(inflight + issue - done_total)
+        with m.If(inflight_reset):
+            m.d.sync += inflight.eq(0)
+        with m.Else():
+            m.d.sync += inflight.eq(inflight + inflight_inc - popcount(done_vec))
 
-        with m.If(tasks_done & (inflight == 0)):
-            m.d.sync += ctx_active.eq(0)
-
-        wiring.connect(m, recomb.o, wiring.flipped(self.os_fragment))
+        wiring.connect(m, recomb.o, wiring.flipped(self.o))
 
         return m

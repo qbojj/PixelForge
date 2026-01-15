@@ -114,8 +114,8 @@ class Texturing(wiring.Component):
     def __init__(self):
         super().__init__(
             {
-                "is_fragment": In(stream.Signature(FragmentLayout)),
-                "os_fragment": Out(stream.Signature(FragmentLayout)),
+                "i": In(stream.Signature(FragmentLayout)),
+                "o": Out(stream.Signature(FragmentLayout)),
                 "ready": Out(1),
             }
         )
@@ -125,16 +125,14 @@ class Texturing(wiring.Component):
 
         m.d.comb += self.ready.eq(1)
 
-        wiring.connect(
-            m, wiring.flipped(self.is_fragment), wiring.flipped(self.os_fragment)
-        )
+        wiring.connect(m, wiring.flipped(self.i), wiring.flipped(self.o))
 
         return m
 
 
 class DepthStencilTest(wiring.Component):
-    is_fragment: stream.Interface
-    os_fragment: stream.Interface
+    i: stream.Interface
+    o: stream.Interface
 
     stencil_conf_front: Value
     stencil_conf_back: Value
@@ -147,8 +145,8 @@ class DepthStencilTest(wiring.Component):
     def __init__(self):
         super().__init__(
             {
-                "is_fragment": In(stream.Signature(FragmentLayout)),
-                "os_fragment": Out(stream.Signature(FragmentLayout)),
+                "i": In(stream.Signature(FragmentLayout)),
+                "o": Out(stream.Signature(FragmentLayout)),
                 "stencil_conf_front": In(StencilOpConfig),
                 "stencil_conf_back": In(StencilOpConfig),
                 "depth_conf": In(DepthTestConfig),
@@ -166,7 +164,7 @@ class DepthStencilTest(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        v = Signal.like(self.is_fragment.payload)
+        v = Signal.like(self.i.payload)
 
         # Combined depth/stencil buffer (D16_X8_S8 format)
         depthstencil_addr = Signal(wb_bus_addr_width)
@@ -182,56 +180,59 @@ class DepthStencilTest(wiring.Component):
         s_accepted = Signal()
         d_accepted = Signal()
 
+        real_new_stencil_value = Signal(unsigned(8))
+        new_depth_value = Signal(unsigned(16))
+        new_depthstencil = Signal(unsigned(32))
+        m.d.comb += new_depthstencil.eq(
+            Cat(
+                new_depth_value,
+                Const(0, 8),  # padding
+                real_new_stencil_value,
+            )
+        )
+
         m.d.comb += s_conf.eq(
             Mux(v.front_facing, self.stencil_conf_front, self.stencil_conf_back)
         )
 
         def perform_compare(op, value, reference):
-            """Perform comparison operation (combinational)."""
-            ret = Signal()
-            with m.Switch(op):
-                with m.Case(CompareOp.NEVER):
-                    m.d.comb += ret.eq(0)
-                with m.Case(CompareOp.LESS):
-                    m.d.comb += ret.eq(value < reference)
-                with m.Case(CompareOp.EQUAL):
-                    m.d.comb += ret.eq(value == reference)
-                with m.Case(CompareOp.LESS_OR_EQUAL):
-                    m.d.comb += ret.eq(value <= reference)
-                with m.Case(CompareOp.GREATER):
-                    m.d.comb += ret.eq(value > reference)
-                with m.Case(CompareOp.NOT_EQUAL):
-                    m.d.comb += ret.eq(value != reference)
-                with m.Case(CompareOp.GREATER_OR_EQUAL):
-                    m.d.comb += ret.eq(value >= reference)
-                with m.Case(CompareOp.ALWAYS):
-                    m.d.comb += ret.eq(1)
-            return ret
+            less = Signal()
+            equal = Signal()
+            greater = Signal()
+
+            m.d.comb += less.eq(value < reference)
+            m.d.comb += equal.eq(value == reference)
+            m.d.comb += greater.eq(value > reference)
+
+            return (
+                ((op & CompareOp.LESS == CompareOp.LESS) & less)
+                | ((op & CompareOp.EQUAL == CompareOp.EQUAL) & equal)
+                | ((op & CompareOp.GREATER == CompareOp.GREATER) & greater)
+            )
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += [self.is_fragment.ready.eq(1), self.ready.eq(1)]
-                with m.If(self.is_fragment.valid):
-                    m.d.sync += v.eq(self.is_fragment.payload)
+                m.d.comb += self.ready.eq(1)
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.sync += v.eq(self.i.payload)
+                    m.next = "PREPARE"
 
-                    m.d.sync += s_accepted.eq(0)
-                    m.d.sync += d_accepted.eq(0)
+            with m.State("PREPARE"):
+                # TODO: handle minDepth and maxDepth from fb_info
+                depth_zero_one = v.depth.clamp(zero, one)
+                m.d.sync += d_frag.eq(((depth_zero_one << 16) - depth_zero_one).round())
 
-                    # TODO: handle minDepth and maxDepth from fb_info
-                    depth_zero_one = ((self.is_fragment.p.depth + one) >> 1).clamp(
-                        zero, one
-                    )
-                    m.d.sync += d_frag.eq(
-                        ((depth_zero_one << 16) - depth_zero_one).round()
-                    )
+                m.d.sync += depthstencil_addr.eq(
+                    self.fb_info.depthstencil_address[2:]
+                    + v.coord_pos[0] * 1
+                    + v.coord_pos[1] * self.fb_info.depthstencil_pitch[2:]
+                )
 
-                    m.d.sync += depthstencil_addr.eq(
-                        self.fb_info.depthstencil_address[2:]
-                        + v.coord_pos[0] * 1
-                        + v.coord_pos[1] * self.fb_info.depthstencil_pitch[2:]
-                    )
+                m.d.sync += s_accepted.eq(0)
+                m.d.sync += d_accepted.eq(0)
 
-                    m.next = "READ_DEPTHSTENCIL"
+                m.next = "READ_DEPTHSTENCIL"
 
             with m.State("READ_DEPTHSTENCIL"):
                 # Read 32-bit combined depth/stencil value
@@ -249,16 +250,6 @@ class DepthStencilTest(wiring.Component):
                         depth_value.eq(self.wb_bus.dat_r[0:16]),
                         stencil_value.eq(self.wb_bus.dat_r[24:32]),
                     ]
-                    m.d.sync += Print(
-                        "Reading depth/stencil from address:",
-                        depthstencil_addr,
-                        " got: ",
-                        self.wb_bus.dat_r,
-                        " depth=",
-                        self.wb_bus.dat_r[0:16],
-                        " stencil=",
-                        self.wb_bus.dat_r[24:32],
-                    )
                     m.next = "CHECK_DEPTH_STENCIL"
 
             with m.State("CHECK_DEPTH_STENCIL"):
@@ -291,9 +282,9 @@ class DepthStencilTest(wiring.Component):
                         )
                     ),
                 ]
-                m.next = "OUTPUT_DEPTHSTENCIL"
+                m.next = "COMPUTE_DEPTHSTENCIL"
 
-            with m.State("OUTPUT_DEPTHSTENCIL"):
+            with m.State("COMPUTE_DEPTHSTENCIL"):
                 # Perform depth/stencil updates if accepted
                 stencil_op_to_do = Signal(StencilOp)
                 new_stencil_value = Signal(unsigned(8))
@@ -325,50 +316,46 @@ class DepthStencilTest(wiring.Component):
                     with m.Case(StencilOp.DECR_WRAP):
                         m.d.comb += new_stencil_value.eq(stencil_value - 1)
 
-                real_new_stencil_value = Signal(unsigned(8))
-                m.d.comb += [
+                m.d.sync += [
                     real_new_stencil_value.eq(
-                        (stencil_value & ~s_conf.write_mask)
-                        | (new_stencil_value & s_conf.write_mask)
-                    )
+                        Cat(
+                            [
+                                Mux(
+                                    s_conf.write_mask[i],
+                                    new_stencil_value[i],
+                                    stencil_value[i],
+                                )
+                                for i in range(8)
+                            ]
+                        )
+                    ),
+                    new_depth_value.eq(
+                        Mux(
+                            s_accepted & d_accepted & self.depth_conf.write_enabled,
+                            d_frag,
+                            depth_value,
+                        )
+                    ),
                 ]
 
+                m.next = "OUTPUT_DEPTHSTENCIL"
+
+            with m.State("OUTPUT_DEPTHSTENCIL"):
                 # Determine if we need to write back
-                need_write = Signal()
-                new_depth_value = Signal(unsigned(16))
-                m.d.comb += new_depth_value.eq(
-                    Mux(d_accepted & self.depth_conf.write_enabled, d_frag, depth_value)
-                )
-                new_depthstencil = Signal(unsigned(32))
-                m.d.comb += new_depthstencil.eq(
-                    Cat(
-                        new_depth_value,
-                        Const(0, 8),  # padding
-                        real_new_stencil_value,
-                    )
-                )
 
-                m.d.comb += need_write.eq(new_depthstencil != depthstencil_data)
+                ready_send = Signal()
 
-                m.d.sync += Print("stencil accepted: ", s_accepted)
-                m.d.sync += Print("depth accepted: ", d_accepted)
-                m.d.sync += Print("Stencil op:", stencil_op_to_do)
-                m.d.sync += Print(Format("Old stencil: {:#02x}", stencil_value))
-                m.d.sync += Print(
-                    Format("New stencil: {:#02x}", real_new_stencil_value)
-                )
-                m.d.sync += Print(Format("Old depth: {}", depth_value))
-                m.d.sync += Print(Format("New depth: {}", new_depth_value))
-
-                with m.If(need_write):
-                    # Build 32-bit value: [15:0]=depth, [23:16]=padding(0), [31:24]=stencil
-                    m.d.sync += Print(
+                m.d.sync += [
+                    Print(
                         Format(
-                            "Writing depth/stencil {:#08x} to address {}",
-                            new_depthstencil,
-                            depthstencil_addr,
+                            "New stencil value: {}, New depth value: {}",
+                            real_new_stencil_value,
+                            new_depth_value,
                         )
-                    )
+                    ),
+                ]
+
+                with m.If(new_depthstencil != depthstencil_data):
                     m.d.comb += [
                         self.wb_bus.cyc.eq(1),
                         self.wb_bus.stb.eq(1),
@@ -377,21 +364,20 @@ class DepthStencilTest(wiring.Component):
                         self.wb_bus.dat_w.eq(new_depthstencil),
                         self.wb_bus.sel.eq(~0),
                     ]
-                    with m.If(self.wb_bus.ack):
-                        with m.If(~s_accepted | ~d_accepted):
-                            m.next = "IDLE"
-                        with m.Else():
-                            m.next = "SEND"
+                    m.d.comb += ready_send.eq(self.wb_bus.ack)
                 with m.Else():
+                    m.d.comb += ready_send.eq(1)
+
+                with m.If(ready_send):
                     with m.If(~s_accepted | ~d_accepted):
                         m.next = "IDLE"
                     with m.Else():
                         m.next = "SEND"
 
             with m.State("SEND"):
-                m.d.comb += self.os_fragment.valid.eq(1)
-                m.d.comb += self.os_fragment.payload.eq(v)
-                with m.If(self.os_fragment.ready):
+                m.d.comb += self.o.valid.eq(1)
+                m.d.comb += self.o.payload.eq(v)
+                with m.If(self.o.ready):
                     m.next = "IDLE"
 
         return m
@@ -403,7 +389,7 @@ class SwapchainOutput(wiring.Component):
     def __init__(self):
         super().__init__(
             {
-                "is_fragment": In(stream.Signature(FragmentLayout)),
+                "i": In(stream.Signature(FragmentLayout)),
                 "conf": In(BlendConfig),
                 "fb_info": In(FramebufferInfoLayout),
                 "wb_bus": Out(
@@ -422,11 +408,18 @@ class SwapchainOutput(wiring.Component):
         color_shape = fixed.UQ(0, 9)
         one = fixed.Const(1.0).saturate(color_shape)
 
+        in_data = Signal(data.ArrayLayout(color_shape, 4))
         src_data = Signal(data.ArrayLayout(color_shape, 4))
         dst_data = Signal(data.ArrayLayout(color_shape, 4))
 
         big_shape = fixed.SQ(3, 18)
         out_data = Signal(data.ArrayLayout(big_shape, 4))
+
+        out_data_clamped = Signal(data.ArrayLayout(fixed.UQ(0, 18), 4))
+        m.d.comb += [
+            out_data_clamped[i].eq(out_data[i].saturate(fixed.UQ(0, 18)))
+            for i in range(4)
+        ]
 
         color_addr = Signal(wb_bus_addr_width)
 
@@ -434,6 +427,17 @@ class SwapchainOutput(wiring.Component):
         src_a = src_data[3]
         dst_rgb = dst_data[0:3]
         dst_a = dst_data[3]
+
+        factor_src_rgb = Signal(color_shape)
+        factor_dst_rgb = Signal(color_shape)
+        factor_src_a = Signal(color_shape)
+        factor_dst_a = Signal(color_shape)
+
+        mul_shape = fixed.UQ(0, 18)
+        mul_a = Signal(data.ArrayLayout(color_shape, 6))
+        mul_b = Signal(data.ArrayLayout(color_shape, 6))
+        mul_result = Signal(data.ArrayLayout(mul_shape, 6))
+        m.d.comb += [mul_result[i].eq(mul_a[i] * mul_b[i]) for i in range(6)]
 
         def factor_value(factor):
             ret = Signal(color_shape)
@@ -468,31 +472,31 @@ class SwapchainOutput(wiring.Component):
                     m.d.comb += ret.eq(one - dst_a)
             return ret
 
+        v = Signal.like(self.i.payload)
+
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += [self.is_fragment.ready.eq(1), self.ready.eq(1)]
-                with m.If(self.is_fragment.valid):
-                    m.d.sync += color_addr.eq(
-                        self.fb_info.color_address[2:]
-                        + (
-                            self.is_fragment.p.coord_pos[1]
-                            * self.fb_info.color_pitch[2:]
-                        )
-                        + (self.is_fragment.p.coord_pos[0])
-                    )
-                    in_data = [Signal(color_shape) for _ in range(4)]
-                    m.d.comb += [
-                        in_data[i].eq(
-                            (self.is_fragment.payload.color[i]).saturate(color_shape)
-                        )
-                        for i in range(4)
-                    ]
-                    with m.If(self.conf.enabled):
-                        m.d.sync += [src_data[i].eq(in_data[i]) for i in range(4)]
-                        m.next = "READ_DEST"
-                    with m.Else():
-                        m.d.sync += [out_data[i].eq(in_data[i]) for i in range(4)]
-                        m.next = "WRITE_OUTPUT"
+                m.d.comb += [self.i.ready.eq(1), self.ready.eq(1)]
+                with m.If(self.i.valid):
+                    m.d.sync += v.eq(self.i.payload)
+                    m.next = "CALC_ADDR"
+
+            with m.State("CALC_ADDR"):
+                m.d.comb += [
+                    in_data[i].eq(v.color[i].saturate(color_shape)) for i in range(4)
+                ]
+                m.d.sync += src_data.eq(in_data)
+                m.d.sync += [out_data[i].eq(in_data[i]) for i in range(4)]
+
+                m.d.sync += color_addr.eq(
+                    (self.fb_info.color_address[2:] + v.coord_pos[0])
+                    + (v.coord_pos[1] * self.fb_info.color_pitch[2:])
+                )
+
+                with m.If(self.conf.enabled):
+                    m.next = "READ_DEST"
+                with m.Else():
+                    m.next = "WRITE_OUTPUT"
 
             with m.State("READ_DEST"):
                 m.d.comb += [
@@ -503,97 +507,88 @@ class SwapchainOutput(wiring.Component):
                     self.wb_bus.sel.eq(~0),
                 ]
                 with m.If(self.wb_bus.ack):
-                    plain_fp = [Signal(fixed.UQ(8, 0)) for _ in range(4)]
+                    plain_dat = [Signal(unsigned(8)) for _ in range(4)]
                     m.d.comb += [
-                        plain_fp[i].eq(self.wb_bus.dat_r.word_select(BGRA_MAP[i], 8))
+                        plain_dat[i].eq(self.wb_bus.dat_r.word_select(BGRA_MAP[i], 8))
                         for i in range(4)
                     ]
+                    assert color_shape.i_bits == 0
+                    assert color_shape.f_bits == 9
                     m.d.sync += [
-                        dst_data[i].eq(
-                            # approximate conversion from [0,255] to [0,1] fixed-point
-                            (plain_fp[i] >> 8)
-                            + (plain_fp[i] >> 16)
-                        )
+                        # approximate conversion from [0,255] to [0,1] fixed-point
+                        dst_data[i].eq(Cat(plain_dat[i][7], plain_dat[i]))
                         for i in range(4)
                     ]
-                    m.next = "BLEND_RGB"
+                    m.next = "CALC_FACTORS"
+
+            with m.State("CALC_FACTORS"):
+                m.d.sync += factor_src_rgb.eq(factor_value(self.conf.src_factor))
+                m.d.sync += factor_dst_rgb.eq(factor_value(self.conf.dst_factor))
+                m.d.sync += factor_src_a.eq(factor_value(self.conf.src_a_factor))
+                m.d.sync += factor_dst_a.eq(factor_value(self.conf.dst_a_factor))
+                m.next = "BLEND_RGB"
 
             with m.State("BLEND_RGB"):
-                src_factor = factor_value(self.conf.src_factor)
-                dst_factor = factor_value(self.conf.dst_factor)
-
                 for i in range(3):
                     src_comp = src_rgb[i]
                     dst_comp = dst_rgb[i]
 
-                    src_scaled = Signal(big_shape)
-                    dst_scaled = Signal(big_shape)
+                    m.d.comb += mul_a[i].eq(src_comp)
+                    m.d.comb += mul_b[i].eq(factor_src_rgb)
+                    src_scaled = mul_result[i]
 
-                    m.d.comb += [
-                        src_scaled.eq(src_comp * src_factor),
-                        dst_scaled.eq(dst_comp * dst_factor),
-                    ]
+                    m.d.comb += mul_a[i + 3].eq(dst_comp)
+                    m.d.comb += mul_b[i + 3].eq(factor_dst_rgb)
+                    dst_scaled = mul_result[i + 3]
 
                     with m.Switch(self.conf.blend_op):
                         with m.Case(BlendOp.ADD):
-                            m.d.sync += out_data[i].eq(
-                                (src_scaled + dst_scaled).saturate(big_shape)
-                            )
+                            m.d.sync += out_data[i].eq(src_scaled + dst_scaled)
                         with m.Case(BlendOp.SUBTRACT):
-                            m.d.sync += out_data[i].eq(
-                                (src_scaled - dst_scaled).saturate(big_shape)
-                            )
+                            m.d.sync += out_data[i].eq(src_scaled - dst_scaled)
                         with m.Case(BlendOp.REVERSE_SUBTRACT):
-                            m.d.sync += out_data[i].eq(
-                                (dst_scaled - src_scaled).saturate(big_shape)
-                            )
+                            m.d.sync += out_data[i].eq(dst_scaled - src_scaled)
                         with m.Case(BlendOp.MIN):
                             with m.If(src_comp < dst_comp):
-                                m.d.sync += out_data[i].eq(src_comp)
+                                m.d.sync += out_data[i].eq(src_scaled)
                             with m.Else():
-                                m.d.sync += out_data[i].eq(dst_comp)
+                                m.d.sync += out_data[i].eq(dst_scaled)
                         with m.Case(BlendOp.MAX):
                             with m.If(src_comp > dst_comp):
-                                m.d.sync += out_data[i].eq(src_comp)
+                                m.d.sync += out_data[i].eq(src_scaled)
                             with m.Else():
-                                m.d.sync += out_data[i].eq(dst_comp)
+                                m.d.sync += out_data[i].eq(dst_scaled)
                 m.next = "BLEND_A"
 
             with m.State("BLEND_A"):
-                src_a_factor = factor_value(self.conf.src_a_factor)
-                dst_a_factor = factor_value(self.conf.dst_a_factor)
+                src_scaled = Signal(mul_shape)
+                dst_scaled = Signal(mul_shape)
 
-                src_scaled = Signal(big_shape)
-                dst_scaled = Signal(big_shape)
+                m.d.comb += mul_a[0].eq(src_a)
+                m.d.comb += mul_b[0].eq(factor_src_a)
+                m.d.comb += src_scaled.eq(mul_result[0])
 
-                m.d.comb += [
-                    src_scaled.eq(src_a * src_a_factor),
-                    dst_scaled.eq(dst_a * dst_a_factor),
-                ]
+                m.d.comb += mul_a[3].eq(dst_a)
+                m.d.comb += mul_b[3].eq(factor_dst_a)
+                m.d.comb += dst_scaled.eq(mul_result[3])
 
                 with m.Switch(self.conf.blend_a_op):
                     with m.Case(BlendOp.ADD):
-                        m.d.sync += out_data[3].eq(
-                            (src_scaled + dst_scaled).saturate(big_shape)
-                        )
+                        m.d.sync += out_data[3].eq(src_scaled + dst_scaled)
                     with m.Case(BlendOp.SUBTRACT):
-                        m.d.sync += out_data[3].eq(
-                            (src_scaled - dst_scaled).saturate(big_shape)
-                        )
+                        m.d.sync += out_data[3].eq(src_scaled - dst_scaled)
                     with m.Case(BlendOp.REVERSE_SUBTRACT):
-                        m.d.sync += out_data[3].eq(
-                            (dst_scaled - src_scaled).saturate(big_shape)
-                        )
+                        m.d.sync += out_data[3].eq(dst_scaled - src_scaled)
                     with m.Case(BlendOp.MIN):
                         with m.If(src_a < dst_a):
-                            m.d.sync += out_data[3].eq(src_a)
+                            m.d.sync += out_data[3].eq(src_scaled)
                         with m.Else():
-                            m.d.sync += out_data[3].eq(dst_a)
+                            m.d.sync += out_data[3].eq(dst_scaled)
                     with m.Case(BlendOp.MAX):
                         with m.If(src_a > dst_a):
-                            m.d.sync += out_data[3].eq(src_a)
+                            m.d.sync += out_data[3].eq(src_scaled)
                         with m.Else():
-                            m.d.sync += out_data[3].eq(dst_a)
+                            m.d.sync += out_data[3].eq(dst_scaled)
 
                 m.next = "WRITE_OUTPUT"
 
@@ -604,7 +599,9 @@ class SwapchainOutput(wiring.Component):
                     # Convert from fixed-point [0,1] to [0,255] (*256 - 1)
                     # here *256 - /8 as a heuristic to only use 9 bit multiplications
                     ret_v[BGRA_MAP[i]].eq(
-                        ((out_data[i] << 8) - (out_data[i] >> 3)).round()
+                        (
+                            (out_data_clamped[i] << 8) - (out_data_clamped[i] >> 3)
+                        ).round()
                     )
                     for i in range(4)
                 ]

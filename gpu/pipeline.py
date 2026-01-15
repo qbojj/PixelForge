@@ -1,6 +1,7 @@
 import amaranth_soc.wishbone.bus as wb
 from amaranth import *
 from amaranth.lib import data, fifo, wiring
+from amaranth.lib.cdc import FFSynchronizer
 from amaranth.lib.wiring import In, Out
 from amaranth_soc import csr
 from amaranth_soc.csr.wishbone import WishboneCSRBridge
@@ -25,7 +26,7 @@ from .primitive_assembly.cores import (
     PrimitiveAssemblyConfigLayout,
 )
 from .rasterizer.cores import PrimitiveClipper
-from .rasterizer.rasterizer import PerspectiveDivide, TriangleRasterizer
+from .rasterizer.rasterizer import PerspectiveDivide, TrianglePrep, TriangleRasterizer
 from .utils import avalon as avl
 from .utils.layouts import (
     FramebufferInfoLayout,
@@ -138,6 +139,7 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.pa = pa = PrimitiveAssembly()
         m.submodules.clip = clip = PrimitiveClipper()
         m.submodules.div = div = PerspectiveDivide()
+        m.submodules.tri_prep = tri_prep = TrianglePrep()
         m.submodules.rast = rast = TriangleRasterizer(num_generators=5)
 
         m.submodules.tex = tex = Texturing()
@@ -148,72 +150,89 @@ class GraphicsPipeline(wiring.Component):
 
         # FIFO buffers between stages
         m.submodules.idx_to_topo_fifo = fifo_idx_topo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(topo.is_index.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(topo.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.topo_to_ia_fifo = fifo_topo_ia = fifo.SyncFIFOBuffered(
-            width=Shape.cast(ia.is_index.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(ia.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.ia_to_vtx_xf_fifo = fifo_ia_vtx_xf = fifo.SyncFIFOBuffered(
-            width=Shape.cast(vtx_xf.is_vertex.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(vtx_xf.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.vtx_xf_to_vtx_sh_fifo = fifo_vtx_xf_vtx_sh = fifo.SyncFIFOBuffered(
-            width=Shape.cast(vtx_sh.is_vertex.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(vtx_sh.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.vtx_sh_to_pa_fifo = fifo_vtx_sh_pa = fifo.SyncFIFOBuffered(
-            width=Shape.cast(pa.is_vertex.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(pa.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.pa_to_clip_fifo = fifo_pa_clip = fifo.SyncFIFOBuffered(
-            width=Shape.cast(clip.is_vertex.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(clip.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.clip_to_div_fifo = fifo_clip_div = fifo.SyncFIFOBuffered(
-            width=Shape.cast(div.i_vertex.p.shape()).width, depth=fifo_size_default
+            width=Shape.cast(div.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.div_to_rast_fifo = fifo_div_rast = fifo.SyncFIFOBuffered(
-            width=Shape.cast(rast.is_vertex.p.shape()).width, depth=fifo_size_default
+        m.submodules.div_to_tri_prep_fifo = fifo_div_tri_prep = fifo.SyncFIFOBuffered(
+            width=Shape.cast(tri_prep.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.rast_to_tex_fifo = fifo_rast_tex = fifo.SyncFIFOBuffered(
-            width=Shape.cast(tex.is_fragment.p.shape()).width, depth=fifo_size_default
+        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = (
+            fifo.AsyncFIFOBuffered(
+                width=Shape.cast(rast.i.p.shape()).width,
+                depth=fifo_size_default,
+                w_domain="sync",
+                r_domain="pixel",
+            )
         )
-        m.submodules.tex_to_ds_fifo = fifo_tex_ds = fifo.SyncFIFOBuffered(
-            width=Shape.cast(ds.is_fragment.p.shape()).width, depth=fifo_size_default
+        m.submodules.rast_to_tex_fifo = fifo_rast_tex = DomainRenamer("pixel")(
+            fifo.SyncFIFOBuffered(
+                width=Shape.cast(tex.i.p.shape()).width, depth=fifo_size_default
+            )
         )
-        m.submodules.ds_to_sc_fifo = fifo_ds_sc = fifo.SyncFIFOBuffered(
-            width=Shape.cast(sc.is_fragment.p.shape()).width, depth=fifo_size_default
+        m.submodules.tex_to_ds_fifo = fifo_tex_ds = DomainRenamer("pixel")(
+            fifo.SyncFIFOBuffered(
+                width=Shape.cast(ds.i.p.shape()).width, depth=fifo_size_default
+            )
+        )
+        m.submodules.ds_to_sc_fifo = fifo_ds_sc = DomainRenamer("pixel")(
+            fifo.SyncFIFOBuffered(
+                width=Shape.cast(sc.i.p.shape()).width, depth=fifo_size_default
+            )
         )
 
-        wiring.connect(m, idx.os_index, fifo_idx_topo.w_stream)
+        wiring.connect(m, idx.o, fifo_idx_topo.w_stream)
 
-        wiring.connect(m, fifo_idx_topo.r_stream, topo.is_index)
-        wiring.connect(m, topo.os_index, fifo_topo_ia.w_stream)
+        wiring.connect(m, fifo_idx_topo.r_stream, topo.i)
+        wiring.connect(m, topo.o, fifo_topo_ia.w_stream)
 
-        wiring.connect(m, fifo_topo_ia.r_stream, ia.is_index)
-        wiring.connect(m, ia.os_vertex, fifo_ia_vtx_xf.w_stream)
+        wiring.connect(m, fifo_topo_ia.r_stream, ia.i)
+        wiring.connect(m, ia.o, fifo_ia_vtx_xf.w_stream)
 
-        wiring.connect(m, fifo_ia_vtx_xf.r_stream, vtx_xf.is_vertex)
-        wiring.connect(m, vtx_xf.os_vertex, fifo_vtx_xf_vtx_sh.w_stream)
+        wiring.connect(m, fifo_ia_vtx_xf.r_stream, vtx_xf.i)
+        wiring.connect(m, vtx_xf.o, fifo_vtx_xf_vtx_sh.w_stream)
 
-        wiring.connect(m, fifo_vtx_xf_vtx_sh.r_stream, vtx_sh.is_vertex)
-        wiring.connect(m, vtx_sh.os_vertex, fifo_vtx_sh_pa.w_stream)
+        wiring.connect(m, fifo_vtx_xf_vtx_sh.r_stream, vtx_sh.i)
+        wiring.connect(m, vtx_sh.o, fifo_vtx_sh_pa.w_stream)
 
-        wiring.connect(m, fifo_vtx_sh_pa.r_stream, pa.is_vertex)
-        wiring.connect(m, pa.os_primitive, fifo_pa_clip.w_stream)
+        wiring.connect(m, fifo_vtx_sh_pa.r_stream, pa.i)
+        wiring.connect(m, pa.o, fifo_pa_clip.w_stream)
 
-        wiring.connect(m, fifo_pa_clip.r_stream, clip.is_vertex)
-        wiring.connect(m, clip.os_vertex, fifo_clip_div.w_stream)
+        wiring.connect(m, fifo_pa_clip.r_stream, clip.i)
+        wiring.connect(m, clip.o, fifo_clip_div.w_stream)
 
-        wiring.connect(m, fifo_clip_div.r_stream, div.i_vertex)
-        wiring.connect(m, div.o_vertex, fifo_div_rast.w_stream)
+        wiring.connect(m, fifo_clip_div.r_stream, div.i)
+        wiring.connect(m, div.o, fifo_div_tri_prep.w_stream)
 
-        wiring.connect(m, fifo_div_rast.r_stream, rast.is_vertex)
-        wiring.connect(m, rast.os_fragment, fifo_rast_tex.w_stream)
+        wiring.connect(m, fifo_div_tri_prep.r_stream, tri_prep.i)
+        wiring.connect(m, tri_prep.o, fifo_tri_prep_rast.w_stream)
 
-        wiring.connect(m, fifo_rast_tex.r_stream, tex.is_fragment)
-        wiring.connect(m, tex.os_fragment, fifo_tex_ds.w_stream)
+        wiring.connect(m, fifo_tri_prep_rast.r_stream, rast.i)
+        wiring.connect(m, rast.o, fifo_rast_tex.w_stream)
 
-        wiring.connect(m, fifo_tex_ds.r_stream, ds.is_fragment)
-        wiring.connect(m, ds.os_fragment, fifo_ds_sc.w_stream)
+        wiring.connect(m, fifo_rast_tex.r_stream, tex.i)
+        wiring.connect(m, tex.o, fifo_tex_ds.w_stream)
 
-        wiring.connect(m, fifo_ds_sc.r_stream, sc.is_fragment)
+        wiring.connect(m, fifo_tex_ds.r_stream, ds.i)
+        wiring.connect(m, ds.o, fifo_ds_sc.w_stream)
+
+        wiring.connect(m, fifo_ds_sc.r_stream, sc.i)
 
         # Wishbone buses wiring
         wiring.connect(m, idx.bus, wiring.flipped(self.wb_index))
@@ -222,38 +241,29 @@ class GraphicsPipeline(wiring.Component):
         wiring.connect(m, sc.wb_bus, wiring.flipped(self.wb_color))
 
         input_assembly_ready_ = [
-            idx.ready,
-            (fifo_idx_topo.level == 0) & ~fifo_idx_topo.w_en,
-            topo.ready,
-            (fifo_topo_ia.level == 0) & ~fifo_topo_ia.w_en,
-            ia.ready,
+            idx.ready & ~fifo_idx_topo.w_en,
+            ~fifo_idx_topo.r_rdy & topo.ready & ~fifo_topo_ia.w_en,
+            ~fifo_topo_ia.r_rdy & ia.ready & ~fifo_ia_vtx_xf.w_en,
         ]
 
         vertex_transform_ready_ = [
-            (fifo_ia_vtx_xf.level == 0) & ~fifo_ia_vtx_xf.w_en,
-            vtx_xf.ready,
-            (fifo_vtx_xf_vtx_sh.level == 0) & ~fifo_vtx_xf_vtx_sh.w_en,
-            vtx_sh.ready,
+            ~fifo_ia_vtx_xf.r_rdy & vtx_xf.ready & ~fifo_vtx_xf_vtx_sh.w_en,
+            ~fifo_vtx_xf_vtx_sh.r_rdy & vtx_sh.ready & ~fifo_vtx_sh_pa.w_en,
         ]
 
         raster_ready_ = [
-            (fifo_vtx_sh_pa.level == 0) & ~fifo_vtx_sh_pa.w_en,
-            pa.ready,
-            (fifo_pa_clip.level == 0) & ~fifo_pa_clip.w_en,
-            clip.ready,
-            (fifo_clip_div.level == 0) & ~fifo_clip_div.w_en,
-            div.ready,
-            (fifo_div_rast.level == 0) & ~fifo_div_rast.w_en,
-            rast.ready,
+            ~fifo_vtx_sh_pa.r_rdy & pa.ready & ~fifo_pa_clip.w_en,
+            ~fifo_pa_clip.r_rdy & clip.ready & ~fifo_clip_div.w_en,
+            ~fifo_clip_div.r_rdy & div.ready & ~fifo_div_tri_prep.w_en,
+            ~fifo_div_tri_prep.r_rdy & tri_prep.ready & ~fifo_tri_prep_rast.w_en,
         ]
 
+        # fragment processing (everything in pixel domain)
         fragment_processing_ready_ = [
-            (fifo_rast_tex.level == 0) & ~fifo_rast_tex.w_en,
-            tex.ready,
-            (fifo_tex_ds.level == 0) & ~fifo_tex_ds.w_en,
-            ds.ready,
-            (fifo_ds_sc.level == 0) & ~fifo_ds_sc.w_en,
-            sc.ready,
+            ~fifo_tri_prep_rast.r_rdy & rast.ready & ~fifo_rast_tex.w_en,
+            ~fifo_rast_tex.r_rdy & tex.ready & ~fifo_tex_ds.w_en,
+            ~fifo_tex_ds.r_rdy & ds.ready & ~fifo_ds_sc.w_en,
+            ~fifo_ds_sc.r_rdy & sc.ready,
         ]
 
         input_assembly_ready = Signal(len(input_assembly_ready_))
@@ -268,21 +278,48 @@ class GraphicsPipeline(wiring.Component):
         fragment_processing_ready = Signal(len(fragment_processing_ready_))
         m.d.comb += fragment_processing_ready.eq(Cat(fragment_processing_ready_))
 
+        def filter_ready(signal, domain="sync"):
+            last = Signal.like(signal)
+            llast = Signal.like(signal)
+            m.d[domain] += llast.eq(last)
+            m.d[domain] += last.eq(signal)
+
+            filtered = Signal.like(signal)
+            m.d.comb += filtered.eq(llast & last & signal)
+
+            if domain != "sync":
+                synced = Signal.like(filtered)
+                m.submodules += FFSynchronizer(filtered, synced, o_domain="sync")
+                return synced
+
+            return filtered
+
+        input_assembly_ready_filtered = filter_ready(
+            input_assembly_ready, domain="sync"
+        )
+        vertex_transform_ready_filtered = filter_ready(
+            vertex_transform_ready, domain="sync"
+        )
+        raster_ready_filtered = filter_ready(raster_ready, domain="sync")
+        fragment_processing_ready_filtered = filter_ready(
+            fragment_processing_ready, domain="pixel"
+        )
+
         m.d.comb += self.ready_vec.eq(
             Cat(
-                input_assembly_ready,
-                vertex_transform_ready,
-                raster_ready,
-                fragment_processing_ready,
+                input_assembly_ready_filtered,
+                vertex_transform_ready_filtered,
+                raster_ready_filtered,
+                fragment_processing_ready_filtered,
             )
         )
 
         m.d.comb += self.ready_components.eq(
             Cat(
-                input_assembly_ready.all(),
-                vertex_transform_ready.all(),
-                raster_ready.all(),
-                fragment_processing_ready.all(),
+                input_assembly_ready_filtered.all(),
+                vertex_transform_ready_filtered.all(),
+                raster_ready_filtered.all(),
+                fragment_processing_ready_filtered.all(),
             )
         )
 
@@ -337,16 +374,30 @@ class GraphicsPipeline(wiring.Component):
             clip.prim_type.eq(self.pa_conf.type),
         ]
 
-        # Framebuffer and per-fragment config
+        m.d.comb += tri_prep.fb_info.eq(self.fb_info)
+
+        fb_info_pix = Signal.like(self.fb_info)
+        m.submodules.fb_info_cdc = FFSynchronizer(
+            self.fb_info.as_value(), fb_info_pix, o_domain="pixel"
+        )
         m.d.comb += [
-            rast.fb_info.eq(self.fb_info),
-            ds.fb_info.eq(self.fb_info),
-            sc.fb_info.eq(self.fb_info),
-            ds.stencil_conf_back.eq(self.stencil_conf_back),
-            ds.stencil_conf_front.eq(self.stencil_conf_front),
-            ds.depth_conf.eq(self.depth_conf),
-            sc.conf.eq(self.blend_conf),
+            rast.fb_info.eq(fb_info_pix),
+            ds.fb_info.eq(fb_info_pix),
+            sc.fb_info.eq(fb_info_pix),
         ]
+
+        m.submodules.stencil_conf_front_cdc = FFSynchronizer(
+            self.stencil_conf_front.as_value(), ds.stencil_conf_front, o_domain="pixel"
+        )
+        m.submodules.stencil_conf_back_cdc = FFSynchronizer(
+            self.stencil_conf_back.as_value(), ds.stencil_conf_back, o_domain="pixel"
+        )
+        m.submodules.depth_conf_cdc = FFSynchronizer(
+            self.depth_conf.as_value(), ds.depth_conf, o_domain="pixel"
+        )
+        m.submodules.blend_conf_cdc = FFSynchronizer(
+            self.blend_conf.as_value(), sc.conf, o_domain="pixel"
+        )
 
         return m
 
@@ -762,11 +813,12 @@ if __name__ == "__main__":
     import json
 
     from amaranth.back import verilog
+    from amaranth_boards.de1_soc import DE1SoCPlatform
 
     # Generate Verilog
     gp_avl = GraphicsPipelineAvalonCSR()
     with open("graphics_pipeline_avalon_csr.sv", "w") as f:
-        f.write(verilog.convert(gp_avl))
+        f.write(verilog.convert(gp_avl, platform=DE1SoCPlatform()))
 
     mem_map: MemoryMap = gp_avl._pipeline_csr.wb_csr.memory_map
 

@@ -49,14 +49,14 @@ module soc_system_mm_interconnect_1_router_default_decode
                DEFAULT_RD_CHANNEL = -1,
                DEFAULT_DESTID = 0
    )
-  (output [100 - 99 : 0] default_destination_id,
+  (output [89 - 88 : 0] default_destination_id,
    output [3-1 : 0] default_wr_channel,
    output [3-1 : 0] default_rd_channel,
    output [3-1 : 0] default_src_channel
   );
 
   assign default_destination_id =
-    DEFAULT_DESTID[100 - 99 : 0];
+    DEFAULT_DESTID[89 - 88 : 0];
 
   generate
     if (DEFAULT_CHANNEL == -1) begin : no_default_channel_assignment
@@ -93,7 +93,7 @@ module soc_system_mm_interconnect_1_router
     // Command Sink (Input)
     // -------------------
     input                       sink_valid,
-    input  [125-1 : 0]    sink_data,
+    input  [114-1 : 0]    sink_data,
     input                       sink_startofpacket,
     input                       sink_endofpacket,
     output                      sink_ready,
@@ -102,7 +102,7 @@ module soc_system_mm_interconnect_1_router
     // Command Source (Output)
     // -------------------
     output                          src_valid,
-    output reg [125-1    : 0] src_data,
+    output reg [114-1    : 0] src_data,
     output reg [3-1 : 0] src_channel,
     output                          src_startofpacket,
     output                          src_endofpacket,
@@ -112,18 +112,18 @@ module soc_system_mm_interconnect_1_router
     // -------------------------------------------------------
     // Local parameters and variables
     // -------------------------------------------------------
-    localparam PKT_ADDR_H = 67;
+    localparam PKT_ADDR_H = 56;
     localparam PKT_ADDR_L = 36;
-    localparam PKT_DEST_ID_H = 100;
-    localparam PKT_DEST_ID_L = 99;
-    localparam PKT_PROTECTION_H = 115;
-    localparam PKT_PROTECTION_L = 113;
-    localparam ST_DATA_W = 125;
+    localparam PKT_DEST_ID_H = 89;
+    localparam PKT_DEST_ID_L = 88;
+    localparam PKT_PROTECTION_H = 104;
+    localparam PKT_PROTECTION_L = 102;
+    localparam ST_DATA_W = 114;
     localparam ST_CHANNEL_W = 3;
     localparam DECODER_TYPE = 0;
 
-    localparam PKT_TRANS_WRITE = 70;
-    localparam PKT_TRANS_READ  = 71;
+    localparam PKT_TRANS_WRITE = 59;
+    localparam PKT_TRANS_READ  = 60;
 
     localparam PKT_ADDR_W = PKT_ADDR_H-PKT_ADDR_L + 1;
     localparam PKT_DEST_ID_W = PKT_DEST_ID_H-PKT_DEST_ID_L + 1;
@@ -136,13 +136,13 @@ module soc_system_mm_interconnect_1_router
     // -------------------------------------------------------
     localparam PAD0 = log2ceil(64'h4000 - 64'h0);
     localparam PAD1 = log2ceil(64'h30010 - 64'h30000);
-    localparam PAD2 = log2ceil(64'h40004 - 64'h40000);
+    localparam PAD2 = log2ceil(64'h31004 - 64'h31000);
     // -------------------------------------------------------
     // Work out which address bits are significant based on the
     // address range of the slaves. If the required width is too
     // large or too small, we use the address field width instead.
     // -------------------------------------------------------
-    localparam ADDR_RANGE = 64'h40004;
+    localparam ADDR_RANGE = 64'h31004;
     localparam RANGE_ADDR_WIDTH = log2ceil(ADDR_RANGE);
     localparam OPTIMIZED_ADDR_H = (RANGE_ADDR_WIDTH > PKT_ADDR_W) ||
                                   (RANGE_ADDR_WIDTH == 0) ?
@@ -196,19 +196,19 @@ module soc_system_mm_interconnect_1_router
         // --------------------------------------------------
 
     // ( 0x0 .. 0x4000 )
-    if ( {address[RG:PAD0],{PAD0{1'b0}}} == 19'h0   ) begin
+    if ( {address[RG:PAD0],{PAD0{1'b0}}} == 18'h0   ) begin
             src_channel = 3'b001;
             src_data[PKT_DEST_ID_H:PKT_DEST_ID_L] = 0;
     end
 
     // ( 0x30000 .. 0x30010 )
-    if ( {address[RG:PAD1],{PAD1{1'b0}}} == 19'h30000   ) begin
+    if ( {address[RG:PAD1],{PAD1{1'b0}}} == 18'h30000   ) begin
             src_channel = 3'b010;
             src_data[PKT_DEST_ID_H:PKT_DEST_ID_L] = 1;
     end
 
-    // ( 0x40000 .. 0x40004 )
-    if ( {address[RG:PAD2],{PAD2{1'b0}}} == 19'h40000  && read_transaction  ) begin
+    // ( 0x31000 .. 0x31004 )
+    if ( {address[RG:PAD2],{PAD2{1'b0}}} == 18'h31000  && read_transaction  ) begin
             src_channel = 3'b100;
             src_data[PKT_DEST_ID_H:PKT_DEST_ID_L] = 2;
     end

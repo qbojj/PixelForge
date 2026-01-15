@@ -70,9 +70,9 @@ def test_identity_transform_positions():
     sim.add_clock(1e-6)
     stream_testbench(
         sim,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=[vertex],
-        output_stream=dut.os_vertex,
+        output_stream=dut.o,
         output_data_checker=output_checker,
         init_process=init_proc,
         is_finished=dut.ready,

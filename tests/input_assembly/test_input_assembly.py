@@ -59,9 +59,9 @@ def make_test_input_assembly(
     stream_testbench(
         sim,
         init_process=tb,
-        input_stream=dut.is_index,
+        input_stream=dut.i,
         input_data=input_idx,
-        output_stream=dut.os_vertex,
+        output_stream=dut.o,
         expected_output_data=expected,
         is_finished=dut.ready,
     )

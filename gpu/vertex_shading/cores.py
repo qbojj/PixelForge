@@ -49,8 +49,8 @@ class VertexShading(wiring.Component):
         self._num_lights = num_lights
         super().__init__(
             {
-                "is_vertex": In(stream.Signature(ShadingVertexLayout)),
-                "os_vertex": Out(stream.Signature(PrimitiveAssemblyLayout)),
+                "i": In(stream.Signature(ShadingVertexLayout)),
+                "o": Out(stream.Signature(PrimitiveAssemblyLayout)),
                 "material": In(MaterialPropertyLayout),
                 "lights": In(LightPropertyLayout).array(num_lights),
                 "ready": Out(1),
@@ -62,9 +62,9 @@ class VertexShading(wiring.Component):
 
         # Cached vertex and light data
         n = Array(Signal(FixedPoint) for _ in range(3))
-        v_color = Array(Signal.like(self.is_vertex.p.color[i]) for i in range(4))
-        v_pos_ndc = Signal.like(self.is_vertex.p.position_proj)
-        v_texcoords = Signal.like(self.is_vertex.p.texcoords)
+        v_color = Array(Signal.like(self.i.p.color[i]) for i in range(4))
+        v_pos_ndc = Signal.like(self.i.p.position_proj)
+        v_texcoords = Signal.like(self.i.p.texcoords)
 
         # Single shared multiplier
         mul_a = Signal(FixedPoint)
@@ -79,30 +79,30 @@ class VertexShading(wiring.Component):
         dif_accum = Signal(FixedPoint)
 
         # Output color (accumulated across all lights)
-        out_color = Signal.like(self.os_vertex.p.color)
+        out_color = Signal.like(self.o.p.color)
 
-        with m.If(self.os_vertex.ready):
-            m.d.sync += self.os_vertex.valid.eq(0)
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
             with m.State("IDLE"):
-                m.d.comb += self.is_vertex.ready.eq(1)
+                m.d.comb += self.i.ready.eq(1)
                 m.d.comb += self.ready.eq(1)
 
-                with m.If(self.is_vertex.valid):
+                with m.If(self.i.valid):
                     # Capture input
                     m.d.sync += [
-                        n[0].eq(self.is_vertex.p.normal_view[0]),
-                        n[1].eq(self.is_vertex.p.normal_view[1]),
-                        n[2].eq(self.is_vertex.p.normal_view[2]),
-                    ] + [v_color[i].eq(self.is_vertex.p.color[i]) for i in range(4)]
+                        n[0].eq(self.i.p.normal_view[0]),
+                        n[1].eq(self.i.p.normal_view[1]),
+                        n[2].eq(self.i.p.normal_view[2]),
+                    ] + [v_color[i].eq(self.i.p.color[i]) for i in range(4)]
                     m.d.sync += [
-                        v_pos_ndc.eq(self.is_vertex.p.position_proj),
-                        v_texcoords.eq(self.is_vertex.p.texcoords),
+                        v_pos_ndc.eq(self.i.p.position_proj),
+                        v_texcoords.eq(self.i.p.texcoords),
                         out_color.eq(0),  # Initialize accumulated color
                     ]
                     m.d.sync += dot_accum.eq(0)
-                    m.d.sync += Print("Shading vtx in: ", self.is_vertex.p)
+                    m.d.sync += Print("Shading vtx in: ", self.i.p)
                     m.next = "DOT_0_LIGHT_0"
 
             # Nested loops: for each light, compute dot product and per-channel shading
@@ -201,13 +201,13 @@ class VertexShading(wiring.Component):
                     m.next = next_state_name
 
             with m.State("SEND"):
-                with m.If(~self.os_vertex.valid | self.os_vertex.ready):
+                with m.If(~self.o.valid | self.o.ready):
                     m.d.sync += [
-                        self.os_vertex.p.position_ndc.eq(v_pos_ndc),
-                        self.os_vertex.p.texcoords.eq(v_texcoords),
-                        self.os_vertex.p.color.eq(out_color),
-                        self.os_vertex.p.color_back.eq(out_color),
-                        self.os_vertex.valid.eq(1),
+                        self.o.p.position_ndc.eq(v_pos_ndc),
+                        self.o.p.texcoords.eq(v_texcoords),
+                        self.o.p.color.eq(out_color),
+                        self.o.p.color_back.eq(out_color),
+                        self.o.valid.eq(1),
                     ]
                     m.next = "IDLE"
 

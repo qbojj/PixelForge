@@ -35,8 +35,8 @@ class VertexTransform(wiring.Component):
     TODO: support for configurable amount of multiplyer circuits (for now 4)
     """
 
-    is_vertex: In(stream.Signature(VertexLayout))
-    os_vertex: Out(stream.Signature(ShadingVertexLayout))
+    i: In(stream.Signature(VertexLayout))
+    o: Out(stream.Signature(ShadingVertexLayout))
 
     enabled: In(VertexTransformEnablementLayout)
     position_mv: In(data.ArrayLayout(FixedPoint_mem, 16))
@@ -54,8 +54,8 @@ class VertexTransform(wiring.Component):
     def elaborate(self, platform) -> Module:
         m = Module()
 
-        i_data = Signal.like(self.is_vertex.payload)
-        o_data = Signal.like(self.os_vertex.payload)
+        i_data = Signal.like(self.i.payload)
+        o_data = Signal.like(self.o.payload)
 
         mul_a = Signal(FixedPoint)
         mul_b = Signal(FixedPoint)
@@ -103,17 +103,15 @@ class VertexTransform(wiring.Component):
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.ready.eq(1)
-                with m.If(self.is_vertex.valid):
-                    m.d.comb += self.is_vertex.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.comb += self.i.ready.eq(1)
                     m.d.sync += [
-                        i_data.eq(self.is_vertex.payload),
-                        o_data.normal_view.eq(self.is_vertex.p.normal),
-                        o_data.texcoords.eq(self.is_vertex.p.texcoords),
-                        o_data.color.eq(self.is_vertex.p.color),
+                        i_data.eq(self.i.payload),
+                        o_data.normal_view.eq(self.i.p.normal),
+                        o_data.texcoords.eq(self.i.p.texcoords),
+                        o_data.color.eq(self.i.p.color),
                     ]
-                    m.d.sync += Print(
-                        "VertexTransform vtx in: ", self.is_vertex.payload
-                    )
+                    m.d.sync += Print("VertexTransform vtx in: ", self.i.payload)
                     m.next = f"{attr_info[0]['name']}_INIT"
 
             for i, attr in enumerate(attr_info):
@@ -159,10 +157,10 @@ class VertexTransform(wiring.Component):
 
             with m.State("SEND"):
                 m.d.comb += [
-                    self.os_vertex.payload.eq(o_data),
-                    self.os_vertex.valid.eq(1),
+                    self.o.payload.eq(o_data),
+                    self.o.valid.eq(1),
                 ]
-                with m.If(self.os_vertex.ready):
+                with m.If(self.o.ready):
                     m.next = "IDLE"
 
         return m

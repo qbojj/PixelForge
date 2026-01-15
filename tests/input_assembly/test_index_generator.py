@@ -35,7 +35,7 @@ def make_test_index_generator(
     stream_testbench(
         sim,
         init_process=tb,
-        output_stream=dut.os_index,
+        output_stream=dut.o,
         expected_output_data=expected,
         is_finished=dut.ready,
     )

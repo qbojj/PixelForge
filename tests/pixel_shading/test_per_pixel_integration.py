@@ -1,8 +1,8 @@
 """End-to-end per-fragment pipeline integration tests."""
 
 import pytest
-from amaranth import Elaboratable, Module
-from amaranth.lib import stream, wiring
+from amaranth import Module
+from amaranth.lib import wiring
 from amaranth.sim import Simulator
 
 from gpu.pixel_shading import (
@@ -12,7 +12,7 @@ from gpu.pixel_shading import (
     StencilOp,
     SwapchainOutput,
 )
-from gpu.utils.layouts import FragmentLayout, num_textures
+from gpu.utils.layouts import num_textures
 from gpu.utils.types import CompareOp
 
 from ..utils.streams import stream_testbench
@@ -58,41 +58,17 @@ def make_fb_info(base_addr=0):
     }
 
 
-class PerPixelPipeline(Elaboratable):
-    """Depth+stencil test followed by swapchain output."""
-
-    def __init__(self):
-        self.dst = DepthStencilTest()
-        self.swp = SwapchainOutput()
-
-        self.is_fragment = stream.Signature(FragmentLayout).flip().create()
-
-        self.fb_info = self.dst.fb_info
-        self.stencil_conf_front = self.dst.stencil_conf_front
-        self.stencil_conf_back = self.dst.stencil_conf_back
-        self.depth_conf = self.dst.depth_conf
-        self.blend_conf = self.swp.conf
-
-        self.wb_bus_depth = self.dst.wb_bus
-        self.wb_bus_swap = self.swp.wb_bus
-
-    def elaborate(self, platform):
-        m = Module()
-        m.submodules.dst = self.dst
-        m.submodules.swp = self.swp
-
-        wiring.connect(m, wiring.flipped(self.is_fragment), self.dst.is_fragment)
-        wiring.connect(m, self.dst.os_fragment, self.swp.is_fragment)
-        m.d.comb += self.swp.fb_info.eq(self.fb_info)
-
-        return m
-
-
 def test_per_pixel_pipeline_end_to_end():
-    pipeline = PerPixelPipeline()
-    t = SimpleTestbench(pipeline, mem_size=4096, mem_addr=0)
-    t.arbiter.add(pipeline.wb_bus_depth)
-    t.arbiter.add(pipeline.wb_bus_swap)
+    m = Module()
+
+    m.submodules.ds = ds = DepthStencilTest()
+    m.submodules.swp = swp = SwapchainOutput()
+
+    wiring.connect(m, ds.o, swp.i)
+
+    t = SimpleTestbench(m, mem_size=4096, mem_addr=0)
+    t.arbiter.add(ds.wb_bus)
+    t.arbiter.add(swp.wb_bus)
 
     fb_info = make_fb_info()
 
@@ -138,11 +114,12 @@ def test_per_pixel_pipeline_end_to_end():
         # Initialize combined depth/stencil buffer
         await t.initialize_memory(ctx, fb_info["depthstencil_address"], b"\x00" * 64)
 
-        ctx.set(pipeline.fb_info, fb_info)
-        ctx.set(pipeline.stencil_conf_front, stencil_conf)
-        ctx.set(pipeline.stencil_conf_back, stencil_conf)
-        ctx.set(pipeline.depth_conf, depth_conf)
-        ctx.set(pipeline.blend_conf, blend_conf)
+        ctx.set(ds.fb_info, fb_info)
+        ctx.set(swp.fb_info, fb_info)
+        ctx.set(ds.stencil_conf_front, stencil_conf)
+        ctx.set(ds.stencil_conf_back, stencil_conf)
+        ctx.set(ds.depth_conf, depth_conf)
+        ctx.set(swp.conf, blend_conf)
 
     async def final_checker(ctx):
         color_bytes = await t.dbg_access.read_bytes(ctx, fb_info["color_address"], 4)
@@ -154,7 +131,7 @@ def test_per_pixel_pipeline_end_to_end():
         depth_bytes = await t.dbg_access.read_bytes(
             ctx, fb_info["depthstencil_address"], 2
         )
-        depth_value = (int.from_bytes(depth_bytes, "little") / 65535.0) * 2.0 - 1.0
+        depth_value = int.from_bytes(depth_bytes, "little") / 65535.0
         assert depth_value == pytest.approx(expected_depth, abs=1 / 65535)
         # Stencil is the upper byte of combined word (offset +3)
         stencil_bytes = await t.dbg_access.read_bytes(
@@ -164,7 +141,7 @@ def test_per_pixel_pipeline_end_to_end():
 
     stream_testbench(
         sim,
-        input_stream=pipeline.is_fragment,
+        input_stream=ds.i,
         input_data=fragments,
         init_process=init_proc,
         final_checker=final_checker,

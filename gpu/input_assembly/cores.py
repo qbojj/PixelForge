@@ -37,7 +37,7 @@ class IndexGenerator(wiring.Component):
     TODO: add memory burst support
     """
 
-    os_index: Out(stream.Signature(index_shape))
+    o: Out(stream.Signature(index_shape))
     bus: Out(wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width))
     ready: Out(1)
 
@@ -94,8 +94,8 @@ class IndexGenerator(wiring.Component):
 
         cur_idx = Signal.like(count)
 
-        with m.If(self.os_index.ready):
-            m.d.sync += self.os_index.valid.eq(0)
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
             with m.State("IDLE"):
@@ -114,10 +114,10 @@ class IndexGenerator(wiring.Component):
                         m.next = "MEM_READ"
 
             with m.State("STREAM_NON_INDEXED"):
-                with m.If(~self.os_index.valid | self.os_index.ready):
+                with m.If(~self.o.valid | self.o.ready):
                     m.d.sync += [
-                        self.os_index.payload.eq(cur_idx),
-                        self.os_index.valid.eq(1),
+                        self.o.payload.eq(cur_idx),
+                        self.o.valid.eq(1),
                         cur_idx.eq(cur_idx + 1),
                     ]
                     with m.If(cur_idx + 1 == count):  # last index streamed
@@ -137,11 +137,11 @@ class IndexGenerator(wiring.Component):
                     m.next = "INDEX_SEND"
 
             with m.State("INDEX_SEND"):
-                with m.If(~self.os_index.valid | self.os_index.ready):
+                with m.If(~self.o.valid | self.o.ready):
                     next_addr = address + index_increment
                     m.d.sync += [
-                        self.os_index.payload.eq(extended_data),
-                        self.os_index.valid.eq(1),
+                        self.o.payload.eq(extended_data),
+                        self.o.valid.eq(1),
                         address.eq(next_addr),
                         cur_idx.eq(cur_idx + 1),
                     ]
@@ -152,7 +152,7 @@ class IndexGenerator(wiring.Component):
                     with m.Else():
                         m.next = "MEM_READ"  # crossed word boundary -> read next word
             with m.State("WAIT_FLUSH"):
-                with m.If(~self.os_index.valid | self.os_index.ready):
+                with m.If(~self.o.valid | self.o.ready):
                     m.next = "IDLE"
 
         return m
@@ -164,8 +164,8 @@ class InputTopologyProcessor(wiring.Component):
     Gets input index stream and outputs vertex index stream based on input topology.
     """
 
-    is_index: In(stream.Signature(index_shape))
-    os_index: Out(stream.Signature(index_shape))
+    i: In(stream.Signature(index_shape))
+    o: Out(stream.Signature(index_shape))
     ready: Out(1)
 
     start: In(1)
@@ -188,17 +188,17 @@ class InputTopologyProcessor(wiring.Component):
 
         # max 3 output indices per input index
         m.submodules.w_out = w_out = WideStreamOutput(index_shape, 3)
-        wiring.connect(m, w_out.o, wiring.flipped(self.os_index))
+        wiring.connect(m, w_out.o, wiring.flipped(self.o))
 
         reset_sig = Signal()
         m.d.comb += reset_sig.eq(
-            self.is_index.valid
+            self.i.valid
             & self.c_primitive_restart_enable
-            & (self.is_index.payload == self.c_primitive_restart_index)
+            & (self.i.payload == self.c_primitive_restart_index)
         )
 
-        idx = Signal.like(self.is_index.payload)
-        m.d.comb += idx.eq(self.is_index.payload + self.c_base_vertex)
+        idx = Signal.like(self.i.payload)
+        m.d.comb += idx.eq(self.i.payload + self.c_base_vertex)
 
         m.d.comb += self.ready.eq(~w_out.i.valid & ~w_out.o.valid)
 
@@ -208,16 +208,16 @@ class InputTopologyProcessor(wiring.Component):
 
         with m.If(reset_sig):
             m.d.sync += vertex_count.eq(0)
-            m.d.comb += self.is_index.ready.eq(1)
+            m.d.comb += self.i.ready.eq(1)
 
-        with m.If(self.is_index.valid & ~reset_sig):
+        with m.If(self.i.valid & ~reset_sig):
             with m.Switch(self.c_input_topology):
                 with m.Case(InputTopology.POINT_LIST):
                     m.d.comb += [
                         w_out.i.p.data[0].eq(idx),
                         w_out.i.p.n.eq(1),
                         w_out.i.valid.eq(1),
-                        self.is_index.ready.eq(w_out.i.ready),
+                        self.i.ready.eq(w_out.i.ready),
                     ]
                 with m.Case(InputTopology.LINE_LIST):
                     with m.Switch(vertex_count):
@@ -226,14 +226,14 @@ class InputTopologyProcessor(wiring.Component):
                                 v1.eq(idx),
                                 vertex_count.eq(1),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(1):
                             m.d.comb += [
                                 w_out.i.p.data[0].eq(v1),
                                 w_out.i.p.data[1].eq(idx),
                                 w_out.i.p.n.eq(2),
                                 w_out.i.valid.eq(1),
-                                self.is_index.ready.eq(w_out.i.ready),
+                                self.i.ready.eq(w_out.i.ready),
                             ]
                             with m.If(w_out.i.ready):
                                 m.d.sync += vertex_count.eq(0)
@@ -244,13 +244,13 @@ class InputTopologyProcessor(wiring.Component):
                                 v1.eq(idx),
                                 vertex_count.eq(1),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(1):
                             m.d.sync += [
                                 v2.eq(idx),
                                 vertex_count.eq(2),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(2):
                             m.d.comb += [
                                 w_out.i.p.data[0].eq(v1),
@@ -258,7 +258,7 @@ class InputTopologyProcessor(wiring.Component):
                                 w_out.i.p.data[2].eq(idx),
                                 w_out.i.p.n.eq(3),
                                 w_out.i.valid.eq(1),
-                                self.is_index.ready.eq(w_out.i.ready),
+                                self.i.ready.eq(w_out.i.ready),
                             ]
                             with m.If(w_out.i.ready):
                                 m.d.sync += vertex_count.eq(0)
@@ -268,14 +268,14 @@ class InputTopologyProcessor(wiring.Component):
                             v1.eq(idx),
                             vertex_count.eq(1),
                         ]
-                        m.d.comb += self.is_index.ready.eq(1)
+                        m.d.comb += self.i.ready.eq(1)
                     with m.Else():
                         m.d.comb += [
                             w_out.i.p.data[0].eq(v1),
                             w_out.i.p.data[1].eq(idx),
                             w_out.i.p.n.eq(2),
                             w_out.i.valid.eq(1),
-                            self.is_index.ready.eq(w_out.i.ready),
+                            self.i.ready.eq(w_out.i.ready),
                         ]
                         with m.If(w_out.i.ready):
                             m.d.sync += v1.eq(idx)
@@ -286,13 +286,13 @@ class InputTopologyProcessor(wiring.Component):
                                 v1.eq(idx),
                                 vertex_count.eq(1),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(1):
                             m.d.sync += [
                                 v2.eq(idx),
                                 vertex_count.eq(2),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(2):
                             # Odd triangle -> indexes n, n+1, n+2
                             # so v1, v2, idx
@@ -302,7 +302,7 @@ class InputTopologyProcessor(wiring.Component):
                                 w_out.i.p.data[2].eq(idx),
                                 w_out.i.p.n.eq(3),
                                 w_out.i.valid.eq(1),
-                                self.is_index.ready.eq(w_out.i.ready),
+                                self.i.ready.eq(w_out.i.ready),
                             ]
                             with m.If(w_out.i.ready):
                                 m.d.sync += [
@@ -319,7 +319,7 @@ class InputTopologyProcessor(wiring.Component):
                                 w_out.i.p.data[2].eq(idx),
                                 w_out.i.p.n.eq(3),
                                 w_out.i.valid.eq(1),
-                                self.is_index.ready.eq(w_out.i.ready),
+                                self.i.ready.eq(w_out.i.ready),
                             ]
                             with m.If(w_out.i.ready):
                                 m.d.sync += [
@@ -334,13 +334,13 @@ class InputTopologyProcessor(wiring.Component):
                                 v1.eq(idx),  # center vertex
                                 vertex_count.eq(1),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Case(1):
                             m.d.sync += [
                                 v2.eq(idx),  # first outer vertex
                                 vertex_count.eq(2),
                             ]
-                            m.d.comb += self.is_index.ready.eq(1)
+                            m.d.comb += self.i.ready.eq(1)
                         with m.Default():
                             m.d.comb += [
                                 w_out.i.p.data[0].eq(v1),  # center vertex
@@ -348,7 +348,7 @@ class InputTopologyProcessor(wiring.Component):
                                 w_out.i.p.data[2].eq(idx),  # current outer vertex
                                 w_out.i.p.n.eq(3),
                                 w_out.i.valid.eq(1),
-                                self.is_index.ready.eq(w_out.i.ready),
+                                self.i.ready.eq(w_out.i.ready),
                             ]
                             with m.If(w_out.i.ready):
                                 m.d.sync += v2.eq(idx)
@@ -379,8 +379,8 @@ class InputAssembly(wiring.Component):
     TODO: add memory burst support
     """
 
-    is_index: In(stream.Signature(index_shape))
-    os_vertex: Out(stream.Signature(VertexLayout))
+    i: In(stream.Signature(index_shape))
+    o: Out(stream.Signature(VertexLayout))
     bus: Out(wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width))
     ready: Out(1)
 
@@ -394,15 +394,15 @@ class InputAssembly(wiring.Component):
 
         # fetch vertex at given index based on vertex input attributes
 
-        idx = Signal.like(self.is_index.payload)
-        vtx = Signal.like(self.os_vertex.payload)
+        idx = Signal.like(self.i.payload)
+        vtx = Signal.like(self.o.payload)
 
         addr = Signal.like(self.c_pos.info.per_vertex.address)
 
-        output_next_free = ~self.os_vertex.valid | self.os_vertex.ready
+        output_next_free = ~self.o.valid | self.o.ready
 
-        with m.If(self.os_vertex.ready):
-            m.d.sync += self.os_vertex.valid.eq(0)
+        with m.If(self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
         @dataclass
         class AttrInfo:
@@ -427,11 +427,11 @@ class InputAssembly(wiring.Component):
             with m.State("IDLE"):
                 m.d.comb += [
                     self.ready.eq(1),
-                    self.is_index.ready.eq(1),
+                    self.i.ready.eq(1),
                 ]
 
-                with m.If(self.is_index.valid):
-                    m.d.sync += idx.eq(self.is_index.payload)
+                with m.If(self.i.valid):
+                    m.d.sync += idx.eq(self.i.payload)
                     m.next = "FETCH_ATTR_0_START"
 
             for attr_no, attr in enumerate(attr_info):
@@ -488,8 +488,8 @@ class InputAssembly(wiring.Component):
             with m.State("DONE"):
                 with m.If(output_next_free):
                     m.d.sync += [
-                        self.os_vertex.payload.eq(vtx),
-                        self.os_vertex.valid.eq(1),
+                        self.o.payload.eq(vtx),
+                        self.o.valid.eq(1),
                     ]
                     m.next = "IDLE"
 

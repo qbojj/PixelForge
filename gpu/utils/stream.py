@@ -1,5 +1,4 @@
 from collections.abc import Callable, Iterable
-from functools import reduce
 
 from amaranth import *
 from amaranth import ShapeCastable, ValueCastable
@@ -127,10 +126,8 @@ class StreamReshape(wiring.Component):
 
         in_valid = Signal()
         out_ready_for_next = Signal()
-        m.d.comb += in_valid.eq(reduce(lambda a, b: a & b, (s.valid for s in self._i)))
-        m.d.comb += out_ready_for_next.eq(
-            reduce(lambda a, b: a & b, (s.ready | ~s.valid for s in self._o))
-        )
+        m.d.comb += in_valid.eq(Cat(s.valid for s in self._i).all())
+        m.d.comb += out_ready_for_next.eq(Cat(~s.valid for s in self._o).all())
 
         for out_s in self._o:
             with m.If(out_s.ready):

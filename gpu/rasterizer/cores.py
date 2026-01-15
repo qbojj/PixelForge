@@ -20,8 +20,8 @@ class PrimitiveClipper(wiring.Component):
     - Clipping: trivial accept/reject against NDC cube.
     """
 
-    is_vertex: In(stream.Signature(RasterizerLayout))
-    os_vertex: Out(stream.Signature(RasterizerLayout))
+    i: In(stream.Signature(RasterizerLayout))
+    o: Out(stream.Signature(RasterizerLayout))
 
     prim_type: In(PrimitiveType)
     ready: Out(1)
@@ -76,8 +76,8 @@ class PrimitiveClipper(wiring.Component):
             with m.Default():
                 m.d.comb += needed.eq(3)
 
-        m.submodules.w_out = w_out = WideStreamOutput(self.os_vertex.p.shape(), 3)
-        wiring.connect(m, wiring.flipped(self.os_vertex), w_out.o)
+        m.submodules.w_out = w_out = WideStreamOutput(self.o.p.shape(), 3)
+        wiring.connect(m, wiring.flipped(self.o), w_out.o)
 
         with m.If(w_out.o.ready & w_out.o.valid):
             m.d.sync += Print("clipper vtx out: ", w_out.o.p)
@@ -85,10 +85,10 @@ class PrimitiveClipper(wiring.Component):
         with m.FSM():
             with m.State("COLLECT"):
                 m.d.comb += self.ready.eq((idx == 0) & w_out.i.ready)
-                m.d.comb += self.is_vertex.ready.eq(1)
-                with m.If(self.is_vertex.valid):
-                    m.d.sync += buf[idx].eq(self.is_vertex.payload)
-                    m.d.sync += Print("clipper vtx in: ", self.is_vertex.payload)
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.sync += buf[idx].eq(self.i.payload)
+                    m.d.sync += Print("clipper vtx in: ", self.i.payload)
                     with m.If(idx == (needed - 1)):
                         m.d.sync += idx.eq(0)
                         m.next = "CHECK"

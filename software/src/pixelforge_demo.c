@@ -84,10 +84,6 @@ static bool g_throttle = false;
     if (g_throttle) usleep(300000); \
 } while (0)
 
-static void flush_dcache(void *addr, size_t size) {
-    __builtin___clear_cache(addr, (char*)addr + size);
-}
-
 static void handle_sigint(int sig) {
     (void)sig;
     keep_running = false;
@@ -290,8 +286,6 @@ void pixelforge_screen_fill(pixelforge_dev *dev, uint32_t color, int backbuffer)
     for (uint32_t i = 0; i < pixel_count; ++i) {
         pixels[i] = color;
     }
-
-    flush_dcache(buf, dev->buffer_size);
 }
 
 /*
@@ -394,8 +388,6 @@ static void setup_triangle_geometry(pixelforge_dev *dev, uint32_t vb_phys, uint8
     *pos_addr = vb_phys + offsetof(struct vertex, pos);
     *norm_addr = vb_phys + offsetof(struct vertex, norm);
     *col_addr = vb_phys + offsetof(struct vertex, col);
-
-    flush_dcache(vb_virt, sizeof(struct vertex) * 4 + sizeof(uint16_t) * 4);
 }
 
 /*
@@ -644,8 +636,6 @@ int main(int argc, char **argv) {
         } else {
             memset(pixels, 0, dev->buffer_size);
         }
-
-        flush_dcache(pixels, dev->buffer_size);
 
         if (!front) {
             pixelforge_swap_buffers_to(dev, dev->back_buffer_address, dev->back_buffer_virt);

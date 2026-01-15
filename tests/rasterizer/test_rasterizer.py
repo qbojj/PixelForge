@@ -13,7 +13,11 @@ from gpu.input_assembly.cores import (
 from gpu.input_assembly.layouts import InputData, InputMode
 from gpu.primitive_assembly.cores import PrimitiveAssembly
 from gpu.rasterizer.cores import PrimitiveClipper
-from gpu.rasterizer.rasterizer import PerspectiveDivide, TriangleRasterizer
+from gpu.rasterizer.rasterizer import (
+    PerspectiveDivide,
+    TrianglePrep,
+    TriangleRasterizer,
+)
 from gpu.utils.layouts import num_lights, num_textures
 from gpu.utils.types import (
     CullFace,
@@ -107,13 +111,13 @@ def test_clip_to_perspective_divide_colors():
     m.submodules.clip = clip = PrimitiveClipper()
     m.submodules.div = div = PerspectiveDivide()
 
-    wiring.connect(m, idx.os_index, topo.is_index)
-    wiring.connect(m, topo.os_index, ia.is_index)
-    wiring.connect(m, ia.os_vertex, vtx_xf.is_vertex)
-    wiring.connect(m, vtx_xf.os_vertex, vtx_sh.is_vertex)
-    wiring.connect(m, vtx_sh.os_vertex, pa.is_vertex)
-    wiring.connect(m, pa.os_primitive, clip.is_vertex)
-    wiring.connect(m, clip.os_vertex, div.i_vertex)
+    wiring.connect(m, idx.o, topo.i)
+    wiring.connect(m, topo.o, ia.i)
+    wiring.connect(m, ia.o, vtx_xf.i)
+    wiring.connect(m, vtx_xf.o, vtx_sh.i)
+    wiring.connect(m, vtx_sh.o, pa.i)
+    wiring.connect(m, pa.o, clip.i)
+    wiring.connect(m, clip.o, div.i)
 
     t = SimpleTestbench(m)
     t.arbiter.add(idx.bus)
@@ -189,10 +193,10 @@ def test_clip_to_perspective_divide_colors():
         ctx.set(idx.start, 0)
 
         for _ in range(2000):
-            ctx.set(div.o_vertex.ready, 1)
+            ctx.set(div.o.ready, 1)
             await ctx.tick()
-            if ctx.get(div.o_vertex.valid):
-                vtx = ctx.get(div.o_vertex.payload)
+            if ctx.get(div.o.valid):
+                vtx = ctx.get(div.o.payload)
                 color = tuple(comp.as_float() for comp in vtx.color)
                 logged_colors.append(color)
                 print(f"Passing vertex {len(logged_colors)-1} color: {color}")
@@ -217,8 +221,10 @@ def test_rasterizer_single_triangle(persp: bool):
     """Test rasterizing a single triangle"""
     m = Module()
     m.submodules.div = div = PerspectiveDivide()
+    m.submodules.prep = prep = TrianglePrep()
     m.submodules.rast = dut = TriangleRasterizer()
-    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    wiring.connect(m, div.o, prep.i)
+    wiring.connect(m, prep.o, dut.i)
     t = SimpleTestbench(m)
 
     # Setup framebuffer
@@ -281,18 +287,18 @@ def test_rasterizer_single_triangle(persp: bool):
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
-    sim.add_clock(1e-6, domain="pixel")
 
     async def init_proc(ctx):
         # Set framebuffer info
+        ctx.set(prep.fb_info, fb_info)
         ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=div.i_vertex,
+        input_stream=div.i,
         input_data=triangle_vertices,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=collect_output,
         idle_for=100000,  # Wait for rasterization to complete
     )
@@ -332,8 +338,10 @@ def test_rasterizer_two_triangles():
     """Test rasterizing two triangles with different colors"""
     m = Module()
     m.submodules.div = div = PerspectiveDivide()
+    m.submodules.prep = prep = TrianglePrep()
     m.submodules.rast = dut = TriangleRasterizer()
-    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    wiring.connect(m, div.o, prep.i)
+    wiring.connect(m, prep.o, dut.i)
     t = SimpleTestbench(m)
 
     # Setup framebuffer
@@ -398,19 +406,19 @@ def test_rasterizer_two_triangles():
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
-    sim.add_clock(1e-6, domain="pixel")
 
     input_vertices = triangle1 + triangle2
 
     async def init_proc(ctx):
+        ctx.set(prep.fb_info, fb_info)
         ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=div.i_vertex,
+        input_stream=div.i,
         input_data=input_vertices,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )
@@ -446,8 +454,10 @@ def test_rasterizer_depth_interpolation():
     """Test that depth is correctly interpolated"""
     m = Module()
     m.submodules.div = div = PerspectiveDivide()
+    m.submodules.prep = prep = TrianglePrep()
     m.submodules.rast = dut = TriangleRasterizer()
-    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    wiring.connect(m, div.o, prep.i)
+    wiring.connect(m, prep.o, dut.i)
     t = SimpleTestbench(m)
 
     fb_width = 128
@@ -496,17 +506,17 @@ def test_rasterizer_depth_interpolation():
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
-    sim.add_clock(1e-6, domain="pixel")
 
     async def init_proc(ctx):
+        ctx.set(prep.fb_info, fb_info)
         ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=div.i_vertex,
+        input_stream=div.i,
         input_data=triangle,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )
@@ -543,8 +553,10 @@ def test_rasterizer_two_overlapping_triangles(alpha: bool):
     """Test rasterizing two overlapping triangles to check fragment generation"""
     m = Module()
     m.submodules.div = div = PerspectiveDivide()
+    m.submodules.prep = prep = TrianglePrep()
     m.submodules.rast = dut = TriangleRasterizer()
-    wiring.connect(m, div.o_vertex, dut.is_vertex)
+    wiring.connect(m, div.o, prep.i)
+    wiring.connect(m, prep.o, dut.i)
     t = SimpleTestbench(m)
 
     fb_width = 128
@@ -608,18 +620,18 @@ def test_rasterizer_two_overlapping_triangles(alpha: bool):
 
     sim = Simulator(t)
     sim.add_clock(1e-6)
-    sim.add_clock(1e-6, domain="pixel")
     input_vertices = triangle1 + triangle2
 
     async def init_proc(ctx):
+        ctx.set(prep.fb_info, fb_info)
         ctx.set(dut.fb_info, fb_info)
 
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=div.i_vertex,
+        input_stream=div.i,
         input_data=input_vertices,
-        output_stream=dut.os_fragment,
+        output_stream=dut.o,
         output_data_checker=collect_output,
         idle_for=10000,  # Wait for rasterization to complete
     )

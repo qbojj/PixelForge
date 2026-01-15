@@ -34,9 +34,9 @@ def make_test_input_topology_processor(
     stream_testbench(
         sim,
         init_process=init_tb,
-        input_stream=dut.is_index,
+        input_stream=dut.i,
         input_data=input,
-        output_stream=dut.os_index,
+        output_stream=dut.o,
         expected_output_data=expected,
         is_finished=dut.ready,
     )

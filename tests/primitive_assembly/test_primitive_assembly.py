@@ -68,9 +68,9 @@ def test_points_passthrough_hypothesis(pos, color):
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=vertices,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=50,
     )
@@ -106,9 +106,9 @@ def test_lines_passthrough():
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=line,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=50,
     )
@@ -189,9 +189,9 @@ def test_triangles_winding_and_front_face(tri, winding_order, front_face, cull_f
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=tri,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=50,
     )
@@ -232,9 +232,9 @@ def test_triangle_front_facing():
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=tri,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=1000,
     )
@@ -273,9 +273,9 @@ def test_triangle_back_face_culled():
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=tri,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=30,
     )
@@ -321,9 +321,9 @@ def test_triangle_back_face_uses_back_color():
     stream_testbench(
         sim,
         init_process=init_proc,
-        input_stream=dut.is_vertex,
+        input_stream=dut.i,
         input_data=tri,
-        output_stream=dut.os_primitive,
+        output_stream=dut.o,
         output_data_checker=checker,
         idle_for=30,
     )

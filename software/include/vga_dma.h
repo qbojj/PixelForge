@@ -1,10 +1,11 @@
 #pragma once
 
 #include <stdint.h>
+#include "soc_system.h"
 
 /* Default VGA DMA base address on H2F lightweight bridge */
-#define VGA_DMA_BASE_PHYS   0xFF230000u
-#define VGA_DMA_SPAN        0x1000u
+#define VGA_DMA_BASE_PHYS   VIDEO_PIXEL_BUFFER_DMA_0_BASE
+#define VGA_DMA_SPAN        VIDEO_PIXEL_BUFFER_DMA_0_SPAN
 
 /* VGA DMA register offsets (for reference) */
 #define VGA_DMA_FRONT_REG   0x00

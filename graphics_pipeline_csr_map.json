@@ -1,5 +1,5 @@
 {
-  "address_width": 12,
+  "address_width": 10,
   "data_width": 32,
   "granularity": 8,
   "registers": {

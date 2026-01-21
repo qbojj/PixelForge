@@ -46,14 +46,12 @@ class PrimitiveAssemblyLayout(data.Struct):
     position_ndc: Vector4
     texcoords: texture_coords
     color: Vector4
-    color_back: Vector4
 
 
 class RasterizerLayout(data.Struct):
     position_ndc: Vector4  # In normalized device coordinates
     texcoords: texture_coords
     color: Vector4
-    front_facing: unsigned(1)
 
 
 class RasterizerLayoutNDC(data.Struct):

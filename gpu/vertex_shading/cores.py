@@ -206,7 +206,6 @@ class VertexShading(wiring.Component):
                         self.o.p.position_ndc.eq(v_pos_ndc),
                         self.o.p.texcoords.eq(v_texcoords),
                         self.o.p.color.eq(out_color),
-                        self.o.p.color_back.eq(out_color),
                         self.o.valid.eq(1),
                     ]
                     m.next = "IDLE"

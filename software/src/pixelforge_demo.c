@@ -19,7 +19,7 @@
 
 #include "graphics_pipeline_csr_access.h"
 #include "vram_alloc.h"
-#include "vga_dma.h"
+#include "pixelforge_utils.h"
 
 /*
  * PixelForge demo inspired by Altera's video DMA controller API.
@@ -31,49 +31,7 @@
  */
 
 #define PAGE_SIZE       4096u
-#define PAGE_MASK       (~(PAGE_SIZE - 1u))
-#define MAP_ALIGN(v)    (((v) + PAGE_SIZE - 1u) & PAGE_MASK)
-#define PAGE_ALIGN_DOWN(a) ((a) & PAGE_MASK)
-#define PAGE_OFFSET(a)  ((a) & ~PAGE_MASK)
-
-/* Physical base addresses */
-#define PF_CSR_BASE_PHYS     0xFF200000u
-#define PF_CSR_MAP_SIZE      0x4000u
-#define VRAM_BASE_PHYS       0x3C000000u  /* reserved VRAM carveout */
-#define VRAM_SIZE            0x04000000u  /* 64MB */
-#define VB_REGION_SIZE       0x00010000u
-
-/* Framebuffer configuration */
-#define FB_WIDTH             640u
-#define FB_HEIGHT            480u
-#define FB_DATA_WIDTH        4u    /* 4 bytes per pixel (RGBA8888) */
-
-/*
- * PixelForge device structure (inspired by alt_up_video_dma_dev)
- */
-typedef struct {
-    int memfd;                         /* /dev/mem file descriptor */
-    volatile uint8_t *csr_base;        /* GPU CSR mapped base */
-    volatile struct vga_dma_regs *dma_regs; /* VGA pixel DMA registers */
-
-    struct vram_allocator vram;        /* simple bump allocator over VRAM carveout */
-    uint8_t *vram_base_virt;           /* mapped VRAM base */
-    uint32_t vram_base_phys;           /* VRAM base phys */
-    uint32_t vram_size;                /* VRAM size */
-
-    uint32_t front_buffer_address;     /* Current display buffer phys addr */
-    uint32_t back_buffer_address;      /* Current draw buffer phys addr */
-
-    uint8_t *front_buffer_virt;        /* Front buffer CPU pointer */
-    uint8_t *back_buffer_virt;         /* Back buffer CPU pointer */
-
-    uint32_t x_resolution;             /* Width in pixels */
-    uint32_t y_resolution;             /* Height in pixels */
-    uint32_t data_width;               /* Bytes per pixel */
-
-    size_t buffer_stride;              /* Bytes per scanline */
-    size_t buffer_size;                /* Bytes per buffer */
-} pixelforge_dev;
+#define VB_REGION_SIZE  0x00010000u
 
 static volatile bool keep_running = true;
 static bool g_verbose = false;
@@ -89,100 +47,6 @@ static void handle_sigint(int sig) {
     keep_running = false;
 }
 
-static void* map_physical(int memfd, uint32_t phys, size_t length) {
-    uint32_t aligned_phys = PAGE_ALIGN_DOWN(phys);
-    uint32_t offset = PAGE_OFFSET(phys);
-    size_t aligned_length = MAP_ALIGN(length + offset);
-
-    uint8_t *mapped = mmap(NULL, aligned_length, PROT_READ | PROT_WRITE,
-                          MAP_SHARED, memfd, aligned_phys);
-    if (mapped == MAP_FAILED) {
-        perror("mmap");
-        return NULL;
-    }
-    return mapped + offset;
-}
-
-/*
- * Open and initialize the PixelForge device
- */
-pixelforge_dev* pixelforge_open_dev(void) {
-    pixelforge_dev *dev = calloc(1, sizeof(pixelforge_dev));
-    if (!dev) {
-        perror("calloc");
-        return NULL;
-    }
-
-    dev->memfd = open("/dev/mem", O_RDWR | O_SYNC);
-    if (dev->memfd < 0) {
-        perror("open /dev/mem");
-        free(dev);
-        return NULL;
-    }
-
-    /* Map CSR window */
-    dev->csr_base = map_physical(dev->memfd, PF_CSR_BASE_PHYS, PF_CSR_MAP_SIZE);
-    if (!dev->csr_base) {
-        close(dev->memfd);
-        free(dev);
-        return NULL;
-    }
-
-    /* Map VGA DMA controller */
-    dev->dma_regs = map_physical(dev->memfd, VGA_DMA_BASE_PHYS, VGA_DMA_SPAN);
-    if (!dev->dma_regs) {
-        close(dev->memfd);
-        free(dev);
-        return NULL;
-    }
-
-    /* Configure device parameters */
-    dev->x_resolution = FB_WIDTH;
-    dev->y_resolution = FB_HEIGHT;
-    dev->data_width = FB_DATA_WIDTH;
-    dev->buffer_stride = FB_WIDTH * FB_DATA_WIDTH;
-    dev->buffer_size = FB_WIDTH * FB_HEIGHT * FB_DATA_WIDTH;
-
-    /* Map VRAM carveout and allocate front/back color buffers */
-    dev->vram_base_virt = map_physical(dev->memfd, VRAM_BASE_PHYS, VRAM_SIZE);
-    if (!dev->vram_base_virt) {
-        close(dev->memfd);
-        free(dev);
-        return NULL;
-    }
-    dev->vram_base_phys = VRAM_BASE_PHYS;
-    dev->vram_size = VRAM_SIZE;
-    vram_allocator_init(&dev->vram, dev->vram_base_virt, dev->vram_base_phys, dev->vram_size);
-
-    struct vram_block fb0, fb1;
-    if (vram_alloc(&dev->vram, dev->buffer_size, PAGE_SIZE, &fb0) ||
-        vram_alloc(&dev->vram, dev->buffer_size, PAGE_SIZE, &fb1)) {
-        fprintf(stderr, "VRAM allocation failed for framebuffers\n");
-        close(dev->memfd);
-        free(dev);
-        return NULL;
-    }
-
-    dev->front_buffer_virt = fb0.virt;
-    dev->back_buffer_virt = fb1.virt;
-    dev->front_buffer_address = fb0.phys;
-    dev->back_buffer_address = fb1.phys;
-
-    DBG("PixelForge device opened: %ux%u, front=0x%08x back=0x%08x",
-        dev->x_resolution, dev->y_resolution,
-        dev->front_buffer_address, dev->back_buffer_address);
-
-    /* setup front and back buffers in the DMA controller */
-    dev->dma_regs->back_buffer = dev->front_buffer_address;
-    dev->dma_regs->front_buffer = 1; // trigger swap to load front buffer address
-    while (dev->dma_regs->status.bits.swap_busy && keep_running) {
-        usleep(50);  /* wait for previous swap to complete */
-    }
-    dev->dma_regs->back_buffer = dev->back_buffer_address;
-
-    return dev;
-}
-
 /* Report GPU readiness status (components + vector) */
 static void report_ready_status(volatile uint8_t *csr) {
     uint32_t ready = pf_csr_get_ready(csr);
@@ -196,103 +60,6 @@ static void report_ready_status(volatile uint8_t *csr) {
            (comps & 0x4) ? "ready" : "busy",
            (comps & 0x8) ? "ready" : "busy",
            vec);
-}
-
-/*
- * Close device and release resources
- */
-void pixelforge_close_dev(pixelforge_dev *dev) {
-    if (dev) {
-        if (dev->memfd >= 0) {
-            close(dev->memfd);
-        }
-        free(dev);
-    }
-}
-
-/*
- * Set the back buffer address (similar to alt_up_video_dma_ctrl_set_bb_addr)
- */
-int pixelforge_set_back_buffer(pixelforge_dev *dev, uint32_t new_address, void *new_virt) {
-    if (!dev || !dev->dma_regs) return -1;
-
-    dev->dma_regs->back_buffer = new_address;
-    dev->back_buffer_address = new_address;
-    dev->back_buffer_virt = new_virt;
-
-    DBG("Set back buffer: 0x%08x", dev->back_buffer_address);
-    return 0;
-}
-
-/*
- * Swap front and back buffers (similar to alt_up_video_dma_ctrl_swap_buffers)
- * The DMA will perform the swap at the next vertical refresh
- */
-int pixelforge_swap_buffers(pixelforge_dev *dev) {
-    if (!dev || !dev->dma_regs) return -1;
-
-    /* Trigger swap by writing to front register */
-    dev->dma_regs->front_buffer = 1;
-    while (dev->dma_regs->status.bits.swap_busy && keep_running) {
-        usleep(10);
-    }
-
-    /* Update tracked addresses */
-    uint32_t temp = dev->back_buffer_address;
-    dev->back_buffer_address = dev->front_buffer_address;
-    dev->front_buffer_address = temp;
-
-    /* Update virtual pointers */
-    uint8_t *temp_virt = dev->back_buffer_virt;
-    dev->back_buffer_virt = dev->front_buffer_virt;
-    dev->front_buffer_virt = temp_virt;
-
-    DBG("Swapped buffers: front=0x%08x back=0x%08x",
-        dev->front_buffer_address, dev->back_buffer_address);
-
-    return 0;
-}
-
-int pixelforge_swap_buffers_to(pixelforge_dev *dev, uint32_t address, void *virt) {
-    int ret;
-    ret = pixelforge_set_back_buffer(dev, address, virt);
-    if (ret < 0) return ret;
-    return pixelforge_swap_buffers(dev);
-}
-
-/*
- * Check if buffer swap has completed (similar to alt_up_video_dma_ctrl_check_swap_status)
- * Returns 0 if complete, 1 if still in progress
- */
-int pixelforge_check_swap_status(pixelforge_dev *dev) {
-    if (!dev || !dev->dma_regs) return -1;
-    return dev->dma_regs->status.bits.swap_busy;
-}
-
-/*
- * Fill entire screen with a given color (similar to alt_up_video_dma_screen_fill)
- * backbuffer: 1 = draw to back buffer, 0 = draw to front buffer
- */
-void pixelforge_screen_fill(pixelforge_dev *dev, uint32_t color, int backbuffer) {
-    if (!dev) return;
-
-    uint8_t *buf = backbuffer ? dev->back_buffer_virt : dev->front_buffer_virt;
-    uint32_t *pixels = (uint32_t*)buf;
-    uint32_t pixel_count = dev->x_resolution * dev->y_resolution;
-
-    DBG("Fill screen with 0x%08x (%s buffer)", color, backbuffer ? "back" : "front");
-
-    /* Fast 32-bit fill */
-    for (uint32_t i = 0; i < pixel_count; ++i) {
-        pixels[i] = color;
-    }
-}
-
-/*
- * Clear entire screen (fill with 0) (similar to alt_up_video_dma_screen_clear)
- */
-void pixelforge_screen_clear(pixelforge_dev *dev, int backbuffer) {
-    pixelforge_screen_fill(dev, 0, backbuffer);
 }
 
 /*
@@ -509,8 +276,8 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     fb.scissor_height = dev->y_resolution;
     fb.color_address = color_addr;
     fb.color_pitch = dev->buffer_stride;
-    fb.depthstencil_address = depthstencil_addr;
-    fb.depthstencil_pitch = dev->x_resolution * 4; /* D16_X8_S8 combined */
+    fb.depthstencil_address = 0; /* disable depth/stencil */
+    fb.depthstencil_pitch = 0; /* D16_X8_S8 combined */
     pf_csr_set_fb(csr, &fb);
     DBG("Framebuffer configured: %ux%u color_addr=0x%08x depthstencil_addr=0x%08x",
         fb.width, fb.height, fb.color_address, fb.depthstencil_address);
@@ -615,13 +382,8 @@ int main(int argc, char **argv) {
     /* Simple clear/fill test */
     if (clear_test || xor_test) {
         printf("Clear/XOR test: filling screen with XOR pattern...\n");
-
-        uint32_t *pixels = (uint32_t*)(front ? dev->front_buffer_virt : dev->back_buffer_virt);
-
-        if (front) {
-            printf("Operating on FRONT buffer\n");
-            pixelforge_swap_buffers_to(dev, dev->front_buffer_address, dev->front_buffer_virt);
-        }
+        /* Get back buffer to work with */
+        uint32_t *pixels = (uint32_t*)pixelforge_get_back_buffer(dev);
 
         if (xor_test) {
             for (uint32_t y = 0; y < dev->y_resolution; ++y) {
@@ -637,10 +399,9 @@ int main(int argc, char **argv) {
             memset(pixels, 0, dev->buffer_size);
         }
 
-        if (!front) {
-            pixelforge_swap_buffers_to(dev, dev->back_buffer_address, dev->back_buffer_virt);
-        }
-        printf("Pattern written and buffer swapped\n");
+        /* Submit buffer for display */
+        pixelforge_swap_buffers(dev);
+        printf("Pattern written and buffer submitted\n");
         pixelforge_close_dev(dev);
         return 0;
     }
@@ -675,17 +436,21 @@ int main(int argc, char **argv) {
         printf("Rendering %d frame(s)...\n", frames);
 
         for (int frame = 0; frame < frames && keep_running; ++frame) {
-            /* Clear back buffer */
-            pixelforge_screen_fill(dev, 0x00000000, 1);
+            /* Request next buffer */
+            uint8_t *buffer = pixelforge_get_back_buffer(dev);
+            uint32_t buffer_phys = dev->buffer_phys[dev->render_buffer];
+
+            /* Clear buffer */
+            memset(buffer, 0, dev->buffer_size);
             DBG("Frame %d: buffer cleared", frame);
 
-            /* Configure pipeline for back buffer */
+            /* Configure pipeline */
             configure_gpu_pipeline(dev, idx_addr, idx_count,
                                  pos_addr, norm_addr, col_addr, stride,
-                                 dev->back_buffer_address,
+                                 buffer_phys,
                                  ds_block.phys);
             DBG("Frame %d: GPU pipeline configured", frame);
-            DBG("Drawing to %x08x", dev->back_buffer_address);
+            DBG("Drawing to buffer at 0x%08x", buffer_phys);
 
             /* Start rendering */
             pf_csr_start(dev->csr_base);
@@ -698,7 +463,7 @@ int main(int argc, char **argv) {
                 break;
             }
 
-            /* Swap buffers */
+            /* Submit buffer for display */
             pixelforge_swap_buffers(dev);
             printf("Frame %d rendered\n", frame);
         }

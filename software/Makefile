@@ -3,32 +3,71 @@ CC = $(CROSS_COMPILE)gcc
 AR = $(CROSS_COMPILE)ar
 CFLAGS ?= -O2 -Wall -Wextra -std=c11 -static
 INCLUDE := -Iinclude
-SRC := src/graphics_pipeline_csr_access.c
+SRC := src/graphics_pipeline_csr_access.c src/pixelforge_utils.c src/demo_utils.c src/udma_alloc.c src/obj_loader.c
 OBJ := $(SRC:.c=.o)
 LIB := libpixelforgecsr.a
 DEMO := pixelforge_demo
+DEMO_CUBE := demo_cube
+DEMO_LIGHTING := demo_lighting
+DEMO_DEPTH := demo_depth
+DEMO_STENCIL := demo_stencil
+DEMO_OBJ := demo_obj
 DUMP_VGA := dump_vga_dma
+DUMP_FB2 := dump_fb2
 DUMP_GPU_CSR := dump_gpu_csr
-RELEASE_SDRAM := release_sdram
+DEVMEM2 := devmem2
 
-all: $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR) $(RELEASE_SDRAM)
+DEMOS := $(DEMO) $(DEMO_CUBE) $(DEMO_LIGHTING) $(DEMO_DEPTH) $(DEMO_STENCIL) $(DEMO_OBJ)
+DUMPS := $(DUMP_FB2) $(DUMP_GPU_CSR) $(DUMP_VGA)
+TOOLS := $(DEVMEM2)
+
+all: $(LIB) $(DEMOS) $(DUMPS) $(TOOLS)
 
 $(LIB): $(OBJ)
 	$(AR) rcs $@ $(OBJ)
 
-src/%.o: src/%.c include/graphics_pipeline_csr_access.h include/graphics_pipeline_csr.h include/graphics_pipeline_formats.h
-	$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $<
+src/%.o: src/%.c
+	$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $< -MMD
 
-$(DEMO): $(LIB) src/pixelforge_demo.c
-	$(CC) $(CFLAGS) $(INCLUDE) -o $@ src/pixelforge_demo.c $(LIB)
+$(DEMO): src/pixelforge_demo.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
 
-$(DUMP_VGA): src/dump_vga_dma.c include/vga_dma.h
-	$(CC) $(CFLAGS) $(INCLUDE) -o $@ src/dump_vga_dma.c
+$(DEMO_CUBE): src/demo_cube.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
 
-$(DUMP_GPU_CSR): $(LIB) src/dump_gpu_csr.c include/graphics_pipeline_csr_access.h
-	$(CC) $(CFLAGS) $(INCLUDE) -o $@ src/dump_gpu_csr.c $(LIB)
+$(DEMO_LIGHTING): src/demo_lighting.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+
+$(DEMO_DEPTH): src/demo_depth.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+
+$(DEMO_STENCIL): src/demo_stencil.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+
+$(DEMO_OBJ): src/demo_obj.o $(LIB)
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+
+$(DUMP_FB2): src/dump_fb2.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(DUMP_VGA): src/dump_vga_dma.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(DUMP_GPU_CSR): src/dump_gpu_csr.o
+	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+
+$(DEVMEM2): src/devmem2.o
+	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
-	rm -f $(OBJ) $(LIB) $(DEMO) $(DUMP_VGA) $(DUMP_GPU_CSR) $(RELEASE_SDRAM)
+	rm -f $(LIB)
+	rm -f $(DEMOS) $(DUMPS) $(TOOLS)
+	find src -name '*.o' -delete
+	find src -name '*.d' -delete
+
+install: $(DEMOS) $(DUMPS) $(TOOLS)
+	cp -f $^ $(DESTDIR)
 
 .PHONY: all clean
+
+-include $(OBJ:.o=.d)

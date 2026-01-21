@@ -13,11 +13,15 @@ extern "C" {
 
 /* Low-level MMIO helpers */
 static inline void pf_csr_write32(volatile uint8_t *base, uint32_t offset, uint32_t value) {
+    __sync_synchronize();
     *(volatile uint32_t *)(base + offset) = value;
+    __sync_synchronize();
 }
 
 static inline uint32_t pf_csr_read32(volatile uint8_t *base, uint32_t offset) {
+    __sync_synchronize();
     return *(volatile uint32_t *)(base + offset);
+    __sync_synchronize();
 }
 
 /* =============================

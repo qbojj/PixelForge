@@ -21,11 +21,8 @@ from .pixel_shading.cores import (
     SwapchainOutput,
     Texturing,
 )
-from .primitive_assembly.cores import (
-    PrimitiveAssembly,
-    PrimitiveAssemblyConfigLayout,
-)
 from .rasterizer.cores import PrimitiveClipper
+from .rasterizer.layouts import PrimitiveAssemblyConfigLayout
 from .rasterizer.rasterizer import PerspectiveDivide, TrianglePrep, TriangleRasterizer
 from .utils import avalon as avl
 from .utils.layouts import (
@@ -59,7 +56,7 @@ class GraphicsPipeline(wiring.Component):
 
     Stages (streams):
       IndexGenerator → InputTopologyProcessor → InputAssembly → VertexTransform →
-      VertexShading → PrimitiveAssembly → PrimitiveClipper → TriangleRasterizer →
+      VertexShading → PrimitiveClipper → TriangleRasterizer →
       Texturing → DepthStencilTest → SwapchainOutput
 
     Exposes separate Wishbone buses for vertex fetch, depth/stencil and color.
@@ -136,7 +133,6 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.vtx_xf = vtx_xf = VertexTransform()
         m.submodules.vtx_sh = vtx_sh = VertexShading()
 
-        m.submodules.pa = pa = PrimitiveAssembly()
         m.submodules.clip = clip = PrimitiveClipper()
         m.submodules.div = div = PerspectiveDivide()
         m.submodules.tri_prep = tri_prep = TrianglePrep()
@@ -161,10 +157,7 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.vtx_xf_to_vtx_sh_fifo = fifo_vtx_xf_vtx_sh = fifo.SyncFIFOBuffered(
             width=Shape.cast(vtx_sh.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.vtx_sh_to_pa_fifo = fifo_vtx_sh_pa = fifo.SyncFIFOBuffered(
-            width=Shape.cast(pa.i.p.shape()).width, depth=fifo_size_default
-        )
-        m.submodules.pa_to_clip_fifo = fifo_pa_clip = fifo.SyncFIFOBuffered(
+        m.submodules.vtx_sh_to_clip_fifo = fifo_vtx_sh_clip = fifo.SyncFIFOBuffered(
             width=Shape.cast(clip.i.p.shape()).width, depth=fifo_size_default
         )
         m.submodules.clip_to_div_fifo = fifo_clip_div = fifo.SyncFIFOBuffered(
@@ -209,12 +202,9 @@ class GraphicsPipeline(wiring.Component):
         wiring.connect(m, vtx_xf.o, fifo_vtx_xf_vtx_sh.w_stream)
 
         wiring.connect(m, fifo_vtx_xf_vtx_sh.r_stream, vtx_sh.i)
-        wiring.connect(m, vtx_sh.o, fifo_vtx_sh_pa.w_stream)
+        wiring.connect(m, vtx_sh.o, fifo_vtx_sh_clip.w_stream)
 
-        wiring.connect(m, fifo_vtx_sh_pa.r_stream, pa.i)
-        wiring.connect(m, pa.o, fifo_pa_clip.w_stream)
-
-        wiring.connect(m, fifo_pa_clip.r_stream, clip.i)
+        wiring.connect(m, fifo_vtx_sh_clip.r_stream, clip.i)
         wiring.connect(m, clip.o, fifo_clip_div.w_stream)
 
         wiring.connect(m, fifo_clip_div.r_stream, div.i)
@@ -248,12 +238,11 @@ class GraphicsPipeline(wiring.Component):
 
         vertex_transform_ready_ = [
             ~fifo_ia_vtx_xf.r_rdy & vtx_xf.ready & ~fifo_vtx_xf_vtx_sh.w_en,
-            ~fifo_vtx_xf_vtx_sh.r_rdy & vtx_sh.ready & ~fifo_vtx_sh_pa.w_en,
+            ~fifo_vtx_xf_vtx_sh.r_rdy & vtx_sh.ready & ~fifo_vtx_sh_clip.w_en,
         ]
 
         raster_ready_ = [
-            ~fifo_vtx_sh_pa.r_rdy & pa.ready & ~fifo_pa_clip.w_en,
-            ~fifo_pa_clip.r_rdy & clip.ready & ~fifo_clip_div.w_en,
+            ~fifo_vtx_sh_clip.r_rdy & clip.ready & ~fifo_clip_div.w_en,
             ~fifo_clip_div.r_rdy & div.ready & ~fifo_div_tri_prep.w_en,
             ~fifo_div_tri_prep.r_rdy & tri_prep.ready & ~fifo_tri_prep_rast.w_en,
         ]
@@ -370,11 +359,11 @@ class GraphicsPipeline(wiring.Component):
 
         # Primitive assembly and clipper configuration
         m.d.comb += [
-            pa.config.eq(self.pa_conf),
             clip.prim_type.eq(self.pa_conf.type),
         ]
 
         m.d.comb += tri_prep.fb_info.eq(self.fb_info)
+        m.d.comb += tri_prep.pa_conf.eq(self.pa_conf)
 
         fb_info_pix = Signal.like(self.fb_info)
         m.submodules.fb_info_cdc = FFSynchronizer(
@@ -420,14 +409,14 @@ class GraphicsPipelineCSR(wiring.Component):
         wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
     )
 
-    wb_csr: In(wb.Signature(addr_width=12, data_width=32, granularity=32))
+    wb_csr: In(wb.Signature(addr_width=10, data_width=32, granularity=32))
 
     def elaborate(self, platform):
         m = Module()
 
         m.submodules.pipeline = pipeline = GraphicsPipeline()
 
-        bld = csr.Builder(addr_width=12, data_width=32)
+        bld = csr.Builder(addr_width=10, data_width=32)
 
         class RWReg(csr.Register):
             def __init__(self, field_shape):

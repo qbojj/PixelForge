@@ -471,9 +471,6 @@ class PrimitiveClipper(wiring.Component):
 
                     with m.If(lerp_stage == (total_fields - 1)):
                         # Finished interpolated vertex; finalize bookkeeping
-                        m.d.sync += [
-                            clip_buf[dst][out_idx].front_facing.eq(curr_v.front_facing)
-                        ]
                         with m.If(emit_next):
                             m.d.sync += [
                                 clip_buf[dst][out_idx + 1].eq(next_v),

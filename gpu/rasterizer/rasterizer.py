@@ -12,7 +12,8 @@ from ..utils.layouts import (
 )
 from ..utils.stream import AnyDistributor, AnyRecombiner
 from ..utils.transactron_utils import max_value, min_value, popcount
-from ..utils.types import FixedPoint, FixedPoint_fb
+from ..utils.types import CullFace, FixedPoint, FixedPoint_fb, FrontFace
+from .layouts import PrimitiveAssemblyConfigLayout
 
 _weight_shape = fixed.SQ(2 * FixedPoint_fb.i_bits + 1, FixedPoint_fb.f_bits)
 _area_recip_shape = fixed.SQ(_weight_shape.f_bits, _weight_shape.i_bits)
@@ -109,7 +110,6 @@ class PerspectiveDivide(wiring.Component):
                     self.o.p.inv_w.eq(inv_w),
                     self.o.p.color.eq(vtx_buf.color),
                     self.o.p.texcoords.eq(vtx_buf.texcoords),
-                    self.o.p.front_facing.eq(vtx_buf.front_facing),
                 ]
                 with m.If(self.o.ready):
                     m.d.sync += Print("Input vertex: ", vtx_buf)
@@ -129,6 +129,7 @@ class TriangleContext(data.Struct):
     min_y: unsigned(FixedPoint_fb.i_bits)
     max_x: unsigned(FixedPoint_fb.i_bits)
     max_y: unsigned(FixedPoint_fb.i_bits)
+    front_facing: unsigned(1)
 
 
 class PixelTask(data.Struct):
@@ -143,6 +144,7 @@ class TrianglePrep(wiring.Component):
     o: Out(stream.Signature(TriangleContext))
 
     fb_info: In(FramebufferInfoLayout)
+    pa_conf: In(PrimitiveAssemblyConfigLayout)
     ready: Out(1)
 
     def __init__(self, inv_steps: int = 4):
@@ -181,6 +183,8 @@ class TrianglePrep(wiring.Component):
         area = Signal(weight_shape)
         area_recip = Signal(recip_shape)
 
+        tri_front_facing = Signal()
+
         # Edge deltas for area calc using the shared multiplier
         dx10 = Signal(s_fb_type)
         dy10 = Signal(s_fb_type)
@@ -209,7 +213,7 @@ class TrianglePrep(wiring.Component):
             with m.State("CALC_SCREEN"):
                 scale = Signal(FixedPoint_fb)
                 offset = Signal(FixedPoint_fb)
-                scalar = Signal(fixed.UQ(16, 16))
+                scalar = Signal.like(vtx[0].position_ndc[0])
 
                 with m.If(calc_screen_idx < 3):
                     m.d.comb += [
@@ -293,7 +297,26 @@ class TrianglePrep(wiring.Component):
                     outside_bits[3].eq(bb_min_y > scissor_max_y),
                 ]
 
-                with m.If(outside_bits.any() | (area == 0)):
+                ff = Signal()
+                with m.Switch(self.pa_conf.winding):
+                    with m.Case(FrontFace.CCW):
+                        m.d.comb += ff.eq(area > 0)
+                    with m.Case(FrontFace.CW):
+                        m.d.comb += ff.eq(area < 0)
+
+                m.d.sync += tri_front_facing.eq(ff)
+
+                with m.If(
+                    ff & ((self.pa_conf.cull & CullFace.FRONT) == CullFace.FRONT)
+                ):
+                    m.d.sync += Print("Culling front face")
+                    m.next = "COLLECT"
+                with m.Elif(
+                    ~ff & ((self.pa_conf.cull & CullFace.BACK) == CullFace.BACK)
+                ):
+                    m.d.sync += Print("Culling back face")
+                    m.next = "COLLECT"
+                with m.Elif(outside_bits.any() | (area == 0)):
                     m.d.sync += Print("Culling triangle: outside scissor or zero area")
                     m.d.sync += Print("outside_bits: {}", outside_bits)
                     m.d.sync += Print("area: {}", area)
@@ -310,30 +333,19 @@ class TrianglePrep(wiring.Component):
                     m.next = "OUTPUT_CTX"
 
             with m.State("OUTPUT_CTX"):
-                with m.If(self.o.ready | ~self.o.valid):
-                    ctx = self.o.p
-                    m.d.sync += [
-                        ctx.area.eq(area),
-                        ctx.area_recip.eq(area_recip),
-                        ctx.min_x.eq(min_x),
-                        ctx.min_y.eq(min_y),
-                        ctx.max_x.eq(max_x),
-                        ctx.max_y.eq(max_y),
-                    ]
-                    for i in range(3):
-                        m.d.sync += [
-                            ctx.vtx[i].eq(vtx[i]),
-                            ctx.screen_x[i].eq(screen_x[i]),
-                            ctx.screen_y[i].eq(screen_y[i]),
-                        ]
-                    m.d.sync += self.o.valid.eq(1)
-                    m.next = "WAIT_CONSUME"
-
-            with m.State("WAIT_CONSUME"):
+                m.d.comb += self.o.p.area.eq(area)
+                m.d.comb += self.o.p.area_recip.eq(area_recip)
+                m.d.comb += self.o.p.min_x.eq(min_x)
+                m.d.comb += self.o.p.min_y.eq(min_y)
+                m.d.comb += self.o.p.max_x.eq(max_x)
+                m.d.comb += self.o.p.max_y.eq(max_y)
+                m.d.comb += self.o.p.front_facing.eq(tri_front_facing)
+                m.d.comb += [self.o.p.vtx[i].eq(vtx[i]) for i in range(3)]
+                m.d.comb += [self.o.p.screen_x[i].eq(screen_x[i]) for i in range(3)]
+                m.d.comb += [self.o.p.screen_y[i].eq(screen_y[i]) for i in range(3)]
+                m.d.comb += self.o.valid.eq(1)
                 with m.If(self.o.ready):
-                    m.d.sync += self.o.valid.eq(0)
                     m.d.sync += Print("Output ctx: ", self.o.p)
-                    m.d.sync += Print("Input vtx: ", *vtx)
                     m.next = "COLLECT"
 
         return m
@@ -730,7 +742,7 @@ class FragmentGenerator(wiring.Component):
                     self.o.p.color[1].eq(color_sat[1].clamp(zero, one)),
                     self.o.p.color[2].eq(color_sat[2].clamp(zero, one)),
                     self.o.p.color[3].eq(color_sat[3].clamp(zero, one)),
-                    self.o.p.front_facing.eq(self.ctx.vtx[0].front_facing),
+                    self.o.p.front_facing.eq(self.ctx.front_facing),
                 ]
 
                 m.d.comb += self.o.valid.eq(1)

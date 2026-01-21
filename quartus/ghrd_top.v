@@ -320,15 +320,30 @@ soc_system u0 (
     .hps_0_f2h_warm_reset_req_reset_n      (~hps_warm_reset),           //       hps_0_f2h_warm_reset_req.reset_n
     .hps_0_f2h_debug_reset_req_reset_n     (~hps_debug_reset),          //      hps_0_f2h_debug_reset_req.reset_n
     .hps_0_f2h_cold_reset_req_reset_n      (~hps_cold_reset),           //       hps_0_f2h_cold_reset_req.reset_n
+/*
+    .vga_clk_clk    (VGA_CLK),
 
-	 .vga_CLK                               (VGA_CLK),
-	 .vga_HS                                (VGA_HS),
-	 .vga_VS                                (VGA_VS),
-	 .vga_BLANK                             (VGA_BLANK_N),
-	 .vga_SYNC                              (VGA_SYNC_N),
-	 .vga_R                                 (VGA_R),
-	 .vga_G                                 (VGA_G),
-	 .vga_B                                 (VGA_B)
+    .video_vid_clk  (~VGA_CLK),
+    .video_vid_data ({VGA_R, VGA_G, VGA_B}),
+    .video_underflow (),
+    .video_vid_datavalid (),
+    .video_vid_v_sync (VGA_VS),
+    .video_vid_h_sync (VGA_HS),
+    .video_vid_f      (),
+    .video_vid_h      (),
+    .video_vid_v      ()
+assign   VGA_BLANK_N          =     1'b1;
+assign   VGA_SYNC_N           =     1'b0;
+	 */
+
+	.vga_CLK(VGA_CLK),
+	.vga_HS(VGA_HS),
+	.vga_VS(VGA_VS),
+	.vga_BLANK(VGA_BLANK_N),
+	.vga_SYNC(VGA_SYNC_N),
+	.vga_R(VGA_R),
+	.vga_G(VGA_G),
+	.vga_B(VGA_B)
 );
 
 // Source/Probe megawizard instance

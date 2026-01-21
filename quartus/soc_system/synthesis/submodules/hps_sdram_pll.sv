@@ -53,16 +53,16 @@ parameter GENERIC_PLL = "true";
 parameter REF_CLK_FREQ = "25.0 MHz";
 parameter REF_CLK_PERIOD_PS = 40000;
 
-parameter PLL_MEM_CLK_FREQ_STR = "400.0 MHz";
-parameter PLL_WRITE_CLK_FREQ_STR = "400.0 MHz";
+parameter PLL_MEM_CLK_FREQ_STR = "533.333333 MHz";
+parameter PLL_WRITE_CLK_FREQ_STR = "533.333333 MHz";
 parameter PLL_DR_CLK_FREQ_STR = "";
 
-parameter PLL_MEM_CLK_FREQ_SIM_STR = "2500 ps";
-parameter PLL_WRITE_CLK_FREQ_SIM_STR = "2500 ps";
+parameter PLL_MEM_CLK_FREQ_SIM_STR = "1876 ps";
+parameter PLL_WRITE_CLK_FREQ_SIM_STR = "1876 ps";
 parameter PLL_DR_CLK_FREQ_SIM_STR = "0 ps";
 
 parameter MEM_CLK_PHASE      = "0 ps";
-parameter WRITE_CLK_PHASE    = "1875 ps";
+parameter WRITE_CLK_PHASE    = "1406 ps";
 parameter DR_CLK_PHASE       = "";
 
 

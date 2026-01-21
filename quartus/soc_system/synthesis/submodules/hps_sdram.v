@@ -389,15 +389,15 @@ module hps_sdram (
 		.ENUM_MEM_IF_TCCD                        ("TCCD_4"),
 		.ENUM_MEM_IF_TCL                         ("TCL_11"),
 		.ENUM_MEM_IF_TCWL                        ("TCWL_8"),
-		.ENUM_MEM_IF_TFAW                        ("TFAW_12"),
+		.ENUM_MEM_IF_TFAW                        ("TFAW_16"),
 		.ENUM_MEM_IF_TMRD                        ("TMRD_4"),
-		.ENUM_MEM_IF_TRAS                        ("TRAS_14"),
-		.ENUM_MEM_IF_TRC                         ("TRC_20"),
-		.ENUM_MEM_IF_TRCD                        ("TRCD_6"),
-		.ENUM_MEM_IF_TRP                         ("TRP_6"),
-		.ENUM_MEM_IF_TRRD                        ("TRRD_3"),
-		.ENUM_MEM_IF_TRTP                        ("TRTP_3"),
-		.ENUM_MEM_IF_TWR                         ("TWR_6"),
+		.ENUM_MEM_IF_TRAS                        ("TRAS_19"),
+		.ENUM_MEM_IF_TRC                         ("TRC_26"),
+		.ENUM_MEM_IF_TRCD                        ("TRCD_8"),
+		.ENUM_MEM_IF_TRP                         ("TRP_8"),
+		.ENUM_MEM_IF_TRRD                        ("TRRD_4"),
+		.ENUM_MEM_IF_TRTP                        ("TRTP_4"),
+		.ENUM_MEM_IF_TWR                         ("TWR_8"),
 		.ENUM_MEM_IF_TWTR                        ("TWTR_4"),
 		.ENUM_MMR_CFG_MEM_BL                     ("MP_BL_8"),
 		.ENUM_OUTPUT_REGD                        ("DISABLED"),
@@ -589,8 +589,8 @@ module hps_sdram (
 		.INTG_EXTRA_CTL_CLK_WR_TO_RD_DIFF_CHIP   (3),
 		.INTG_EXTRA_CTL_CLK_WR_TO_WR             (0),
 		.INTG_EXTRA_CTL_CLK_WR_TO_WR_DIFF_CHIP   (0),
-		.INTG_MEM_IF_TREFI                       (3120),
-		.INTG_MEM_IF_TRFC                        (104),
+		.INTG_MEM_IF_TREFI                       (4160),
+		.INTG_MEM_IF_TRFC                        (139),
 		.INTG_RCFG_SUM_WT_PRIORITY_0             (0),
 		.INTG_RCFG_SUM_WT_PRIORITY_1             (0),
 		.INTG_RCFG_SUM_WT_PRIORITY_2             (0),
@@ -806,7 +806,7 @@ module hps_sdram (
 		.DLL_OFFSET_CTRL_WIDTH      (6),
 		.DELAY_BUFFER_MODE          ("HIGH"),
 		.DELAY_CHAIN_LENGTH         (8),
-		.DLL_INPUT_FREQUENCY_PS_STR ("2500 ps")
+		.DLL_INPUT_FREQUENCY_PS_STR ("1875 ps")
 	) dll (
 		.clk            (p0_dll_clk_clk),                //         clk.clk
 		.dll_pll_locked (p0_dll_sharing_dll_pll_locked), // dll_sharing.dll_pll_locked

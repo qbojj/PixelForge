@@ -16,33 +16,38 @@ A hardware implementation of a subset of [OpenGL ES 1.1 Common-Lite](https://reg
 
 - **[Thesis (Polish)](thesis/thesis_new.tex)** - Full bachelor's thesis in LaTeX
 - **[Architecture Documentation](ARCHITECTURE.md)** - Detailed technical architecture
-- **[Polish README](README_PL.md)** - Complete guide in Polish
 - **[Demo Applications](software/DEMOS.md)** - Documentation of demo programs
-- **[Summary](PODSUMOWANIE.md)** - Project summary in Polish
 
 ## ⚡ Features
 
-- ✨ Complete 3D graphics pipeline from vertex transform to fragment output
-- 🎨 Phong lighting model (ambient, diffuse, emissive - up to 8 lights)
-- 🔺 Triangle rasterization with perspective-correct interpolation
-- 📊 Depth & stencil buffering
-- 🎭 Alpha blending
-- 🔧 Configurable topologies (Triangle List, Strip, Fan)
-- 🚀 Fixed-point arithmetic dopasowana do bloków DSP (Q13.13 / Q1.17 / UQ0.9)
-- 🔌 SoC integration via Wishbone bus and CSR interface
+- Complete 3D graphics pipeline from vertex transform to fragment output
+- Phong lighting model (ambient, diffuse)
+- Triangle rasterization with perspective-correct interpolation
+- Depth & stencil buffering
+- Alpha blending
+- Configurable topologies (Triangle List, Strip, Fan)
+- Fixed-point arithmetic optimized for DE1-SoC's DSP blocks (Q13.13 / Q1.17 / UQ0.9)
+- SoC integration via Wishbone bus and CSR interface
 
 ## 🏗️ Pipeline Architecture
 
-```
-Index Generation → Input Topology → Input Assembly
-    ↓
-Vertex Transform → Vertex Shading → Primitive Assembly
-    ↓
-Primitive Clipping → Perspective Divide → Triangle Prep
-    ↓
-Triangle Rasterization → Depth/Stencil Test
-    ↓
-Blending → Framebuffer Output
+```mermaid
+graph TD
+    A["Index Generation"]
+    B["Input Topology<br/>Processor"]
+    C["Input Assembly"]
+    D["Vertex Transform"]
+    E["Vertex Shading"]
+    F["Primitive Assembly"]
+    G["Primitive Clipper"]
+    H["Perspective Divide"]
+    I["Triangle Prep"]
+    J["Triangle<br/>Rasterization"]
+    K["Depth/Stencil<br/>Test"]
+    L["Color Blending"]
+    M["Framebuffer<br/>Output"]
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> M
 ```
 
 ## 🚀 Quick Start
@@ -64,42 +69,37 @@ pip install -e ".[dev]"
 ### Run Tests
 
 ```bash
-# All tests
-pytest tests/
-
-# Parallel execution
-pytest -n auto tests/
-
-# Specific module
-pytest tests/rasterizer/
+pytest
 ```
 
 ### Build for FPGA
 
-```bash
-cd quartus
-make              # Full build (synthesis, fit, asm)
-make program      # Program FPGA
-```
+Open `quartus/soc_system.qpf` in Intel Quartus Prime and compile the project.
+You can also look into `quartus/soc_system.qsys` for detailed SoC configuration.
 
 ### Build Demo Applications
 
 ```bash
 cd software
-make              # Build all demos
-./demo_lighting   # Run lighting demo
+CROSS_COMPILE=arm-linux-gnueabihf- make
 ```
+
+then you can upload the binaries to the DE1-SoC board.
+```bash
+make install DESTDIR=/path/to/sdcard/home/root/
+```
+
+### Run Demos
+
+See [software/DEMOS.md](software/DEMOS.md) for detailed instructions on running the demo applications.
 
 ## 📊 Resource Usage (Cyclone V)
 
 | Resource | Used | Available | Utilization |
 |----------|------|-----------|-------------|
-| ALMs | 18,542 | 32,070 | 57.8% |
-| Registers | 35,821 | 128,280 | 27.9% |
-| Block Memory | 89 | 397 | 22.4% |
-| DSP Blocks | 67 | 87 | 77.0% |
-
-**Clock Frequency**: 50 MHz
+| ALMs | 28,702 | 32,070 | 89% |
+| DSP Blocks | 67 | 87 | 77% |
+| Memory Bits | 552,407 | 4,065,280 | 14% |
 
 ## 📖 Project Structure
 
@@ -120,13 +120,14 @@ PixelForge/
 
 ## 🧪 Testing
 
-91 unit tests covering all major modules:
+81 unit and integration tests covering all major modules:
 - Input Assembly & Topology Processing
 - Vertex Transformations
 - Vertex Shading & Lighting
 - Rasterization Pipeline
 - Depth/Stencil Tests
 - Blending Operations
+- Full pipeline integration tests
 
 Visual verification via PPM image generation.
 
@@ -139,7 +140,7 @@ Visual verification via PPM image generation.
 
 ## 📄 License
 
-[To be determined - e.g., MIT, BSD, GPL]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
@@ -155,12 +156,12 @@ Visual verification via PPM image generation.
 ## 📝 Citation
 
 ```bibtex
-@mastersthesis{janeczko2026pixelforge,
+@mastersthesis{pixelforge2026,
   author = {Jakub Janeczko},
   title = {Fixed-Pipeline Graphics Accelerator Based on FPGA},
   school = {University of Wrocław, Institute of Computer Science},
   year = {2026},
-  type = {Bachelor's thesis},
+  type = {Engineering thesis},
   supervisor = {dr Marek Materzok}
 }
 ```

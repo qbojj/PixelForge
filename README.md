@@ -4,7 +4,7 @@
 
 A hardware implementation of a subset of [OpenGL ES 1.1 Common-Lite](https://registry.khronos.org/OpenGL/specs/es/1.1/es_full_spec_1.1.pdf) specification on Intel Cyclone V FPGA using Amaranth HDL.
 
-## 🎓 Bachelor's Thesis
+## 🎓 Engineering Thesis
 
 **Title**: Fixed-Pipeline Graphics Accelerator Based on FPGA
 **Author**: Jakub Janeczko
@@ -28,27 +28,6 @@ A hardware implementation of a subset of [OpenGL ES 1.1 Common-Lite](https://reg
 - Configurable topologies (Triangle List, Strip, Fan)
 - Fixed-point arithmetic optimized for DE1-SoC's DSP blocks (Q13.13 / Q1.17 / UQ0.9)
 - SoC integration via Wishbone bus and CSR interface
-
-## 🏗️ Pipeline Architecture
-
-```mermaid
-graph TD
-    A["Index Generation"]
-    B["Input Topology<br/>Processor"]
-    C["Input Assembly"]
-    D["Vertex Transform"]
-    E["Vertex Shading"]
-    F["Primitive Assembly"]
-    G["Primitive Clipper"]
-    H["Perspective Divide"]
-    I["Triangle Prep"]
-    J["Triangle<br/>Rasterization"]
-    K["Depth/Stencil<br/>Test"]
-    L["Color Blending"]
-    M["Framebuffer<br/>Output"]
-
-    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K --> L --> M
-```
 
 ## 🚀 Quick Start
 
@@ -74,19 +53,52 @@ pytest
 
 ### Build for FPGA
 
-Open `quartus/soc_system.qpf` in Intel Quartus Prime and compile the project.
-You can also look into `quartus/soc_system.qsys` for detailed SoC configuration.
+- Elaborate the Amaranth HDL design:
+
+```bash
+python -m gpu.pipeline
+```
+
+  - That will regenerate `graphics_pipeline_avalon_csr.sv` and `graphics_pipeline_csr_map.json`.
+
+- Regenerate the CSR mapping with:
+
+```bash
+python tools/gen_csr_header.py \
+    --json graphics_pipeline_csr_map.json \
+    --out software/include/graphics_pipeline_csr.h
+```
+
+- Open `quartus/soc_system.qpf` in Intel Quartus.
+- Open `quartus/soc_system.qsys` and regenerate the system.
+- Compile the project. (This will create .sof file)
+- Convert .sof to .rbf:
+
+```bash
+quartus_cpf -c quartus/output_files/soc_system.sof quartus/output_files/soc_system.rbf
+```
+
+- Upload the `soc_system.rbf` to the root of the first partition of the SD card. (see [INSTALLATION.md](INSTALLATION.md) for details)
+
+- Regenerate the memory map header for software:
+
+```bash
+sopcinfo2swinfo --input=quartus/soc_system.sopcinfo --output=quartus/soc_system.swinfo
+swinfo2header --swinfo quartus/soc_system.swinfo --single software/include/soc_system.h --module 'hps_arm_a9_0'
+```
 
 ### Build Demo Applications
 
 ```bash
 cd software
-CROSS_COMPILE=arm-linux-gnueabihf- make
+export CROSS_COMPILE=arm-linux-gnueabihf-
+make
 ```
 
 then you can upload the binaries to the DE1-SoC board.
 ```bash
-make install DESTDIR=/path/to/sdcard/home/root/
+cd software
+sudo make install DESTDIR=/path/to/sdcard/home/root/
 ```
 
 ### Run Demos
@@ -133,10 +145,10 @@ Visual verification via PPM image generation.
 
 ## 🎮 Demo Applications
 
-- **demo_lighting** - Rotating icosahedron with directional lighting
 - **demo_cube** - Basic rotating cube
 - **demo_depth** - Three cubes at different depths demonstrating depth buffering
-- **demo_stencil** - Outline/glow effect using stencil buffer
+- **demo_obj** - Wavefront OBJ model viewer with stencil outline effect
+- **pixelforge_demo** - Minimal example rendering simple triangles and test patterns
 
 ## 📄 License
 

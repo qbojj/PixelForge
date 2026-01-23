@@ -1,464 +1,171 @@
-# PixelForge - Architektura Projektu
+# Pixel-Forge architecture documentation
 
-## Przegląd
+This document provides a detailed overview of the architecture and design of the Pixel-Forge graphics accelerator implemented on FPGA. It covers the major components, data flow, and key algorithms used in the rendering pipeline.
 
-PixelForge to akcelerator graficzny fixed-pipeline implementujący podzbiór funkcjonalności OpenGL ES 1.1 Common-Lite na platformie FPGA. Projekt realizuje pełny potok graficzny od przetwarzania wierzchołków do generowania obrazów rastrowych, z obsługą oświetlenia, transformacji, rasteryzacji, testów głębokości i szablonu oraz mieszania kolorów.
+## 🚀 Overview
+Pixel-Forge is a fixed-function graphics pipeline designed to implement a subset of the OpenGL ES 1.1 Common-Lite specification. It is built using Amaranth HDL and targets the Intel Cyclone V FPGA platform. The architecture is modular, allowing for easy understanding and potential future extensions.
 
-## Technologie i Narzędzia
-
-### Język HDL i Framework
-- **Amaranth HDL** (Python-based HDL) - główny język opisu sprzętu
-- **Amaranth SoC** - komponenty infrastruktury systemowej (Wishbone, CSR)
-- **Python 3.10+** - język testów i narzędzi pomocniczych
-
-### Platforma Docelowa
-- **Intel Cyclone V SoC FPGA** (DE1-SoC)
-- **Quartus Prime** - narzędzia syntezy i implementacji
-- **LiteX/LiteDRAM** - kontrolery pamięci i infrastruktura SoC
-
-### Testy i Weryfikacja
-- **pytest** - framework testowy
-- **pytest-xdist** - równoległe wykonywanie testów
-- **hypothesis** - testy oparte na właściwościach (property-based testing)
-
-## Architektura Potoku Graficznego
-
-PixelForge implementuje klasyczny fixed-pipeline składający się z następujących etapów:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         GRAPHICS PIPELINE                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  1. INDEX GENERATION           │  6. PRIMITIVE CLIPPING                 │
-│     ↓                          │     ↓                                  │
-│  2. INPUT TOPOLOGY PROCESSOR   │  7. PERSPECTIVE DIVIDE                 │
-│     ↓                          │     ↓                                  │
-│  3. INPUT ASSEMBLY             │  8. TRIANGLE PREPARATION               │
-│     ↓                          │     ↓                                  │
-│  4. VERTEX TRANSFORM           │  9. TRIANGLE RASTERIZATION             │
-│     ↓                          │     ↓                                  │
-│  5. VERTEX SHADING             │ 10. DEPTH/STENCIL TEST                 │
-│                                │     ↓                                  │
-│                                │ 11. BLENDING & OUTPUT                  │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### 1. Input Assembly (`gpu/input_assembly/`)
-
-Odpowiada za pobieranie i formatowanie danych wierzchołków z pamięci.
-
-**Komponenty:**
-- **IndexGenerator** (`cores.py`): Generuje indeksy wierzchołków (generowane lub z bufora indeksów)
-- **InputTopologyProcessor** (`cores.py`): Przetwarza topologię primitywów (triangle list, strip, fan)
-- **InputAssembly** (`cores.py`): Łączy dane atrybutów wierzchołków z pamięci
-
-**Obsługiwane topologie:**
-- Triangle List
-- Triangle Strip
-- Triangle Fan
-- Z opcjonalnym primitive restart
-
-**Formaty danych:**
-- Pozycje, normalne, kolory; koordynaty tekstury są opcjonalne (texturing nie
-    jest obecnie zaimplementowane)
-- Różne formaty atrybutów (float, fixed-point, integer)
-- Konfigurowalne offsety i stride
-
-### 2. Vertex Transform (`gpu/vertex_transform/`)
-
-Transformacje geometryczne wierzchołków.
-
-**Komponenty:**
-- **VertexTransform** (`cores.py`): Główny moduł transformacji
-
-**Funkcjonalność:**
-- Transformacja pozycji (Model-View-Projection)
-- Transformacja normalnych (Inverse Transpose Model-View)
-- Macierze 4x4 w formacie fixed-point
-
-**Operacje matematyczne:**
-- Mnożenie macierz-wektor
-- Pipeline mnożeń i akumulacji
-- Optymalizacja dla FPGA (DSP blocks)
-
-### 3. Vertex Shading (`gpu/vertex_shading/`)
-
-System oświetlenia zgodny z modelem Phong.
-
-**Komponenty:**
-- **VertexShading** (`cores.py`): Obliczenia oświetlenia per-vertex
-- **LightPropertyLayout** (`cores.py`): Konfiguracja właściwości świateł
-- **MaterialPropertyLayout** (`cores.py`): Właściwości materiału
-
-**Model oświetlenia:**
-- Ambient lighting (światło otaczające)
-- Diffuse lighting (światło rozproszone, Lambertian)
-- Emissive (emisja materiału)
-- Wsparcie dla 8 źródeł światła
-
-Składowa specular nie jest zaimplementowana w obecnej wersji.
-
-**Obliczenia:**
-- Iloczyn skalarny normalnej i kierunku światła
-- Interpolacja kolorów
-- Atenuacja światła (odległość)
-
-### 4. Primitive Assembly (`gpu/primitive_assembly/`)
-
-Łączy wierzchołki w prymitywy (trójkąty).
-
-**Komponenty:**
-- **PrimitiveAssembly** (`cores.py`): Buduje trójkąty z przetworzonych wierzchołków
-
-**Funkcjonalność:**
-- Face culling (wybór widocznych ścian)
-  - Front face / Back face / obie
-  - CW/CCW winding order
-- Przekazywanie trójkątów do rasteryzacji
-
-### 5. Rasterizer (`gpu/rasterizer/`)
-
-Konwersja trójkątów na fragmenty pikseli.
-
-**Komponenty:**
-- **PrimitiveClipper** (`cores.py`): Clipping trójkątów do frustum
-- **PerspectiveDivide** (`rasterizer.py`): Dzielenie przez W (projekcja perspektywiczna)
-- **TrianglePrep** (`rasterizer.py`): Przygotowanie równań krawędzi
-- **TriangleRasterizer** (`rasterizer.py`): Skanowanie trójkątów i generowanie fragmentów
-
-**Algorytmy:**
-- Edge function (test punktu w trójkącie)
-- Barycentric interpolation (atrybuty fragmentów)
-- Incremental rasterization (tile-based)
-- Viewport transform
-- Scissor test
-
-**Interpolowane atrybuty:**
-- Kolory RGBA
-- Głębokość Z
-- Perspective-correct interpolation
-
-### 6. Pixel Shading (`gpu/pixel_shading/`)
-
-Per-fragment operations - testy i mieszanie kolorów.
-
-**Komponenty:**
-- **DepthStencilTest** (`cores.py`): Testy głębokości i szablonu
-- **BlendConfig** (`cores.py`): Konfiguracja blendingu
-- **SwapchainOutput** (`cores.py`): Zapis do framebuffera
-
-Aktualnie brak etapu teksturowania (niezaimplementowane).
-
-**Depth Test:**
-- Funkcje porównania: NEVER, LESS, EQUAL, LEQUAL, GREATER, NOTEQUAL, GEQUAL, ALWAYS
-- Depth buffer read/write
-- Depth range mapping
-
-**Stencil Test:**
-- Osobne konfiguracje dla front/back faces
-- Operacje: KEEP, ZERO, REPLACE, INCR, DECR, INVERT, INCR_WRAP, DECR_WRAP
-- Maska porównania i zapisu
-- Reference value
-
-**Blending:**
-- Source/Destination blend factors
-- Blend equations (ADD, SUBTRACT, REVERSE_SUBTRACT)
+It implements all of the major features of OpenGL ES 1.1 Common-Lite, including:
+- Vertex transformations
+- Lighting (ambient, diffuse)
+- Triangle rasterization with perspective-correct interpolation
+- Depth and stencil buffering
 - Alpha blending
-- Pre-multiplied alpha support
+- Configurable topologies (Triangle List, Strip, Fan)
 
-## Interfejsy Systemowe
+Major missing features are:
+- Texturing
+- Specular lighting
+- Line and point rasterization (could be added by converting them to triangles)
+- Multiple data layout support (for both vertex buffer and color and depthstencil formats)
 
-### Wishbone Bus
-Potok graficzny wykorzystuje magistralę Wishbone do dostępu do pamięci:
+## 🏗️ Pipeline Architecture
 
-- **Vertex Data Bus** - pobieranie atrybutów wierzchołków
-- **Depth/Stencil Bus** - dostęp do bufora głębokości/szablonu
-- **Color Bus** - dostęp do framebuffera kolorów
-- **Texture Bus** - planowane; brak jednostki teksturującej w bieżącej wersji
+```mermaid
+graph TD
+    A["Index Generation"]
+    B["Input Topology<br/>Processor"]
+    C["Input Assembly"]
+    D["Vertex Transform"]
+    E["Vertex Shading"]
+    G["Primitive Clipper"]
+    H["Perspective Divide"]
+    I["Triangle Prep"]
+    J1["Rasterizer 0"]
+    J2["Rasterizer 1"]
+    J3["Rasterizer ..."]
+    J4["Rasterizer N"]
+    K["Depth/Stencil<br/>Test"]
+    M["Framebuffer<br/>Output"]
 
-Parametry magistrali:
-- Szerokość adresu: 32-bit
-- Szerokość danych: 32-bit
-- Brak trybu pipelined; pojedyncze transfery
-
-### Control/Status Registers (CSR)
-
-**GraphicsPipelineCSR** (`pipeline.py`):
-Interfejs rejestrów konfiguracyjnych i kontrolnych poprzez Wishbone-CSR bridge.
-
-**GraphicsPipelineAvalonCSR** (`graphics_pipeline_avalon_csr.sv`):
-Mostek Wishbone→Avalon-MM generowany w Amaranth HDL (bez Qsys/Platform Designer).
-
-**Mapa rejestrów** (`graphics_pipeline_csr_map.json`):
-Szczegółowa mapa wszystkich rejestrów konfiguracyjnych dostępnych z poziomu CPU.
-
-## Struktura Katalogów
-
-```
-├── gpu/                        # Główny kod źródłowy HDL
-│   ├── input_assembly/         # Input assembly stage
-│   │   ├── cores.py           # Główne moduły
-│   │   └── layouts.py         # Definicje struktur danych
-│   ├── vertex_transform/       # Vertex transform stage
-│   │   └── cores.py
-│   ├── vertex_shading/         # Vertex shading stage
-│   │   └── cores.py
-│   ├── primitive_assembly/     # Primitive assembly
-│   ├── rasterizer/            # Rasterization stage
-│   │   ├── cores.py
-│   │   ├── rasterizer.py
-│   │   └── layouts.py
-│   ├── pixel_shading/         # Pixel/fragment operations
-│   │   └── cores.py
-│   ├── utils/                 # Wspólne utilities
-│   │   ├── layouts.py         # Wspólne layouty danych
-│   │   ├── types.py           # Typy i enumy
-│   │   └── avalon.py          # Avalon interface utils
-│   └── pipeline.py            # Top-level pipeline integration
-│
-├── tests/                      # Testy jednostkowe i integracyjne
-│   ├── input_assembly/
-│   ├── vertex_transform/
-│   ├── vertex_shading/
-│   ├── rasterizer/
-│   ├── pixel_shading/
-│   └── utils/                 # Test utilities
-│       ├── testbench.py
-│       ├── streams.py
-│       └── visualization.py   # PPM image generation
-│
-├── quartus/                    # Pliki projektu Intel Quartus
-│   ├── soc_system.qsf         # Project settings
-│   ├── soc_system.qpf         # Project file
-│   ├── soc_system.qsys        # Platform Designer SoC
-│   ├── ghrd_top.v             # Top-level HDL
-│   └── software/              # Bootloader/U-Boot
-│
-├── software/                   # Aplikacje demo (C)
-│   ├── src/                   # Kod źródłowy demo
-│   ├── include/               # Nagłówki API
-│   ├── demo_cube              # Podstawowy obracający się sześcian
-│   ├── demo_lighting          # Demo oświetlenia
-│   ├── demo_depth             # Demo depth buffer
-│   ├── demo_stencil           # Demo stencil buffer
-│   └── DEMOS.md               # Dokumentacja demo
-│
-├── tools/                      # Narzędzia pomocnicze
-│   └── gen_csr_header.py      # Generator nagłówków CSR
-│
-└── thesis/                     # Praca dyplomowa
-    ├── thesis.tex
-    └── iithesis.cls           # Szablon WMiI UWr
+    A --> B --> C --> D --> E --> G --> H --> I
+    I --> J1 & J2 & J3 & J4
+    J1 & J2 & J3 & J4 --> K --> M
 ```
 
-## Przepływ Danych
+Components are connected via standardized interfaces (amaranth.lib.streaming) and separated with FIFOs to
+help with critical path timing and handling stages with variable latency (like rasterizers, culling).
 
-### 1. Inicjalizacja Draw Call (CPU → GPU)
+The vertex and primitive processing stages are on separate clock domain from the rasterization and fragment processing stages to allow for better timing closure and higher overall throughput.
 
-```
-CPU writes CSR registers:
-├── Framebuffer config (width, height, addresses)
-├── Vertex attribute pointers & formats
-├── Transform matrices (MVP, Normal)
-├── Material & lighting parameters
-├── Render state (depth/stencil/blend)
-└── Draw parameters (index buffer, count)
+## 🔍 Component Descriptions
 
-CPU writes START register → GPU starts processing
-```
+### Index Generation
+Generates vertex indices based on the configured index buffer format (U8, U16, U32 or NOT_INDEXED).
 
-### 2. Vertex Processing
+Implemented with a simple FSM that reads indices from memory and outputs them downstream.
 
-```
-IndexGenerator
-    ↓ vertex indices
-InputTopologyProcessor
-    ↓ topology-processed indices
-InputAssembly
-    ↓ assembled vertex attributes (via Wishbone reads)
-VertexTransform
-    ↓ transformed positions & normals
-VertexShading
-    ↓ lit vertices with colors
-PrimitiveAssembly
-    ↓ complete triangles
-```
+Rendering start by sending a `start` signal to this module after configuring the index buffer address, count and format.
 
-### 3. Rasterization & Fragment Processing
+### Input Topology Processor
+Processes the input primitive topology (Triangle List, Strip, Fan) and generates a stream of vertex
+indices for the Input Assembly stage. It handles the conversion of different topologies into a consistent stream of triangles.
 
-```
-PrimitiveClipper
-    ↓ clipped triangles
-PerspectiveDivide
-    ↓ screen-space coordinates
-TrianglePrep
-    ↓ edge equations & setup
-TriangleRasterizer
-    ↓ fragments with interpolated attributes
-DepthStencilTest
-    ↓ fragments that pass tests (via Wishbone read/write)
-BlendOperation & SwapchainOutput
-    ↓ final pixel colors (via Wishbone write)
-Framebuffer Memory
-```
+This module supports primitive restart index functionality and base vertex offset.
 
-## Typy Danych
+### Input Assembly
+Fetches vertex attributes from the vertex buffer based on the incoming indices. It constructs complete vertex records
+with all attributes (position, normal, color, etc.) for further processing.
 
-### Fixed-Point Arithmetic
+For now it only supports a single vertex component format (Q13.13 saved as Q16.16 in memory).
 
-Pipeline wykorzystuje głównie arytmetykę fixed-point dostosowaną do bloków DSP
-27x27 / 18x18 / 9x9 w Cyclone V:
-- **Q13.13** (27-bit) – pozycje, normalne, macierze transformacji
-- **Q1.17** (18-bit) – współczynniki barycentryczne, głębokość, znormalizowane
-    wektory kierunków
-- **UQ0.9** (9-bit, bez znaku) – kanały koloru/alphę w zakresie 0–1
+The vertex buffers can be configured dynamically by setting the attribute base address and stride or
+just using constant attributes.
 
-Dobór formatów minimalizuje zużycie bloków DSP i rejestrów przy zachowaniu
-akceptowalnej precyzji dla potoku rastrowego 2D/3D.
+This allows us for arbitrary vertex buffer layouts. (e.g AOS, SOA, and multiple independent buffers).
 
-### Streaming Protocol
+### Vertex Transform
+Applies geometric transformations to vertex positions using the provided model-view and projection matrices. It performs matrix-vector multiplication in fixed-point arithmetic.
 
-Amaranth Stream protocol z sygnałami:
-- `valid` - dane są ważne
-- `ready` - odbiorca gotowy
-- `payload` - struktura danych
-- `first` / `last` - oznaczenia początku/końca sekwencji
+### Vertex Shading
+Calculates per-vertex lighting using a simple lighting model (ambient + diffuse). It computes the final vertex color based on the light direction, normal, and material properties.
 
-## Charakterystyka Wydajnościowa
+### Primitive Clipper
+Clips primitives against the view frustum to ensure only visible geometry is processed further. It implements
+the Sutherland-Hodgman clipping algorithm for triangles.
 
-### Teoretyczna Przepustowość
+This stage has high variability in processing time depending on how many clip planes a triangle intersects.
 
-**Vertex Processing:**
-- Input Assembly: ~1 wierzchołek / cykl (sekwencyjnie, bez burst/pipeline)
-- Vertex Transform: ~10-20 cykli / wierzchołek (w zależności od liczby macierzy)
-- Vertex Shading: ~5-15 cykli / wierzchołek (w zależności od liczby świateł)
+The impact of this stage could be reduced by performing Guard-band clipping to avoid clipping most of the time.
 
-**Rasterization:**
-- Triangle Setup: ~10 cykli / trójkąt
-- Fragment Generation: 1 fragment / cykl (teoretycznie)
-- Depth/Stencil Test: 2-4 cykle / fragment (memory access)
-- Blending: 2-4 cykle / fragment (memory read-modify-write)
+### Perspective Divide
+Performs perspective division on vertex positions to convert them from clip space to normalized device coordinates (NDC).
 
-### Ograniczenia
-- Dostęp do pamięci (Wishbone latency)
-- Szerokość magistrali (32-bit)
-- Brak cache'owania
-- Single-pipeline (no parallelism between stages yet)
+In this stage we change all parameters to smaller fixed-point formats, as we know that NDC ranges from -1.0 to 1.0.
+As such from here on instead of using 27x27 bit DSP multipliers we can use smaller 18x18 bit multipliers, doubling
+the effectiveness of DSP block usage.
 
-## Integracja z SoC
+### Triangle Prep
+Prepares triangles for rasterization by computing edge equations, bounding boxes, and other necessary data for
+the rasterizers.
 
-### Platform Designer (Qsys)
+Precomputes the inverse of the area of the triangle to optimize barycentric coordinate calculations during rasterization.
+Also performs face culling based on the configured front-face and cull mode (using the sign of the computed area).
 
-Komponent GPU integruje się z systemem poprzez:
-- **Avalon Memory-Mapped Slave** - CSR interface
-- **Avalon Memory-Mapped Master** (x3) - Vertex, Depth/Stencil, Color memory access
-- **Clock/Reset** - synchronizacja z resztą systemu
+We also perform viewport transformation and scizzor testing here, so we don't rasterize pixels outside the viewport/scizzor rectangle.
 
-### Połączenie z HPS (Hard Processor System)
+### Rasterizer
+A combination of pixel generator in the bounding box calculated in Triangle Prep and a set of fragment processors.
 
-ARM Cortex-A9 w Cyclone V:
-- Zapisuje konfigurację poprzez lightweight HPS-to-FPGA bridge
-- Alokuje bufory w SDRAM
-- Czyta framebuffer do wyświetlenia (VGA/HDMI)
-- Może czytać status GPU (idle/busy)
+The main module creates a stream of pixels to be checked against the triangle using edge equations and
+distributes them to multiple fragment processors for parallel processing.
 
-## Testowanie
+Each fragment processor does the following:
+- Computes edge functions
+- Determines if the pixel is inside the triangle (all edge functions have the same sign)
+- Computes linear barycentric coordinates (how much each vertex contributes to this pixel as if the triangle was flat)
+- Performs linear interpolation of depth (as specified in OpenGL ES 1.1)
+- Computes perspective-correct barycentric coordinates:
+    - This is done by multiplying each linear barycentric coordinate by the reciprocal of the depth at that pixel
+    - Normalizing the resulting values so they sum to 1.0
+    - We effectively need to perform division in all pixels, that is why we created multiple fragment processors to parallelize this operation
+- Performs perspective-correct interpolation of attributes (color, texture coords, etc.) using aforementioned perspective-correct barycentric coordinates
 
-### Methodology
+The main module then collects the output fragments from all fragment processors and forwards them downstream. This also
+makes sure that fragments are output in the correct order, so OpenGL ES semantics are preserved (all fragments of a triangle are processed before moving to the next triangle).
 
-1. **Unit Tests** - testowanie pojedynczych komponentów
-   - Każdy stage potoku ma osobne testy
-   - Symulacja Amaranth (Simulator)
-   - Weryfikacja protocołu stream
+### Depth/Stencil Test
+For each incoming fragment, fetches current depth/stencil values from the attached buffers and performs depth and stencil tests based on the configured operations.
 
-2. **Integration Tests** - testowanie całych ścieżek
-   - Rasterizer pipeline (clip → divide → prep → raster)
-   - Vertex pipeline (assembly → transform → shading)
+It also updates the depth/stencil buffer if value changed.
 
-3. **Visual Verification** - generowanie obrazów testowych
-   - PPM file output z testów rasteryzera
-   - Porównanie z reference rendering
+### Framebuffer Output
+Performs blending operations and writes the final fragment color values to the color buffer.
 
-4. **Property-Based Testing** - Hypothesis
-   - Losowe dane wejściowe
-   - Weryfikacja niezmienników (invariants)
+It supports configurable blending modes and factors as specified in OpenGL ES 1.1.
 
-### Test Fixtures
+It also uses Q0.9 fixed-point format for color components, as this is sufficient for color representation,
+uses 9x9 bit multipliers further saving DSP resources on the FPGA.
 
-`tests/utils/`:
-- `testbench.py` - infrastruktura symulacji
-- `streams.py` - helpery dla stream protocol
-- `visualization.py` - generowanie PPM, statystyki
+## ⚙️ Configuration and Control
+The Pixel-Forge GPU is configured and controlled via a set of Control and Status Registers (CSRs) accessible through a Wishbone bus interface. These registers allow the host CPU to set up the rendering state, issue draw calls, and monitor the GPU status.
 
-### Coverage
+The main configuration parameters include:
+- Index buffer address, count, and format
+- Vertex buffer base address, attribute offsets, and stride
+- Input topology type and primitive restart index
+- Viewport and scizzor rectangle parameters
+- Depth and stencil test settings
+- Blending modes and factors
+- Transformation matrices (model-view, projection, normal-model-view (inverse transpose of model-view))
+- Lighting parameters (light direction, colors)
 
-Testy pokrywają:
-- [x] Input assembly (topologies, formats)
-- [x] Vertex transform (matrices)
-- [x] Vertex shading (lighting)
-- [x] Rasterization (triangles, interpolation)
-- [x] Depth/stencil tests
-- [~] Blending (częściowo)
+The module also exposes which stages are currently busy,
+allowing the host to wait for specific stages to complete before issuing new draw calls.
+This prevents data hazards as well as allows for waiting for example only of the input assembly and vertex processing to
+complete, as after that we can start the next draw call as long as we don't need to change clip/raster settings.
 
-## Narzędzia Deweloperskie
+So we can with increasing speed:
+- Wait for the whole pipeline to finish -> waiting to swap the framebuffers
+- Wait for triangle preparation to finish -> Changing viewport/scizzor settings safely.
+- Wait for vertex processing to finish -> changing matrices and lighting settings safely.
+- Wait for input assembly to finish -> changing vertex buffer/index buffer/topology safely.
 
-### gen_csr_header.py
+## 📚 Further Reading
+For more detailed information on specific components, algorithms, and implementation details, please refer to the source code and comments within the `gpu/` directory. The unit and integration tests in the `tests/` directory also provide practical examples of how each module operates and interacts with others in the pipeline.
 
-Generator nagłówków C z mapy rejestrów CSR:
-```bash
-python tools/gen_csr_header.py \
-    --json graphics_pipeline_csr_map.json \
-    --out software/include/graphics_pipeline_csr.h
-```
 
-### Build System
+## Usage
+Please see [software/DEMOS.md](software/DEMOS.md) for detailed instructions on running the demo applications and utilizing debugging utilities.
 
-**Python/Amaranth:**
-```bash
-pip install -e .                    # Install package
-pytest tests/                       # Run tests
-pytest -n auto tests/               # Parallel execution
-```
-
-**Quartus:**
-- quartus/soc_system.qpf -> projekt Quartus (gotowy dla DE1-SoC)
-
-Wygenerowane pliki bitstream:
-- quartus/output_files/soc_system.sof
-- quartus/output_files/soc_system.rbf
-
-**Software:**
-```bash
-cd software
-make                                # Build all demos
-make demo_lighting                  # Build specific demo
-```
-
-## Rozszerzenia i Planowane Funkcjonalności
-
-### Krótkoterminowe
-- [ ] Texturing pipeline
-- [ ] Bilinear texture filtering
-- [ ] Multiple render targets
-- [ ] Antialiasing (MSAA)
-
-### Średnioterminowe
-- [ ] Shader pipeline (basic programmable shaders)
-- [ ] Geometry instancing
-- [ ] Occlusion queries
-- [ ] Performance counters
-
-### Długoterminowe
-- [ ] Compute shaders
-- [ ] Ray tracing acceleration
-- [ ] Multi-threading / parallel rasterizers
-
-## Bibliografia Techniczna
-
-- OpenGL ES 1.1 Common-Lite Specification
-- Amaranth HDL Documentation
-- Intel Cyclone V Handbook
-- "Real-Time Rendering" - Akenine-Möller, Haines
-- "Computer Graphics: Principles and Practice" - Foley, van Dam
+It also exposes some headers for using the GPU from C applications, located in `software/include/` and `libpixelforge.a` static library for easier integration.

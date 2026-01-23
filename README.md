@@ -16,7 +16,7 @@ A hardware implementation of a subset of [OpenGL ES 1.1 Common-Lite](https://reg
 
 - **[Thesis (Polish)](thesis/thesis_new.tex)** - Full bachelor's thesis in LaTeX
 - **[Architecture Documentation](ARCHITECTURE.md)** - Detailed technical architecture
-- **[Demo Applications](software/DEMOS.md)** - Documentation of demo programs
+- **[Demo Applications](software/README.md)** - Documentation of demo programs
 
 ## ⚡ Features
 

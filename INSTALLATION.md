@@ -83,7 +83,7 @@ You should see a login prompt, the username is `root` with no password.
 You will be in `/home/root/`. The demos should be located in this directory.
 
 Please remember to correctly connect a VGA monitor to see the output.
-See [DEMOS.md](software/DEMOS.md) for usage instructions.
+See [software/README.md](software/README.md) for usage instructions.
 
 ## Troubleshooting
 
@@ -96,7 +96,7 @@ See [DEMOS.md](software/DEMOS.md) for usage instructions.
 **Demos show no output:**
 - Verify VGA monitor is connected and powered
 - Check framebuffer configuration with `dump_vga_dma`
-- Consult [DEMOS.md](software/DEMOS.md) troubleshooting section
+- Consult [software/README.md](software/README.md) troubleshooting section
 
 **SD card detection issues:**
 - Use a different SD card reader
@@ -105,5 +105,5 @@ See [DEMOS.md](software/DEMOS.md) for usage instructions.
 ## Related Documentation
 
 - [README.md](README.md) - Project overview
-- [DEMOS.md](software/DEMOS.md) - Demo program descriptions
+- [software/README.md](software/README.md) - Demo program descriptions
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Technical architecture

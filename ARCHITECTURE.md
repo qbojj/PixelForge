@@ -166,7 +166,7 @@ For more detailed information on specific components, algorithms, and implementa
 
 
 ## Usage
-Please see [software/DEMOS.md](software/DEMOS.md) for detailed instructions on running the demo applications and utilizing debugging utilities.
+Please see [software/DEMOS.md](software/README.md) for detailed instructions on running the demo applications and utilizing debugging utilities.
 
 It also exposes some headers for using the GPU from C applications, located in `software/include/` and `libpixelforge.a` static library for easier integration.
 

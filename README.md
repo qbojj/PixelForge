@@ -6,15 +6,15 @@ A hardware implementation of a subset of [OpenGL ES 1.1 Common-Lite](https://reg
 
 ## 🎓 Engineering Thesis
 
-**Title**: Fixed-Pipeline Graphics Accelerator Based on FPGA
-**Author**: Jakub Janeczko
-**Supervisor**: dr Marek Materzok
-**Institution**: Institute of Computer Science, University of Wrocław
-**Year**: 2025/2026
+- **Title**: Fixed-Pipeline Graphics Accelerator Based on FPGA
+- **Author**: Jakub Janeczko
+- **Supervisor**: dr Marek Materzok
+- **Institution**: Institute of Computer Science, University of Wrocław
+- **Year**: 2025/2026
 
 ## 📚 Documentation
 
-- **[Thesis (Polish)](thesis/thesis_new.tex)** - Full bachelor's thesis in LaTeX
+- **[Thesis (Polish)](thesis/thesis_new.tex)** - Full Engineering thesis in LaTeX
 - **[Architecture Documentation](ARCHITECTURE.md)** - Detailed technical architecture
 - **[Demo Applications](software/README.md)** - Documentation of demo programs
 

@@ -11,7 +11,6 @@ from gpu.input_assembly.cores import (
     InputTopologyProcessor,
 )
 from gpu.input_assembly.layouts import InputData, InputMode
-from gpu.primitive_assembly.cores import PrimitiveAssembly
 from gpu.rasterizer.cores import PrimitiveClipper
 from gpu.rasterizer.rasterizer import (
     PerspectiveDivide,
@@ -20,8 +19,6 @@ from gpu.rasterizer.rasterizer import (
 )
 from gpu.utils.layouts import num_lights, num_textures
 from gpu.utils.types import (
-    CullFace,
-    FrontFace,
     IndexKind,
     InputTopology,
     PrimitiveType,
@@ -42,7 +39,6 @@ def make_pa_vertex(pos, color):
         "position_ndc": pos,
         "texcoords": [[0.0, 0.0, 0.0, 1.0] for _ in range(num_textures)],
         "color": color,
-        "front_facing": 1,
     }
 
 
@@ -107,7 +103,6 @@ def test_clip_to_perspective_divide_colors():
     m.submodules.ia = ia = InputAssembly()
     m.submodules.vtx_xf = vtx_xf = VertexTransform()
     m.submodules.vtx_sh = vtx_sh = VertexShading(num_lights)
-    m.submodules.pa = pa = PrimitiveAssembly()
     m.submodules.clip = clip = PrimitiveClipper()
     m.submodules.div = div = PerspectiveDivide()
 
@@ -115,8 +110,7 @@ def test_clip_to_perspective_divide_colors():
     wiring.connect(m, topo.o, ia.i)
     wiring.connect(m, ia.o, vtx_xf.i)
     wiring.connect(m, vtx_xf.o, vtx_sh.i)
-    wiring.connect(m, vtx_sh.o, pa.i)
-    wiring.connect(m, pa.o, clip.i)
+    wiring.connect(m, vtx_sh.o, clip.i)
     wiring.connect(m, clip.o, div.i)
 
     t = SimpleTestbench(m)
@@ -179,10 +173,6 @@ def test_clip_to_perspective_divide_colors():
         ctx.set(vtx_sh.lights[0].ambient, [1.0, 1.0, 1.0])
         ctx.set(vtx_sh.lights[0].diffuse, [0.0, 0.0, 0.0])
         ctx.set(vtx_sh.lights[0].specular, [0.0, 0.0, 0.0])
-
-        ctx.set(pa.config.type, PrimitiveType.TRIANGLES)
-        ctx.set(pa.config.cull, CullFace.NONE)
-        ctx.set(pa.config.winding, FrontFace.CCW)
 
         ctx.set(clip.prim_type, PrimitiveType.TRIANGLES)
 

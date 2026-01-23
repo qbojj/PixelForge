@@ -10,6 +10,8 @@ void mat4_rotate_xyz(float m[16], float rx, float ry, float rz);
 void mat4_translate(float m[16], float x, float y, float z);
 void mat4_scale(float m[16], float sx, float sy, float sz);
 void mat4_multiply(float out[16], const float a[16], const float b[16]);
+
+// Convert 4x4 matrix to 3x3 normal matrix (inverse transpose of upper-left 3x3)
 void mat3_from_mat4(float m3[9], const float m4[16]);
 
 #endif /* PIXELFORGE_DEMO_UTILS_H */

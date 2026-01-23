@@ -347,6 +347,7 @@ int main(int argc, char **argv) {
 
         pf_csr_start(dev->csr_base);
 
+        usleep(100);
         if (wait_for_gpu_ready(dev) != 0) {
             fprintf(stderr, "Frame %d: GPU timeout\n", frame);
             break;

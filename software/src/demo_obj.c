@@ -65,9 +65,9 @@ static int wait_for_gpu_ready(pixelforge_dev *dev) {
     return -1;
 }
 
-/* Convert OBJ model to GPU vertex format */
+/* Convert OBJ model to GPU vertex format, duplicating vertices for per-face normals */
 static size_t convert_obj_to_vertices(const obj_model *model, struct vertex **out_vertices,
-                                      uint16_t **out_indices, vec3f *model_center, float *model_scale) {
+                                      vec3f *model_center, float *model_scale) {
     /* Get bounding box and compute center + scale */
     vec3f min, max;
     obj_get_bounds(model, &min, &max);
@@ -88,36 +88,48 @@ static size_t convert_obj_to_vertices(const obj_model *model, struct vertex **ou
     printf("Model center: (%.2f,%.2f,%.2f), scale: %.2f\n",
            model_center->x, model_center->y, model_center->z, *model_scale);
 
-    /* Allocate vertex and index arrays */
+    /* Duplicate vertices for each face to handle per-face normals correctly */
     size_t num_triangles = model->num_faces / 3;
-    *out_vertices = malloc(model->num_positions * sizeof(struct vertex));
-    *out_indices = malloc(model->num_faces * sizeof(uint16_t));
+    size_t num_vertices = model->num_faces;  /* One unique vertex per face-vertex */
 
-    if (!*out_vertices || !*out_indices) {
-        free(*out_vertices);
-        free(*out_indices);
+    *out_vertices = malloc(num_vertices * sizeof(struct vertex));
+
+    if (!*out_vertices) {
         return 0;
     }
 
-    /* Convert positions */
-    for (size_t i = 0; i < model->num_positions; i++) {
-        const vec3f *pos = &model->positions[i];
+    /* Create a unique vertex for each face-vertex combination */
+    for (size_t i = 0; i < model->num_faces; i++) {
+        const face_vertex *fv = &model->faces[i];
         struct vertex *v = &(*out_vertices)[i];
 
-        /* Center and scale model */
-        float x = (pos->x - model_center->x) * (*model_scale);
-        float y = (pos->y - model_center->y) * (*model_scale);
-        float z = (pos->z - model_center->z) * (*model_scale);
+        /* Get position and transform it */
+        if ((size_t)fv->v_idx < model->num_positions) {
+            const vec3f *pos = &model->positions[fv->v_idx];
 
-        v->pos[0] = fp16_16(x);
-        v->pos[1] = fp16_16(y);
-        v->pos[2] = fp16_16(z);
-        v->pos[3] = fp16_16(1.0f);
+            /* Center and scale model */
+            float x = (pos->x - model_center->x) * (*model_scale);
+            float y = (pos->y - model_center->y) * (*model_scale);
+            float z = (pos->z - model_center->z) * (*model_scale);
 
-        /* Default normal (will compute per-face if not in OBJ) */
-        v->norm[0] = fp16_16(0.0f);
-        v->norm[1] = fp16_16(0.0f);
-        v->norm[2] = fp16_16(1.0f);
+            v->pos[0] = fp16_16(x);
+            v->pos[1] = fp16_16(y);
+            v->pos[2] = fp16_16(z);
+            v->pos[3] = fp16_16(1.0f);
+        }
+
+        /* Set normal if available */
+        if (fv->vn_idx >= 0 && (size_t)fv->vn_idx < model->num_normals) {
+            const vec3f *n = &model->normals[fv->vn_idx];
+            v->norm[0] = fp16_16(n->x);
+            v->norm[1] = fp16_16(n->y);
+            v->norm[2] = fp16_16(n->z);
+        } else {
+            /* Default normal if not specified */
+            v->norm[0] = fp16_16(0.0f);
+            v->norm[1] = fp16_16(0.0f);
+            v->norm[2] = fp16_16(1.0f);
+        }
 
         /* Default white color */
         v->col[0] = fp16_16(0.8f);
@@ -126,40 +138,22 @@ static size_t convert_obj_to_vertices(const obj_model *model, struct vertex **ou
         v->col[3] = fp16_16(1.0f);
     }
 
-    /* Apply normals if present in OBJ */
-    if (model->num_normals > 0) {
-        for (size_t i = 0; i < model->num_faces; i++) {
-            const face_vertex *fv = &model->faces[i];
-            if (fv->vn_idx >= 0 && (size_t)fv->vn_idx < model->num_normals) {
-                const vec3f *n = &model->normals[fv->vn_idx];
-                struct vertex *v = &(*out_vertices)[fv->v_idx];
-                v->norm[0] = fp16_16(n->x);
-                v->norm[1] = fp16_16(n->y);
-                v->norm[2] = fp16_16(n->z);
-            }
-        }
-    }
+    printf("Converted to %zu vertices (duplicated for per-face normals), %zu triangles\n",
+           num_vertices, num_triangles);
 
-    /* Build index buffer */
-    for (size_t i = 0; i < model->num_faces; i++) {
-        (*out_indices)[i] = (uint16_t)model->faces[i].v_idx;
-    }
-
-    printf("Converted to %zu vertices, %zu triangles\n", model->num_positions, num_triangles);
-
-    return num_triangles * 3;  /* Return number of indices */
+    return num_vertices;  /* Return number of vertices */
 }
 
-static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_count,
+static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
                          uint32_t pos_addr, uint32_t norm_addr, uint32_t col_addr,
                          uint16_t stride, uint32_t color_addr, uint32_t ds_addr,
                          const float mv[16], const float p[16]) {
     volatile uint8_t *csr = dev->csr_base;
 
     pixelforge_idx_config_t idx_cfg = {
-        .address = idx_addr,
-        .count = idx_count,
-        .kind = PIXELFORGE_INDEX_U16,
+        .address = 0,
+        .count = vertex_count,
+        .kind = PIXELFORGE_INDEX_NOT_INDEXED,
     };
     pf_csr_set_idx(csr, &idx_cfg);
 
@@ -257,7 +251,7 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_c
     pixelforge_depth_test_config_t depth = {
         .test_enabled = true,
         .write_enabled = true,
-        .compare_op = PIXELFORGE_CMP_LESS,
+        .compare_op = PIXELFORGE_CMP_GREATER_OR_EQUAL,
     };
     pf_csr_set_depth(csr, &depth);
 
@@ -285,19 +279,78 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_c
     pf_csr_set_blend(csr, &blend);
 }
 
+static void set_stencil_write_mode(pixelforge_dev *dev) {
+    volatile uint8_t *csr = dev->csr_base;
+
+    pixelforge_stencil_op_config_t stencil = {
+        .compare_op = PIXELFORGE_CMP_ALWAYS,
+        .reference = 1,
+        .mask = 0xFF,
+        .write_mask = 0xFF,
+        .fail_op = PIXELFORGE_STENCIL_KEEP,
+        .depth_fail_op = PIXELFORGE_STENCIL_KEEP,
+        .pass_op = PIXELFORGE_STENCIL_REPLACE,
+    };
+    pf_csr_set_stencil_front(csr, &stencil);
+    pf_csr_set_stencil_back(csr, &stencil);
+}
+
+static void set_stencil_outline_mode(pixelforge_dev *dev) {
+    volatile uint8_t *csr = dev->csr_base;
+
+    pixelforge_stencil_op_config_t stencil = {
+        .compare_op = PIXELFORGE_CMP_NOT_EQUAL,
+        .reference = 1,
+        .mask = 0xFF,
+        .write_mask = 0x00,
+        .fail_op = PIXELFORGE_STENCIL_KEEP,
+        .depth_fail_op = PIXELFORGE_STENCIL_KEEP,
+        .pass_op = PIXELFORGE_STENCIL_KEEP,
+    };
+    pf_csr_set_stencil_front(csr, &stencil);
+    pf_csr_set_stencil_back(csr, &stencil);
+
+    pixelforge_light_t light = {
+        .ambient = { fp16_16(1.0f), fp16_16(1.0f), fp16_16(1.0f) },
+        .diffuse = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
+        .specular = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
+    };
+    pf_csr_set_light0(csr, &light);
+
+    pixelforge_material_t mat = {
+        .ambient = { fp16_16(1.0f), fp16_16(1.0f), fp16_16(1.0f) },
+        .diffuse = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
+        .specular = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
+        .shininess = fp16_16(1.0f),
+    };
+    pf_csr_set_material(csr, &mat);
+}
+
+static void set_object_color(pixelforge_dev *dev, float r, float g, float b, float a) {
+    volatile uint8_t *csr = dev->csr_base;
+
+    pixelforge_input_attr_t attr = {
+        .mode = PIXELFORGE_ATTR_CONSTANT,
+        .info.constant_value.value = { fp16_16(r), fp16_16(g), fp16_16(b), fp16_16(a) },
+    };
+    pf_csr_set_attr_color(csr, &attr);
+}
+
 int main(int argc, char **argv) {
     int frames = 120;
     const char *obj_file = NULL;
+    bool stencil_outline = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) g_verbose = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--stencil-outline")) stencil_outline = true;
         else if (!strcmp(argv[i], "--obj") && i + 1 < argc) obj_file = argv[++i];
         else if (argv[i][0] != '-') obj_file = argv[i];
     }
 
     if (!obj_file) {
-        fprintf(stderr, "Usage: %s [--verbose] [--frames N] <model.obj>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--verbose] [--frames N] [--stencil-outline] <model.obj>\n", argv[0]);
         return 1;
     }
 
@@ -312,12 +365,11 @@ int main(int argc, char **argv) {
 
     /* Convert to GPU format */
     struct vertex *vertices = NULL;
-    uint16_t *indices = NULL;
     vec3f center;
     float scale;
-    size_t idx_count = convert_obj_to_vertices(&model, &vertices, &indices, &center, &scale);
+    size_t vertex_count = convert_obj_to_vertices(&model, &vertices, &center, &scale);
 
-    if (idx_count == 0) {
+    if (vertex_count == 0) {
         fprintf(stderr, "Failed to convert model\n");
         obj_free(&model);
         return 1;
@@ -327,7 +379,6 @@ int main(int argc, char **argv) {
     if (!dev) {
         fprintf(stderr, "Failed to open device\n");
         free(vertices);
-        free(indices);
         obj_free(&model);
         return 1;
     }
@@ -336,9 +387,7 @@ int main(int argc, char **argv) {
     printf("Rendering %d frames...\n", frames);
 
     /* Calculate buffer sizes */
-    size_t vertex_size = model.num_positions * sizeof(struct vertex);
-    size_t index_size = idx_count * sizeof(uint16_t);
-    size_t vb_size = vertex_size + index_size;
+    size_t vb_size = vertex_count * sizeof(struct vertex);
     vb_size = (vb_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);  /* Align to page */
 
     /* Allocate buffers */
@@ -348,17 +397,14 @@ int main(int argc, char **argv) {
         fprintf(stderr, "VRAM allocation failed\n");
         pixelforge_close_dev(dev);
         free(vertices);
-        free(indices);
         obj_free(&model);
         return 1;
     }
 
     /* Copy geometry to VRAM */
-    memcpy(vb_block.virt, vertices, vertex_size);
-    memcpy(vb_block.virt + vertex_size, indices, index_size);
+    memcpy(vb_block.virt, vertices, vertex_count * sizeof(struct vertex));
 
     free(vertices);
-    free(indices);
     obj_free(&model);
 
     /* Projection matrix */
@@ -375,24 +421,60 @@ int main(int argc, char **argv) {
 
         /* Clear buffers */
         memset(buffer, 0x00, dev->buffer_size);
-        memset(ds_block.virt, 0xFF, dev->x_resolution * dev->y_resolution * 4);
+        memset(ds_block.virt, 0x00, dev->x_resolution * dev->y_resolution * 4);
 
         /* Modelview matrix: rotate model */
         float mv[16], rot[16], trans[16];
         mat4_rotate_xyz(rot, t * 0.2f, t * 0.5f, 0.0f);
         mat4_translate(trans, 0.0f, 0.0f, -5.0f);
-        mat4_multiply(mv, trans, rot);
+        mat4_multiply(mv, rot, trans);
 
-        configure_gpu(dev, vb_block.phys + vertex_size, idx_count,
-                     vb_block.phys + offsetof(struct vertex, pos),
-                     vb_block.phys + offsetof(struct vertex, norm),
-                     vb_block.phys + offsetof(struct vertex, col),
-                     sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p);
-        pf_csr_start(dev->csr_base);
-        if (wait_for_gpu_ready(dev) != 0) break;
+        if (!stencil_outline) {
+            configure_gpu(dev, vertex_count,
+                         vb_block.phys + offsetof(struct vertex, pos),
+                         vb_block.phys + offsetof(struct vertex, norm),
+                         vb_block.phys + offsetof(struct vertex, col),
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p);
+            pf_csr_start(dev->csr_base);
+            if (wait_for_gpu_ready(dev) != 0) break;
+        } else {
+            /* Pass 1: draw model and write stencil */
+            configure_gpu(dev, vertex_count,
+                         vb_block.phys + offsetof(struct vertex, pos),
+                         vb_block.phys + offsetof(struct vertex, norm),
+                         vb_block.phys + offsetof(struct vertex, col),
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p);
+            set_stencil_write_mode(dev);
+            pf_csr_start(dev->csr_base);
+            if (wait_for_gpu_ready(dev) != 0) break;
+
+            /* Pass 2: draw enlarged model where stencil != 1 (outline) */
+            float scale_m[16], mv_outline[16];
+            mat4_scale(scale_m, 1.15f, 1.15f, 1.15f);
+            mat4_multiply(mv_outline, scale_m, mv);
+
+            configure_gpu(dev, vertex_count,
+                         vb_block.phys + offsetof(struct vertex, pos),
+                         vb_block.phys + offsetof(struct vertex, norm),
+                         vb_block.phys + offsetof(struct vertex, col),
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv_outline, p);
+            set_stencil_outline_mode(dev);
+            set_object_color(dev, 1.0f, 0.8f, 0.0f, 1.0f);
+
+            pixelforge_depth_test_config_t depth = {
+                .test_enabled = false,
+                .write_enabled = false,
+                .compare_op = PIXELFORGE_CMP_ALWAYS,
+            };
+            pf_csr_set_depth(dev->csr_base, &depth);
+
+            pf_csr_start(dev->csr_base);
+            if (wait_for_gpu_ready(dev) != 0) break;
+        }
 
         pixelforge_swap_buffers(dev);
-        printf("Frame %d/%d rendered\n", frame + 1, frames);
+        if (stencil_outline) printf("Frame %d/%d rendered (stencil-outline)\n", frame + 1, frames);
+        else printf("Frame %d/%d rendered\n", frame + 1, frames);
     }
 
     pixelforge_close_dev(dev);

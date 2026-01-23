@@ -56,10 +56,20 @@ struct vertex {
     int32_t col[4];
 };
 
-static int wait_for_gpu_ready(pixelforge_dev *dev) {
+enum gpu_stage {
+    GPU_STAGE_IA = 0,
+    GPU_STAGE_VTX_TRANSFORM = 1,
+    GPU_STAGE_PREP_RASTER = 2,
+    GPU_STAGE_PER_PIXEL = 3,
+};
+
+static int wait_for_gpu_ready(pixelforge_dev *dev, enum gpu_stage stage) {
+    // component is really ready if all prior stages are also ready
+    uint32_t mask = (1u << (stage + 1)) - 1;
+
     for (int i = 0; i < 10000000 && keep_running; ++i) {
-        uint32_t ready = pf_csr_get_ready(dev->csr_base);
-        if (ready & 0x1) return 0;
+        uint32_t ready_components = pf_csr_get_ready_components(dev->csr_base);
+        if ((ready_components & mask) == mask) return 0;
         usleep(50);
     }
     return -1;
@@ -225,7 +235,7 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_c
     pixelforge_depth_test_config_t depth = {
         .test_enabled = true,
         .write_enabled = true,
-        .compare_op = PIXELFORGE_CMP_LESS,
+        .compare_op = PIXELFORGE_CMP_GREATER_OR_EQUAL,
     };
     pf_csr_set_depth(csr, &depth);
 
@@ -312,7 +322,7 @@ int main(int argc, char **argv) {
 
         /* Clear buffers */
         memset(buffer, 0x00, dev->buffer_size);
-        memset(ds_block.virt, 0xFF, dev->x_resolution * dev->y_resolution * 4);
+        memset(ds_block.virt, 0x00, dev->x_resolution * dev->y_resolution * 4);
 
         /* Render 4 cubes orbiting in a circle at varying depths
          * They circle around the camera at z=-2.5, creating occlusion */
@@ -336,8 +346,8 @@ int main(int argc, char **argv) {
             mat4_scale(scale, 0.5f, 0.5f, 0.5f);
 
             /* Apply transformations: scale -> rotate -> translate */
-            mat4_multiply(mv, rot, scale);
-            mat4_multiply(mv, trans, mv);
+            mat4_multiply(mv, scale, rot);
+            mat4_multiply(mv, mv, trans);
 
             configure_gpu(dev, vb_block.phys + (4 + i) * 1024, idx_count,
                          vb_block.phys + i * 1024 + offsetof(struct vertex, pos),
@@ -345,9 +355,16 @@ int main(int argc, char **argv) {
                          vb_block.phys + i * 1024 + offsetof(struct vertex, col),
                          sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p, (i == 0));
             pf_csr_start(dev->csr_base);
-            if (wait_for_gpu_ready(dev) != 0) break;
+
+            // We can send next cube right after the previous one finishes vertex transform
+            // -> we overlap rasterization of previous cube with transform of next cube
+            if (wait_for_gpu_ready(dev, GPU_STAGE_VTX_TRANSFORM) != 0) break;
         }
 
+        if (wait_for_gpu_ready(dev, GPU_STAGE_PER_PIXEL) != 0) {
+            fprintf(stderr, "Frame %d: GPU timeout\n", frame);
+            break;
+        }
         pixelforge_swap_buffers(dev);
         printf("Frame %d/%d rendered\n", frame + 1, frames);
     }

@@ -8,16 +8,15 @@ OBJ := $(SRC:.c=.o)
 LIB := libpixelforgecsr.a
 DEMO := pixelforge_demo
 DEMO_CUBE := demo_cube
-DEMO_LIGHTING := demo_lighting
 DEMO_DEPTH := demo_depth
-DEMO_STENCIL := demo_stencil
 DEMO_OBJ := demo_obj
 DUMP_VGA := dump_vga_dma
 DUMP_FB2 := dump_fb2
 DUMP_GPU_CSR := dump_gpu_csr
 DEVMEM2 := devmem2
+OBJS := $(shell find . -iname '*.obj')
 
-DEMOS := $(DEMO) $(DEMO_CUBE) $(DEMO_LIGHTING) $(DEMO_DEPTH) $(DEMO_STENCIL) $(DEMO_OBJ)
+DEMOS := $(DEMO) $(DEMO_CUBE) $(DEMO_DEPTH) $(DEMO_OBJ)
 DUMPS := $(DUMP_FB2) $(DUMP_GPU_CSR) $(DUMP_VGA)
 TOOLS := $(DEVMEM2)
 
@@ -35,13 +34,7 @@ $(DEMO): src/pixelforge_demo.o $(LIB)
 $(DEMO_CUBE): src/demo_cube.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
 
-$(DEMO_LIGHTING): src/demo_lighting.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
-
 $(DEMO_DEPTH): src/demo_depth.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
-
-$(DEMO_STENCIL): src/demo_stencil.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
 
 $(DEMO_OBJ): src/demo_obj.o $(LIB)
@@ -65,9 +58,9 @@ clean:
 	find src -name '*.o' -delete
 	find src -name '*.d' -delete
 
-install: $(DEMOS) $(DUMPS) $(TOOLS)
+install: $(DEMOS) $(DUMPS) $(TOOLS) $(OBJS)
 	cp -f $^ $(DESTDIR)
 
-.PHONY: all clean
+.PHONY: all clean install
 
 -include $(OBJ:.o=.d)

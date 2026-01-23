@@ -59,7 +59,7 @@ module soc_system_vga_resampler (
  *                           Parameter Declarations                          *
  *****************************************************************************/
 
-parameter IDW			= 23;
+parameter IDW			= 31;
 parameter ODW			= 29;
 
 parameter IEW			= 1;
@@ -67,7 +67,7 @@ parameter OEW			= 1;
 
 parameter ALPHA			= 10'h3FF;
 
-parameter STATUS_IN		= 16'h0017;
+parameter STATUS_IN		= 16'h0000;
 parameter STATUS_OUT	= 16'h0019;
 
 /*****************************************************************************
@@ -183,7 +183,7 @@ assign r = {stream_in_data[23:16], stream_in_data[23:22]};
 assign g = {stream_in_data[15: 8], stream_in_data[15:14]};
 assign b = {stream_in_data[ 7: 0], stream_in_data[ 7: 6]};
 
-assign a = ALPHA;
+assign a = {stream_in_data[31:24], stream_in_data[31:30]};
 
 assign converted_data[29:20] = r[ 9: 0];
 assign converted_data[19:10] = g[ 9: 0];

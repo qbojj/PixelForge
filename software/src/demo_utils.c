@@ -8,6 +8,11 @@ void mat4_identity(float m[16]) {
     m[0] = m[5] = m[10] = m[15] = 1.0f;
 }
 
+static void mat3_identity(float m[9]) {
+    memset(m, 0, sizeof(float) * 9);
+    m[0] = m[4] = m[8] = 1.0f;
+}
+
 void mat4_perspective(float m[16], float fovy, float aspect, float near, float far) {
     float f = 1.0f / tanf(fovy / 2.0f);
     memset(m, 0, sizeof(float) * 16);
@@ -62,8 +67,50 @@ void mat4_multiply(float out[16], const float a[16], const float b[16]) {
     memcpy(out, temp, sizeof(float) * 16);
 }
 
+static void mat4_cast_to_mat3(float out[9], const float m[16]) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            out[i * 3 + j] = m[i * 4 + j];
+        }
+    }
+}
+
+static void mat4_transpose(float out[16], const float m[16]) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            out[i * 4 + j] = m[j * 4 + i];
+        }
+    }
+}
+
+static float mat3_det(const float m[9]) {
+    return m[0] * (m[4] * m[8] - m[5] * m[7]) -
+           m[1] * (m[3] * m[8] - m[5] * m[6]) +
+           m[2] * (m[3] * m[7] - m[4] * m[6]);
+}
+
 void mat3_from_mat4(float m3[9], const float m4[16]) {
-    m3[0] = m4[0];  m3[3] = m4[1];  m3[6] = m4[2];
-    m3[1] = m4[4];  m3[4] = m4[5];  m3[7] = m4[6];
-    m3[2] = m4[8];  m3[5] = m4[9];  m3[8] = m4[10];
+    float m4_t[16];
+    mat4_transpose(m4_t, m4);
+
+    float minv[9];
+    mat4_cast_to_mat3(minv, m4_t);
+
+    float det = mat3_det(minv);
+    if (fabsf(det) < 1e-6f) {
+        // Singular matrix, return identity
+        mat3_identity(m3);
+        return;
+    }
+
+    float invdet = 1.0f / det;
+    m3[0] = (minv[4] * minv[8] - minv[5] * minv[7]) * invdet;
+    m3[1] = (minv[2] * minv[7] - minv[1] * minv[8]) * invdet;
+    m3[2] = (minv[1] * minv[5] - minv[2] * minv[4]) * invdet;
+    m3[3] = (minv[5] * minv[6] - minv[3] * minv[8]) * invdet;
+    m3[4] = (minv[0] * minv[8] - minv[2] * minv[6]) * invdet;
+    m3[5] = (minv[2] * minv[3] - minv[0] * minv[5]) * invdet;
+    m3[6] = (minv[3] * minv[7] - minv[4] * minv[6]) * invdet;
+    m3[7] = (minv[1] * minv[6] - minv[0] * minv[7]) * invdet;
+    m3[8] = (minv[0] * minv[4] - minv[1] * minv[3]) * invdet;
 }

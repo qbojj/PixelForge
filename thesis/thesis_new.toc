@@ -1,0 +1,83 @@
+\babel@toc {english}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {english}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {english}{}\relax
+\babel@toc {polish}{}\relax
+\babel@toc {english}{}\relax
+\babel@toc {polish}{}\relax
+\contentsline {chapter}{\numberline {1.}Wprowadzenie}{7}{chapter.1}%
+\contentsline {section}{\numberline {1.1.}Kontekst i motywacja}{7}{section.1.1}%
+\contentsline {section}{\numberline {1.2.}Cel i zakres pracy}{8}{section.1.2}%
+\contentsline {section}{\numberline {1.3.}Struktura pracy}{8}{section.1.3}%
+\contentsline {chapter}{\numberline {2.}Podstawy teoretyczne}{11}{chapter.2}%
+\contentsline {section}{\numberline {2.1.}Standard OpenGL ES 1.1}{11}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1.}Charakterystyka standardu}{11}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2.}Potok graficzny fixed-pipeline}{11}{subsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.1.3.}Model oświetlenia Phonga}{12}{subsection.2.1.3}%
+\contentsline {section}{\numberline {2.2.}Układy FPGA}{13}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1.}Architektura układów FPGA}{13}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2.}Intel Cyclone V SoC}{13}{subsection.2.2.2}%
+\contentsline {section}{\numberline {2.3.}Amaranth HDL}{14}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1.}Charakterystyka języka}{14}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2.}Podstawowe konstrukcje}{14}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3.}Amaranth SoC}{14}{subsection.2.3.3}%
+\contentsline {section}{\numberline {2.4.}Arytmetyka stałoprzecinkowa}{15}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1.}Zastosowane formaty}{15}{subsection.2.4.1}%
+\contentsline {chapter}{\numberline {3.}Architektura akceleratora}{17}{chapter.3}%
+\contentsline {section}{\numberline {3.1.}Założenia projektowe}{17}{section.3.1}%
+\contentsline {section}{\numberline {3.2.}Struktura potoku graficznego}{17}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1.}Schemat blokowy}{18}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2.}Index Generator}{18}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3.}Input Topology Processor}{19}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4.}Input Assembly}{19}{subsection.3.2.4}%
+\contentsline {section}{\numberline {3.3.}Interfejsy systemowe}{19}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1.}Magistrala Wishbone}{19}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2.}Interfejs CSR}{20}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3.}Integracja z~Avalon}{20}{subsection.3.3.3}%
+\contentsline {chapter}{\numberline {4.}Implementacja}{23}{chapter.4}%
+\contentsline {section}{\numberline {4.1.}Transformacje geometryczne}{23}{section.4.1}%
+\contentsline {subsection}{\numberline {4.1.1.}Macierze transformacji}{23}{subsection.4.1.1}%
+\contentsline {subsection}{\numberline {4.1.2.}Algorytm mnożenia macierz-wektor}{23}{subsection.4.1.2}%
+\contentsline {subsection}{\numberline {4.1.3.}Optymalizacja sprzętowa}{24}{subsection.4.1.3}%
+\contentsline {section}{\numberline {4.2.}System oświetlenia}{24}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1.}Implementacja modelu Phonga}{24}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2.}Obliczanie iloczynu skalarnego}{25}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3.}Wsparcie wielu źródeł światła}{25}{subsection.4.2.3}%
+\contentsline {section}{\numberline {4.3.}Rasteryzacja}{25}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1.}Clipping}{25}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2.}Perspective Divide}{26}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3.}Viewport Transform}{26}{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {4.3.4.}Triangle Setup}{26}{subsection.4.3.4}%
+\contentsline {subsection}{\numberline {4.3.5.}Skanowanie trójkątów}{26}{subsection.4.3.5}%
+\contentsline {subsection}{\numberline {4.3.6.}Interpolacja barycentryczna}{27}{subsection.4.3.6}%
+\contentsline {section}{\numberline {4.4.}Operacje per-fragment}{27}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1.}Depth Test}{27}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2.}Stencil Test}{28}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3.}Blending}{28}{subsection.4.4.3}%
+\contentsline {chapter}{\numberline {5.}Testowanie i weryfikacja}{31}{chapter.5}%
+\contentsline {section}{\numberline {5.1.}Metodologia testowania}{31}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1.}Framework testowy}{31}{subsection.5.1.1}%
+\contentsline {section}{\numberline {5.2.}Wyniki testów}{32}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1.}Testy jednostkowe - pokrycie}{32}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2.}Testy wizualne}{33}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3.}Aplikacje demonstracyjne}{33}{subsection.5.2.3}%
+\contentsline {section}{\numberline {5.3.}Analiza wydajności}{33}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1.}Zużycie zasobów FPGA}{33}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2.}Częstotliwość taktowania}{34}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3.}Przepustowość}{34}{subsection.5.3.3}%
+\contentsline {chapter}{\numberline {6.}Podsumowanie i wnioski}{35}{chapter.6}%
+\contentsline {section}{\numberline {6.1.}Osiągnięte cele}{35}{section.6.1}%
+\contentsline {section}{\numberline {6.2.}Wnioski}{36}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1.}Osiągnięcia techniczne}{36}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2.}Ograniczenia obecnej implementacji}{36}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3.}Wartość edukacyjna}{36}{subsection.6.2.3}%
+\contentsline {section}{\numberline {6.3.}Możliwości rozwoju}{37}{section.6.3}%
+\contentsline {subsection}{\numberline {6.3.1.}Krótkoterminowe}{37}{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {6.3.2.}Średnioterminowe}{37}{subsection.6.3.2}%
+\contentsline {subsection}{\numberline {6.3.3.}Długoterminowe}{37}{subsection.6.3.3}%
+\contentsline {section}{\numberline {6.4.}Wkład autora}{38}{section.6.4}%
+\contentsline {chapter}{Bibliografia}{39}{chapter*.7}%

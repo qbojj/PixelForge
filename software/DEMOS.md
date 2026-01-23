@@ -10,20 +10,38 @@ make
 
 This will build all demos:
 - `pixelforge_demo` - Original demo with basic triangle rendering
+- `demo_cube` - Basic rotating cube
 - `demo_lighting` - Rotating object with directional diffuse lighting
 - `demo_depth` - Multiple cubes demonstrating depth buffer operations
 - `demo_stencil` - Object outline/glow effect using stencil buffer
 
 ## Demo Descriptions
 
-### 1. demo_lighting - Rotating Object with Lighting
+### 1. demo_cube - Basic Rotating Cube
+
+**Features showcased:**
+- Podstawowa rasteryzacja trójkątów i interpolacja kolorów
+- Obrót sześcianu w przestrzeni 3D
+
+**Usage:**
+```bash
+./demo_cube [--frames N] [--verbose]
+```
+
+**What it does:**
+Renderuje kolorowy sześcian obracający się w czasie, stanowiący minimalny
+przykład przepływu danych przez cały potok graficzny.
+
+---
+
+### 2. demo_lighting - Rotating Object with Lighting
 
 **Features showcased:**
 - Vertex transformations (model-view-projection matrices)
 - Rotation animation
 - Directional diffuse lighting (Phong shading model)
 - Normal vector transformation
-- 3D icosahedron geometry
+- 3D cube geometry
 
 **Usage:**
 ```bash
@@ -31,14 +49,14 @@ This will build all demos:
 ```
 
 **What it does:**
-Renders a rotating icosahedron (20-sided polyhedron) with directional diffuse lighting. The object rotates continuously, showing how normals are properly transformed and used for lighting calculations. The light is positioned to create realistic shading on the surface.
+Renders a rotating cube with directional diffuse lighting. The object rotates continuously, showing how normals are properly transformed and used for lighting calculations. The light is positioned to create realistic shading on the surface.
 
 **Performance note:**
 Default is 60 frames. Each frame takes time to render on the FPGA GPU, so expect this to run slowly. Reduce frame count for quicker testing.
 
 ---
 
-### 2. demo_depth - Depth Buffer with Occluding Cubes
+### 3. demo_depth - Depth Buffer with Occluding Cubes
 
 **Features showcased:**
 - Depth buffer testing and writing
@@ -65,7 +83,7 @@ Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider
 
 ---
 
-### 3. demo_stencil - Object Outline/Glow Effect
+### 4. demo_stencil - Object Outline/Glow Effect
 
 **Features showcased:**
 - Stencil buffer operations (write, test, masking)
@@ -133,7 +151,10 @@ All demos allocate:
 - Vertex buffers (from VRAM allocator)
 
 ### Fixed-Point Format
-All vertex data, matrices, and colors use 16.16 fixed-point format (SQ(16,16)) to match the GPU's internal representation.
+Vertex data and matrices używają formatów dostosowanych do bloków DSP:
+- Q13.13 dla pozycji, normalnych i macierzy
+- Q1.17 dla barycentrów/głębokości/znormalizowanych kierunków
+- UQ0.9 dla kanałów koloru/alph
 
 ## Troubleshooting
 

@@ -15,7 +15,6 @@ def make_vertex(x, y, z, w=1.0, r=1.0, g=1.0, b=1.0, a=1.0):
         "position_ndc": [x, y, z, w],
         "texcoords": [[0.0, 0.0, 0.0, 1.0] for _ in range(num_textures)],
         "color": [r, g, b, a],
-        "front_facing": 1,
     }
 
 

@@ -9,14 +9,6 @@
    categories="System" />
  <parameter name="bonusData"><![CDATA[bonusData
 {
-   element alt_vip_cl_cps_0
-   {
-      datum _sortIndex
-      {
-         value = "5";
-         type = "int";
-      }
-   }
    element clk
    {
       datum _sortIndex
@@ -39,27 +31,6 @@
       {
          value = "-13369549";
          type = "int";
-      }
-   }
-   element fb
-   {
-      datum _sortIndex
-      {
-         value = "4";
-         type = "int";
-      }
-   }
-   element fb.control
-   {
-      datum _lockedAddress
-      {
-         value = "1";
-         type = "boolean";
-      }
-      datum baseAddress
-      {
-         value = "65536";
-         type = "String";
       }
    }
    element gpu
@@ -114,7 +85,7 @@
    {
       datum _sortIndex
       {
-         value = "2";
+         value = "1";
          type = "int";
       }
    }
@@ -138,7 +109,7 @@
    {
       datum _sortIndex
       {
-         value = "1";
+         value = "2";
          type = "int";
       }
    }
@@ -190,31 +161,7 @@
          type = "String";
       }
    }
-   element vga_pll
-   {
-      datum _sortIndex
-      {
-         value = "7";
-         type = "int";
-      }
-   }
-   element video_bridge_vip_to_raw_bridge_0
-   {
-      datum _sortIndex
-      {
-         value = "6";
-         type = "int";
-      }
-   }
-   element video_dual_clock_buffer_0
-   {
-      datum _sortIndex
-      {
-         value = "10";
-         type = "int";
-      }
-   }
-   element video_pixel_buffer_dma_0
+   element vga_ctrl
    {
       datum _sortIndex
       {
@@ -222,7 +169,15 @@
          type = "int";
       }
    }
-   element video_pixel_buffer_dma_0.avalon_control_slave
+   element vga_dma
+   {
+      datum _sortIndex
+      {
+         value = "5";
+         type = "int";
+      }
+   }
+   element vga_dma.avalon_control_slave
    {
       datum _lockedAddress
       {
@@ -235,19 +190,27 @@
          type = "String";
       }
    }
-   element video_rgb_resampler_0
+   element vga_fifo
    {
       datum _sortIndex
       {
-         value = "9";
+         value = "7";
          type = "int";
       }
    }
-   element video_vga_controller_0
+   element vga_pll
    {
       datum _sortIndex
       {
-         value = "11";
+         value = "4";
+         type = "int";
+      }
+   }
+   element vga_resampler
+   {
+      datum _sortIndex
+      {
+         value = "6";
          type = "int";
       }
    }
@@ -304,102 +267,14 @@
  <interface name="reset" internal="clk.clk_in_reset" type="reset" dir="end" />
  <interface
    name="vga"
-   internal="video_vga_controller_0.external_interface"
+   internal="vga_ctrl.external_interface"
    type="conduit"
    dir="end" />
- <module
-   name="alt_vip_cl_cps_0"
-   kind="alt_vip_cl_cps"
-   version="24.1"
-   enabled="0">
-  <parameter name="AUTO_DEVICE" value="5CSEMA5F31C6" />
-  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
-  <parameter name="AUTO_DEVICE_SPEEDGRADE" value="6" />
-  <parameter name="BITS_PER_SYMBOL" value="8" />
-  <parameter name="EXTRA_PIPELINING" value="0" />
-  <parameter name="INPUT_0_COLOR_PLANES_ARE_IN_PARALLEL" value="1" />
-  <parameter name="INPUT_0_FIFO" value="0" />
-  <parameter name="INPUT_0_FIFO_SIZE" value="8" />
-  <parameter name="INPUT_0_NUMBER_OF_COLOR_PLANES" value="4" />
-  <parameter name="INPUT_0_PATTERN" value="B,G,R,A" />
-  <parameter name="INPUT_0_PIXELS_IN_PARALLEL" value="1" />
-  <parameter name="INPUT_0_TWO_PIXELS_PATTERN" value="0" />
-  <parameter name="INPUT_1_COLOR_PLANES_ARE_IN_PARALLEL" value="1" />
-  <parameter name="INPUT_1_FIFO" value="0" />
-  <parameter name="INPUT_1_FIFO_SIZE" value="8" />
-  <parameter name="INPUT_1_NUMBER_OF_COLOR_PLANES" value="3" />
-  <parameter name="INPUT_1_PATTERN" value="C0,C1,C2" />
-  <parameter name="INPUT_1_PIXELS_IN_PARALLEL" value="1" />
-  <parameter name="INPUT_1_TWO_PIXELS_PATTERN" value="0" />
-  <parameter name="INPUT_VALIDATION" value="1" />
-  <parameter name="NUMBER_OF_INPUTS" value="1" />
-  <parameter name="NUMBER_OF_OUTPUTS" value="1" />
-  <parameter name="OUTPUT_0_COLOR_PLANES_ARE_IN_PARALLEL" value="1" />
-  <parameter name="OUTPUT_0_FIFO" value="0" />
-  <parameter name="OUTPUT_0_FIFO_SIZE" value="8" />
-  <parameter name="OUTPUT_0_NUMBER_OF_COLOR_PLANES" value="3" />
-  <parameter name="OUTPUT_0_PATTERN" value="B,G,R" />
-  <parameter name="OUTPUT_0_PIXELS_IN_PARALLEL" value="1" />
-  <parameter name="OUTPUT_0_TWO_PIXELS_PATTERN" value="0" />
-  <parameter name="OUTPUT_1_COLOR_PLANES_ARE_IN_PARALLEL" value="1" />
-  <parameter name="OUTPUT_1_FIFO" value="0" />
-  <parameter name="OUTPUT_1_FIFO_SIZE" value="8" />
-  <parameter name="OUTPUT_1_NUMBER_OF_COLOR_PLANES" value="3" />
-  <parameter name="OUTPUT_1_PATTERN" value="C0,C1,C2" />
-  <parameter name="OUTPUT_1_PIXELS_IN_PARALLEL" value="1" />
-  <parameter name="OUTPUT_1_TWO_PIXELS_PATTERN" value="0" />
-  <parameter name="OUTPUT_VALIDATION" value="1" />
-  <parameter name="USER_PACKET_SUPPORT" value="PASSTHROUGH" />
-  <parameter name="USER_PKT_0_TO_0" value="0" />
-  <parameter name="USER_PKT_0_TO_1" value="0" />
-  <parameter name="USER_PKT_1_TO_0" value="0" />
-  <parameter name="USER_PKT_1_TO_1" value="1" />
- </module>
  <module name="clk" kind="clock_source" version="24.1" enabled="1">
   <parameter name="clockFrequency" value="50000000" />
   <parameter name="clockFrequencyKnown" value="true" />
   <parameter name="inputClockFrequency" value="0" />
   <parameter name="resetSynchronousEdges" value="NONE" />
- </module>
- <module name="fb" kind="alt_vip_cl_vfb" version="24.1" enabled="0">
-  <parameter name="AUTO_DEVICE" value="5CSEMA5F31C6" />
-  <parameter name="AUTO_DEVICE_SPEEDGRADE" value="6" />
-  <parameter name="BITS_PER_SYMBOL" value="8" />
-  <parameter name="BURST_ALIGNMENT" value="1" />
-  <parameter name="CLOCKS_ARE_SEPARATE" value="0" />
-  <parameter name="COLOR_PLANES_ARE_IN_PARALLEL" value="1" />
-  <parameter name="CONTROLLED_DROP_REPEAT" value="0" />
-  <parameter name="DROP_FRAMES" value="1" />
-  <parameter name="DROP_INVALID_FIELDS" value="1" />
-  <parameter name="DROP_REPEAT_USER" value="0" />
-  <parameter name="FAMILY" value="Cyclone V" />
-  <parameter name="INTERLACED_SUPPORT" value="0" />
-  <parameter name="IS_FRAME_READER" value="1" />
-  <parameter name="IS_FRAME_WRITER" value="0" />
-  <parameter name="IS_SYNC_MASTER" value="0" />
-  <parameter name="IS_SYNC_SLAVE" value="0" />
-  <parameter name="LINE_BASED_BUFFERING" value="0" />
-  <parameter name="MAX_HEIGHT" value="480" />
-  <parameter name="MAX_SYMBOLS_PER_PACKET" value="10" />
-  <parameter name="MAX_WIDTH" value="640" />
-  <parameter name="MEM_BASE_ADDR" value="1006632960" />
-  <parameter name="MEM_BUFFER_OFFSET" value="2097152" />
-  <parameter name="MEM_PORT_WIDTH" value="128" />
-  <parameter name="MULTI_FRAME_DELAY" value="1" />
-  <parameter name="NUMBER_OF_COLOR_PLANES" value="4" />
-  <parameter name="PIXELS_IN_PARALLEL" value="1" />
-  <parameter name="PRIORITIZE_FMAX" value="0" />
-  <parameter name="READER_RUNTIME_CONTROL" value="1" />
-  <parameter name="READY_LATENCY" value="1" />
-  <parameter name="READ_BURST_TARGET" value="32" />
-  <parameter name="READ_FIFO_DEPTH" value="64" />
-  <parameter name="REPEAT_FRAMES" value="1" />
-  <parameter name="TEST_INIT" value="0" />
-  <parameter name="USER_PACKETS_MAX_STORAGE" value="0" />
-  <parameter name="USE_BUFFER_OFFSET" value="0" />
-  <parameter name="WRITER_RUNTIME_CONTROL" value="0" />
-  <parameter name="WRITE_BURST_TARGET" value="32" />
-  <parameter name="WRITE_FIFO_DEPTH" value="64" />
  </module>
  <module name="gpu" kind="gpu" version="1.0" enabled="1" />
  <module name="gpu_pll" kind="altera_pll" version="24.1" enabled="1">
@@ -521,8 +396,8 @@
   <parameter name="gui_multiply_factor" value="1" />
   <parameter name="gui_number_of_clocks" value="2" />
   <parameter name="gui_operation_mode" value="direct" />
-  <parameter name="gui_output_clock_frequency0" value="30.0" />
-  <parameter name="gui_output_clock_frequency1" value="120.0" />
+  <parameter name="gui_output_clock_frequency0" value="25.0" />
+  <parameter name="gui_output_clock_frequency1" value="100.0" />
   <parameter name="gui_output_clock_frequency10" value="100.0" />
   <parameter name="gui_output_clock_frequency11" value="100.0" />
   <parameter name="gui_output_clock_frequency12" value="100.0" />
@@ -701,11 +576,11 @@
   <parameter name="ENABLE_USER_ECC" value="false" />
   <parameter name="EXPORT_AFI_HALF_CLK" value="false" />
   <parameter name="EXTRA_SETTINGS" value="" />
-  <parameter name="F2H_AXI_CLOCK_FREQ" value="100" />
-  <parameter name="F2H_SDRAM0_CLOCK_FREQ" value="100000000" />
-  <parameter name="F2H_SDRAM1_CLOCK_FREQ" value="120000000" />
-  <parameter name="F2H_SDRAM2_CLOCK_FREQ" value="120000000" />
-  <parameter name="F2H_SDRAM3_CLOCK_FREQ" value="30000000" />
+  <parameter name="F2H_AXI_CLOCK_FREQ" value="100000000" />
+  <parameter name="F2H_SDRAM0_CLOCK_FREQ" value="100" />
+  <parameter name="F2H_SDRAM1_CLOCK_FREQ" value="100" />
+  <parameter name="F2H_SDRAM2_CLOCK_FREQ" value="100" />
+  <parameter name="F2H_SDRAM3_CLOCK_FREQ" value="100" />
   <parameter name="F2H_SDRAM4_CLOCK_FREQ" value="100" />
   <parameter name="F2H_SDRAM5_CLOCK_FREQ" value="100" />
   <parameter name="F2SCLK_COLDRST_Enable" value="true" />
@@ -715,10 +590,10 @@
   <parameter name="F2SCLK_SDRAMCLK_Enable" value="false" />
   <parameter name="F2SCLK_SDRAMCLK_FREQ" value="0" />
   <parameter name="F2SCLK_WARMRST_Enable" value="true" />
-  <parameter name="F2SDRAM_Type">Avalon-MM Bidirectional,Avalon-MM Bidirectional,Avalon-MM Bidirectional,Avalon-MM Bidirectional</parameter>
-  <parameter name="F2SDRAM_Width" value="32,32,32,32" />
+  <parameter name="F2SDRAM_Type" value="" />
+  <parameter name="F2SDRAM_Width" value="" />
   <parameter name="F2SINTERRUPT_Enable" value="true" />
-  <parameter name="F2S_Width" value="0" />
+  <parameter name="F2S_Width" value="1" />
   <parameter name="FIX_READ_LATENCY" value="8" />
   <parameter name="FORCED_NON_LDC_ADDR_CMD_MEM_CK_INVERT" value="false" />
   <parameter name="FORCED_NUM_WRITE_FR_CYCLE_SHIFTS" value="0" />
@@ -795,7 +670,7 @@
   <parameter name="MEM_CK_PHASE" value="0.0" />
   <parameter name="MEM_CK_WIDTH" value="1" />
   <parameter name="MEM_CLK_EN_WIDTH" value="1" />
-  <parameter name="MEM_CLK_FREQ" value="533.333" />
+  <parameter name="MEM_CLK_FREQ" value="533.3333" />
   <parameter name="MEM_CLK_FREQ_MAX" value="1066.667" />
   <parameter name="MEM_COL_ADDR_WIDTH" value="10" />
   <parameter name="MEM_CS_WIDTH" value="1" />
@@ -1135,6 +1010,50 @@
   <parameter name="usb_mp_clk_div" value="0" />
   <parameter name="use_default_mpu_clk" value="true" />
  </module>
+ <module
+   name="vga_ctrl"
+   kind="altera_up_avalon_video_vga_controller"
+   version="18.0"
+   enabled="1">
+  <parameter name="AUTO_CLK_CLOCK_RATE" value="25000000" />
+  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
+  <parameter name="board" value="DE1-SoC" />
+  <parameter name="device" value="VGA Connector" />
+  <parameter name="resolution" value="VGA 640x480" />
+  <parameter name="underflow_flag" value="false" />
+ </module>
+ <module
+   name="vga_dma"
+   kind="altera_up_avalon_video_pixel_buffer_dma"
+   version="18.0"
+   enabled="1">
+  <parameter name="AUTO_CLK_CLOCK_RATE" value="100000000" />
+  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
+  <parameter name="addr_mode" value="Consecutive" />
+  <parameter name="back_start_address" value="1023410176" />
+  <parameter name="color_space" value="32-bit RGBA" />
+  <parameter name="image_height" value="480" />
+  <parameter name="image_width" value="640" />
+  <parameter name="start_address" value="1006632960" />
+ </module>
+ <module
+   name="vga_fifo"
+   kind="altera_avalon_dc_fifo"
+   version="24.1"
+   enabled="1">
+  <parameter name="BITS_PER_SYMBOL" value="10" />
+  <parameter name="CHANNEL_WIDTH" value="0" />
+  <parameter name="ENABLE_EXPLICIT_MAXCHANNEL" value="false" />
+  <parameter name="ERROR_WIDTH" value="0" />
+  <parameter name="EXPLICIT_MAXCHANNEL" value="0" />
+  <parameter name="FIFO_DEPTH" value="1024" />
+  <parameter name="RD_SYNC_DEPTH" value="3" />
+  <parameter name="SYMBOLS_PER_BEAT" value="3" />
+  <parameter name="USE_IN_FILL_LEVEL" value="0" />
+  <parameter name="USE_OUT_FILL_LEVEL" value="0" />
+  <parameter name="USE_PACKETS" value="1" />
+  <parameter name="WR_SYNC_DEPTH" value="3" />
+ </module>
  <module name="vga_pll" kind="altera_pll" version="24.1" enabled="1">
   <parameter name="debug_print_output" value="false" />
   <parameter name="debug_use_rbc_taf_method" value="false" />
@@ -1252,10 +1171,10 @@
   <parameter name="gui_fractional_cout" value="32" />
   <parameter name="gui_mif_generate" value="false" />
   <parameter name="gui_multiply_factor" value="1" />
-  <parameter name="gui_number_of_clocks" value="2" />
+  <parameter name="gui_number_of_clocks" value="1" />
   <parameter name="gui_operation_mode" value="direct" />
   <parameter name="gui_output_clock_frequency0" value="25.0" />
-  <parameter name="gui_output_clock_frequency1" value="100.0" />
+  <parameter name="gui_output_clock_frequency1" value="50.0" />
   <parameter name="gui_output_clock_frequency10" value="100.0" />
   <parameter name="gui_output_clock_frequency11" value="100.0" />
   <parameter name="gui_output_clock_frequency12" value="100.0" />
@@ -1339,42 +1258,7 @@
   <parameter name="gui_use_locked" value="false" />
  </module>
  <module
-   name="video_bridge_vip_to_raw_bridge_0"
-   kind="altera_up_avalon_video_bridge_vip_to_raw_bridge"
-   version="18.0"
-   enabled="0">
-  <parameter name="AUTO_CLK_CLOCK_RATE" value="70000000" />
-  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
-  <parameter name="color_bits" value="8" />
-  <parameter name="color_planes" value="4" />
- </module>
- <module
-   name="video_dual_clock_buffer_0"
-   kind="altera_up_avalon_video_dual_clock_buffer"
-   version="18.0"
-   enabled="1">
-  <parameter name="AUTO_CLOCK_STREAM_IN_CLOCK_RATE" value="100000000" />
-  <parameter name="AUTO_CLOCK_STREAM_OUT_CLOCK_RATE" value="25000000" />
-  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
-  <parameter name="color_bits" value="10" />
-  <parameter name="color_planes" value="3" />
- </module>
- <module
-   name="video_pixel_buffer_dma_0"
-   kind="altera_up_avalon_video_pixel_buffer_dma"
-   version="18.0"
-   enabled="1">
-  <parameter name="AUTO_CLK_CLOCK_RATE" value="100000000" />
-  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
-  <parameter name="addr_mode" value="Consecutive" />
-  <parameter name="back_start_address" value="1023410176" />
-  <parameter name="color_space" value="32-bit RGBA" />
-  <parameter name="image_height" value="480" />
-  <parameter name="image_width" value="640" />
-  <parameter name="start_address" value="1006632960" />
- </module>
- <module
-   name="video_rgb_resampler_0"
+   name="vga_resampler"
    kind="altera_up_avalon_video_rgb_resampler"
    version="18.0"
    enabled="1">
@@ -1384,23 +1268,11 @@
   <parameter name="input_type" value="32-bit RGBA" />
   <parameter name="output_type" value="30-bit RGB" />
  </module>
- <module
-   name="video_vga_controller_0"
-   kind="altera_up_avalon_video_vga_controller"
-   version="18.0"
-   enabled="1">
-  <parameter name="AUTO_CLK_CLOCK_RATE" value="25000000" />
-  <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
-  <parameter name="board" value="DE1-SoC" />
-  <parameter name="device" value="VGA Connector" />
-  <parameter name="resolution" value="VGA 640x480" />
-  <parameter name="underflow_flag" value="false" />
- </module>
  <connection
    kind="avalon"
    version="24.1"
-   start="video_pixel_buffer_dma_0.avalon_pixel_dma_master"
-   end="hps.f2h_sdram0_data">
+   start="vga_dma.avalon_pixel_dma_master"
+   end="hps.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x0000" />
   <parameter name="defaultConnection" value="false" />
@@ -1409,7 +1281,7 @@
    kind="avalon"
    version="24.1"
    start="gpu.avl_color"
-   end="hps.f2h_sdram2_data">
+   end="hps.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x0000" />
   <parameter name="defaultConnection" value="false" />
@@ -1418,7 +1290,7 @@
    kind="avalon"
    version="24.1"
    start="gpu.avl_depthstencil"
-   end="hps.f2h_sdram1_data">
+   end="hps.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x0000" />
   <parameter name="defaultConnection" value="false" />
@@ -1427,7 +1299,7 @@
    kind="avalon"
    version="24.1"
    start="gpu.avl_index"
-   end="hps.f2h_sdram3_data">
+   end="hps.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x0000" />
   <parameter name="defaultConnection" value="false" />
@@ -1436,7 +1308,7 @@
    kind="avalon"
    version="24.1"
    start="gpu.avl_vertex"
-   end="hps.f2h_sdram3_data">
+   end="hps.f2h_axi_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x0000" />
   <parameter name="defaultConnection" value="false" />
@@ -1445,18 +1317,9 @@
    kind="avalon"
    version="24.1"
    start="hps.h2f_lw_axi_master"
-   end="video_pixel_buffer_dma_0.avalon_control_slave">
+   end="vga_dma.avalon_control_slave">
   <parameter name="arbitrationPriority" value="1" />
   <parameter name="baseAddress" value="0x00020000" />
-  <parameter name="defaultConnection" value="false" />
- </connection>
- <connection
-   kind="avalon"
-   version="24.1"
-   start="hps.h2f_lw_axi_master"
-   end="fb.control">
-  <parameter name="arbitrationPriority" value="1" />
-  <parameter name="baseAddress" value="0x00010000" />
   <parameter name="defaultConnection" value="false" />
  </connection>
  <connection
@@ -1471,28 +1334,18 @@
  <connection
    kind="avalon_streaming"
    version="24.1"
-   start="video_dual_clock_buffer_0.avalon_dc_buffer_source"
-   end="video_vga_controller_0.avalon_vga_sink" />
+   start="vga_dma.avalon_pixel_source"
+   end="vga_resampler.avalon_rgb_sink" />
  <connection
    kind="avalon_streaming"
    version="24.1"
-   start="video_pixel_buffer_dma_0.avalon_pixel_source"
-   end="video_rgb_resampler_0.avalon_rgb_sink" />
+   start="vga_resampler.avalon_rgb_source"
+   end="vga_fifo.in" />
  <connection
    kind="avalon_streaming"
    version="24.1"
-   start="video_rgb_resampler_0.avalon_rgb_source"
-   end="video_dual_clock_buffer_0.avalon_dc_buffer_sink" />
- <connection
-   kind="avalon_streaming"
-   version="24.1"
-   start="fb.dout"
-   end="video_bridge_vip_to_raw_bridge_0.avalon_vip_to_raw_sink" />
- <connection
-   kind="avalon_streaming"
-   version="24.1"
-   start="fb.dout"
-   end="alt_vip_cl_cps_0.din_0" />
+   start="vga_fifo.out"
+   end="vga_ctrl.avalon_vga_sink" />
  <connection
    kind="clock"
    version="24.1"
@@ -1504,79 +1357,44 @@
    kind="clock"
    version="24.1"
    start="vga_pll.outclk0"
-   end="video_vga_controller_0.clk" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="gpu_pll.outclk0"
-   end="video_bridge_vip_to_raw_bridge_0.clk" />
+   end="vga_ctrl.clk" />
  <connection kind="clock" version="24.1" start="gpu_pll.outclk0" end="gpu.clock" />
  <connection
    kind="clock"
    version="24.1"
    start="vga_pll.outclk0"
-   end="video_dual_clock_buffer_0.clock_stream_out" />
+   end="vga_fifo.out_clk" />
  <connection
    kind="clock"
    version="24.1"
    start="gpu_pll.outclk0"
-   end="hps.f2h_sdram3_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="gpu_pll.outclk0"
-   end="fb.main_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="vga_pll.outclk1"
-   end="video_pixel_buffer_dma_0.clk" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="vga_pll.outclk1"
-   end="video_rgb_resampler_0.clk" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="vga_pll.outclk1"
-   end="video_dual_clock_buffer_0.clock_stream_in" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="vga_pll.outclk1"
-   end="hps.f2h_sdram0_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="gpu_pll.outclk1"
-   end="hps.f2h_sdram1_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="gpu_pll.outclk1"
-   end="hps.f2h_sdram2_clock" />
- <connection
-   kind="clock"
-   version="24.1"
-   start="gpu_pll.outclk1"
    end="gpu.pixel_clock" />
+ <connection kind="clock" version="24.1" start="gpu_pll.outclk1" end="vga_dma.clk" />
  <connection
-   kind="interrupt"
+   kind="clock"
    version="24.1"
-   start="hps.f2h_irq0"
-   end="fb.control_interrupt">
-  <parameter name="irqNumber" value="1" />
- </connection>
- <connection kind="interrupt" version="24.1" start="hps.f2h_irq0" end="gpu.ready">
-  <parameter name="irqNumber" value="0" />
- </connection>
+   start="gpu_pll.outclk1"
+   end="vga_resampler.clk" />
+ <connection
+   kind="clock"
+   version="24.1"
+   start="gpu_pll.outclk1"
+   end="hps.f2h_axi_clock" />
+ <connection
+   kind="clock"
+   version="24.1"
+   start="gpu_pll.outclk1"
+   end="vga_fifo.in_clk" />
  <connection
    kind="reset"
    version="24.1"
    start="clk.clk_reset"
-   end="alt_vip_cl_cps_0.main_reset" />
- <connection kind="reset" version="24.1" start="clk.clk_reset" end="fb.main_reset" />
+   end="vga_fifo.in_clk_reset" />
+ <connection
+   kind="reset"
+   version="24.1"
+   start="clk.clk_reset"
+   end="vga_fifo.out_clk_reset" />
  <connection
    kind="reset"
    version="24.1"
@@ -1587,34 +1405,15 @@
    kind="reset"
    version="24.1"
    start="clk.clk_reset"
-   end="video_vga_controller_0.reset" />
- <connection
-   kind="reset"
-   version="24.1"
-   start="clk.clk_reset"
-   end="video_bridge_vip_to_raw_bridge_0.reset" />
+   end="vga_ctrl.reset" />
  <connection kind="reset" version="24.1" start="clk.clk_reset" end="gpu_pll.reset" />
  <connection kind="reset" version="24.1" start="clk.clk_reset" end="vga_pll.reset" />
  <connection
    kind="reset"
    version="24.1"
    start="clk.clk_reset"
-   end="video_rgb_resampler_0.reset" />
- <connection
-   kind="reset"
-   version="24.1"
-   start="clk.clk_reset"
-   end="video_pixel_buffer_dma_0.reset" />
- <connection
-   kind="reset"
-   version="24.1"
-   start="clk.clk_reset"
-   end="video_dual_clock_buffer_0.reset_stream_in" />
- <connection
-   kind="reset"
-   version="24.1"
-   start="clk.clk_reset"
-   end="video_dual_clock_buffer_0.reset_stream_out" />
+   end="vga_resampler.reset" />
+ <connection kind="reset" version="24.1" start="clk.clk_reset" end="vga_dma.reset" />
  <interconnectRequirement for="$system" name="qsys_mm.clockCrossingAdapter" value="AUTO" />
  <interconnectRequirement for="$system" name="qsys_mm.enableInstrumentation" value="FALSE" />
  <interconnectRequirement for="$system" name="qsys_mm.maxAdditionalLatency" value="2" />

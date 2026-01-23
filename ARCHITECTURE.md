@@ -169,3 +169,13 @@ For more detailed information on specific components, algorithms, and implementa
 Please see [software/DEMOS.md](software/DEMOS.md) for detailed instructions on running the demo applications and utilizing debugging utilities.
 
 It also exposes some headers for using the GPU from C applications, located in `software/include/` and `libpixelforge.a` static library for easier integration.
+
+## Clock Domains
+
+The Pixel-Forge GPU uses two main clock domains to optimize performance and timing closure:
+- **Vertex/Primitive Clock Domain**: This domain runs the vertex processing stages (Input Assembly, Vertex Transform, Vertex Shading, Primitive Clipper, Perspective Divide, Triangle Prep). It can operate at a lower frequency as these stages are less performance-critical and have more variable latency.
+- **Rasterization/Fragment Clock Domain**: This domain runs the rasterization and fragment processing stages (Rasterizer, Depth/Stencil Test, Framebuffer Output). It operates at a higher frequency to maximize pixel throughput and ensure smooth rendering performance.
+
+The two clock domains are connected via asynchronous FIFOs, allowing for safe data transfer between them while accommodating their different timing requirements. This separation helps to improve overall pipeline efficiency and allows for better optimization of each stage according to its specific performance needs.
+
+This helps expecially since the whole pipeline is fill-rate limited, so having a high pixel throughput is essential for good performance.

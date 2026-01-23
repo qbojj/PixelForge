@@ -203,14 +203,10 @@ All demos support:
 
 ## Performance Considerations
 
-The PixelForge GPU is implemented on an FPGA and runs at a modest clock speed. Rendering is done in software-like fashion through the hardware pipeline. **Each frame can take several seconds to complete.**
-
-**Tips for faster testing:**
-- Use `--frames 10` or similar to reduce the number of frames
-- Start with low polygon count objects
-- The demos are already optimized for the GPU's speed (simple geometry, not too many vertices)
-
-Reduce these if testing on slower hardware or if you want quicker results.
+The PixelForge GPU is implemented on an FPGA and runs at a modest clock speed. Rendering is done in software-like fashion through the hardware pipeline. The whole pipeline is fill-rate limited, so performance depends heavily on the number of pixels drawn rather than just triangle count. Complex scenes with many overdrawn pixels may run slower. For best performance:
+- Minimize overdraw
+- use early culling (back-face culling)
+- if not required, skip depth stencil operations altogether
 
 ## Technical Details
 

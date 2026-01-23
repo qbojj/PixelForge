@@ -63,26 +63,9 @@ static void report_ready_status(volatile uint8_t *csr) {
 }
 
 /*
- * Helper to wait for GPU ready (polling or UIO)
+ * Helper to wait for GPU ready (polling)
  */
-static int wait_for_gpu_ready(pixelforge_dev *dev, const char *uio_path) {
-    if (uio_path) {
-        int uio = open(uio_path, O_RDWR);
-        if (uio < 0) {
-            perror("open uio");
-            return -1;
-        }
-        uint32_t count = 1;
-        if (read(uio, &count, sizeof(count)) != sizeof(count)) {
-            perror("uio read");
-            close(uio);
-            return -1;
-        }
-        write(uio, &count, sizeof(count));
-        close(uio);
-        return 0;
-    }
-
+static int wait_for_gpu_ready(pixelforge_dev *dev) {
     /* Poll ready bit */
     for (int i = 0; i < 10000000 && keep_running; ++i) {
         uint32_t ready = pf_csr_get_ready(dev->csr_base);
@@ -325,14 +308,12 @@ static void usage(const char *prog) {
     fprintf(stderr, "  --xor-test            Fill screen with XOR pattern and exit\n");
     fprintf(stderr, "  --render-triangle     Render triangle using GPU pipeline\n");
     fprintf(stderr, "  --frames N            Render N frames (default: 1)\n");
-    fprintf(stderr, "  --uio /dev/uioX       Use UIO for IRQ (otherwise poll)\n");
     fprintf(stderr, "  --verbose             Enable debug output\n");
     fprintf(stderr, "  --throttle            Throttle debug output with delays\n");
     fprintf(stderr, "  --front               Operate on front buffer instead of back buffer\n");
 }
 
 int main(int argc, char **argv) {
-    const char *uio_path = NULL;
     bool clear_test = false;
     bool xor_test = false;
     bool render_triangle = false;
@@ -348,8 +329,6 @@ int main(int argc, char **argv) {
             render_triangle = 1;
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
             frames = atoi(argv[++i]);
-        } else if (!strcmp(argv[i], "--uio") && i + 1 < argc) {
-            uio_path = argv[++i];
         } else if (!strcmp(argv[i], "--verbose")) {
             g_verbose = 1;
         } else if (!strcmp(argv[i], "--front")) {
@@ -458,7 +437,7 @@ int main(int argc, char **argv) {
             DBG("Frame %d: GPU started", frame);
 
             /* Wait for completion */
-            if (wait_for_gpu_ready(dev, uio_path) != 0) {
+            if (wait_for_gpu_ready(dev) != 0) {
                 fprintf(stderr, "Frame %d: GPU timeout\n", frame);
                 break;
             }

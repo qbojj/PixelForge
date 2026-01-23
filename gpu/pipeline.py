@@ -166,13 +166,11 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.div_to_tri_prep_fifo = fifo_div_tri_prep = fifo.SyncFIFOBuffered(
             width=Shape.cast(tri_prep.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = (
-            fifo.AsyncFIFOBuffered(
-                width=Shape.cast(rast.i.p.shape()).width,
-                depth=fifo_size_default,
-                w_domain="sync",
-                r_domain="pixel",
-            )
+        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = fifo.AsyncFIFO(
+            width=Shape.cast(rast.i.p.shape()).width,
+            depth=fifo_size_default,
+            w_domain="sync",
+            r_domain="pixel",
         )
         m.submodules.rast_to_tex_fifo = fifo_rast_tex = DomainRenamer("pixel")(
             fifo.SyncFIFOBuffered(

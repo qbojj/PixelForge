@@ -1,58 +1,70 @@
 # PixelForge GPU Feature Demos
 
-This directory contains several demo programs showcasing different features of the PixelForge GPU.
+This directory contains several demo programs showcasing different features of the PixelForge GPU, along with debugging utilities for inspecting GPU and display controller state.
 
 ## Building the Demos
 
 ```bash
+CROSS_COMPILE=arm-none-linux-gnueabihf-  # Or any suitable ARM linux toolchain
 make
 ```
 
 This will build all demos:
-- `pixelforge_demo` - Original demo with basic triangle rendering
-- `demo_cube` - Basic rotating cube
-- `demo_lighting` - Rotating object with directional diffuse lighting
+- `pixelforge_demo` - Basic triangle rendering (minimal example)
+- `demo_cube` - Rotating colored cube
 - `demo_depth` - Multiple cubes demonstrating depth buffer operations
-- `demo_stencil` - Object outline/glow effect using stencil buffer
+- `demo_obj` - Wavefront OBJ model viewer with optional stencil outline effect
+
+And debugging utilities:
+- `dump_gpu_csr` - Display all PixelForge GPU control/status registers
+- `dump_vga_dma` - Display VGA Pixel Buffer DMA controller registers
 
 ## Demo Descriptions
 
-### 1. demo_cube - Basic Rotating Cube
+### 1. pixelforge_demo - Basic Triangle Rendering
 
 **Features showcased:**
-- Podstawowa rasteryzacja trójkątów i interpolacja kolorów
-- Obrót sześcianu w przestrzeni 3D
+- Basic triangle rasterization and color interpolation
+- Vertex transformations
+- Minimal example of data flow through the rendering pipeline
 
 **Usage:**
 ```bash
-./demo_cube [--frames N] [--verbose]
+./pixelforge_demo [options]
 ```
 
+**Options:**
+- `--clear-test` - Fill screen with test pattern and exit
+- `--xor-test` - Fill screen with XOR pattern and exit
+- `--render-triangle` - Render triangle using GPU pipeline
+- `--frames N` - Render N frames (default: 1)
+- `--verbose` - Enable debug output
+- `--throttle` - Throttle debug output with delays
+- `--front` - Operate on front buffer instead of back buffer
+
 **What it does:**
-Renderuje kolorowy sześcian obracający się w czasie, stanowiący minimalny
-przykład przepływu danych przez cały potok graficzny.
+Renders a simple colored triangle demonstrating the basic graphics pipeline. By default renders a single frame with test pattern fill. Use `--render-triangle` to actually render geometry. This is the minimal example showing how vertices are transformed, rasterized, and rendered with interpolated colors.
 
 ---
 
-### 2. demo_lighting - Rotating Object with Lighting
+### 2. demo_cube - Rotating Colored Cube
 
 **Features showcased:**
-- Vertex transformations (model-view-projection matrices)
-- Rotation animation
-- Directional diffuse lighting (Phong shading model)
-- Normal vector transformation
-- 3D cube geometry
+- Triangle rasterization and color interpolation
+- Rotation animation in 3D space
+- Basic vertex transformations
 
 **Usage:**
 ```bash
-./demo_lighting [--frames N] [--verbose]
+./demo_cube [--verbose] [--frames N]
 ```
 
-**What it does:**
-Renders a rotating cube with directional diffuse lighting. The object rotates continuously, showing how normals are properly transformed and used for lighting calculations. The light is positioned to create realistic shading on the surface.
+**Options:**
+- `--verbose` - Enable debug output
+- `--frames N` - Render N frames (default: varies)
 
-**Performance note:**
-Default is 60 frames. Each frame takes time to render on the FPGA GPU, so expect this to run slowly. Reduce frame count for quicker testing.
+**What it does:**
+Renders a colorful cube rotating in real-time, demonstrating basic 3D transformations and color interpolation across triangle surfaces.
 
 ---
 
@@ -67,51 +79,115 @@ Default is 60 frames. Each frame takes time to render on the FPGA GPU, so expect
 
 **Usage:**
 ```bash
-./demo_depth [--frames N] [--verbose]
+./demo_depth [--verbose] [--frames N]
 ```
+
+**Options:**
+- `--verbose` - Enable debug output
+- `--frames N` - Render N frames (default: 120)
 
 **What it does:**
 Renders three colored cubes at different depths:
-- **Red cube** (back): Rotates slowly in the background at Z=-3.0
-- **Green cube** (middle): Oscillates left-right at Z=-2.0
-- **Blue cube** (front): Rotates and moves up-down at Z=-1.2
-
-The depth buffer ensures that closer objects properly occlude farther ones. As the blue cube moves, you can see it hide parts of the green and red cubes behind it.
 
 **Performance note:**
 Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider reducing frame count for testing.
 
 ---
 
-### 4. demo_stencil - Object Outline/Glow Effect
+### 4. demo_obj - Wavefront OBJ Model Viewer
 
 **Features showcased:**
-- Stencil buffer operations (write, test, masking)
-- Two-pass rendering technique
-- Stencil compare operations (ALWAYS, NOT_EQUAL)
-- Stencil operations (REPLACE, KEEP)
-- Creative visual effects using stencil buffer
+- Loading and rendering Wavefront OBJ files (vertices, normals, faces)
+- Vertex duplication for per-face normal support
+- Non-indexed rendering mode
+- Rotation animation with perspective projection
+- Directional diffuse lighting
+- Optional stencil buffer outline effect
 
 **Usage:**
 ```bash
-./demo_stencil [--frames N] [--verbose]
+./demo_obj [--verbose] [--frames N] [--stencil-outline] [--obj FILE] <model.obj>
 ```
 
+**Options:**
+- `--verbose` - Enable debug output
+- `--frames N` - Number of animation frames (default: 90)
+- `--stencil-outline` - Enable two-pass stencil outline rendering
+- `--obj FILE` - Alternate way to specify OBJ file
+- `<model.obj>` - Path to Wavefront OBJ file (e.g., `sphere.obj`, `tetrahedron.obj`)
+
 **What it does:**
-Creates a glowing outline effect around a rotating octahedron using a two-pass rendering technique:
+Loads a 3D model from a Wavefront OBJ file and renders it rotating under directional lighting. The demo supports models with per-vertex or per-face normals.
 
-**Pass 1:** Draw the object normally (orange color) and mark the stencil buffer with value 1 wherever the object is drawn.
+When `--stencil-outline` is enabled, uses a two-pass rendering technique:
+- **Pass 1:** Draw the object normally with lighting and mark stencil buffer (value=1)
+- **Pass 2:** Draw slightly enlarged object with solid color only where stencil≠1 (creating outline)
 
-**Pass 2:** Draw a slightly enlarged version of the same object (yellow/orange glow color) but only where the stencil value is NOT 1. This creates a border/glow effect around the original object.
+This creates a glowing outline effect around the object, commonly used for selection highlights and visual emphasis in games.
 
-This technique is commonly used in games for:
-- Selection highlights
-- Outline effects
-- Object silhouettes
-- Glow effects
+**Included models:**
+- `sphere.obj` - Smooth sphere (482 vertices, 960 faces, per-vertex normals)
+- `sphere_faceted.obj` - Faceted sphere (per-face normals for flat shading)
+- `tetrahedron.obj` - Simple 4-sided polyhedron (4 vertices, 4 faces)
 
 **Performance note:**
-Default is 90 frames. Each frame requires 2 draw calls (base object + outline). The effect is best seen when the object is rotating.
+All provided models achieve 60FPS on PixelForge. As the pipeline is fill-rate limited we don't expect performance to drop significantly with more complex models, but extremely high polygon counts may impact frame time.
+
+---
+
+## Debugging Utilities
+
+### dump_gpu_csr - GPU Register Inspector
+
+Displays all control and status registers of the PixelForge GPU pipeline.
+
+**Usage:**
+```bash
+./dump_gpu_csr
+```
+
+**What it shows:**
+- **Index configuration:** Index buffer address, count, format (U8/U16/NOT_INDEXED)
+- **Vertex layout:** Attribute offsets, stride, base address
+- **Input topology:** Primitive type (triangles/triangle_strip/triangle_fan), restart index
+- **Viewport:** X/Y/Z transformation parameters, depth range
+- **Depth/stencil test:** Enable flags, compare operations, write masks
+- **Stencil operations:** FAIL/ZFAIL/ZPASS actions, reference values
+- **Fragment output:** Color/depth/stencil buffer addresses, formats
+- **Color blending:** Blend enable, factors, equations, alpha operations
+- **Primitive assembly:** Front-face mode, cull mode, polygon mode
+- **Transforms:** Model-view-projection matrices (4x4 fixed-point)
+- **Lighting:** Light direction, ambient/diffuse colors
+- **Draw control:** Start index, primitive count, instance count
+
+**Use cases:**
+- Debugging rendering issues (wrong buffer addresses, incorrect state)
+- Verifying GPU configuration before/after draw calls
+- Understanding current pipeline state when demos hang
+- Checking matrix values and lighting parameters
+
+---
+
+### dump_vga_dma - VGA DMA Controller Inspector
+
+Displays registers of the Altera VGA Pixel Buffer DMA controller.
+
+**Usage:**
+```bash
+./dump_vga_dma
+```
+
+**What it shows:**
+- **Buffer addresses:** Front buffer and back buffer physical addresses
+- **Resolution:** Display width and height in pixels
+- **Status:** Buffer status register
+- **Control:** DMA control flags
+
+**Use cases:**
+- Verifying framebuffer addresses are correctly set
+- Checking resolution configuration
+- Debugging display issues (no output, wrong buffer)
+- Confirming double-buffering setup
 
 ---
 
@@ -120,6 +196,10 @@ Default is 90 frames. Each frame requires 2 draw calls (base object + outline). 
 All demos support:
 - `--frames N` - Render N frames (default varies per demo)
 - `--verbose` - Enable debug output showing GPU state and operations
+
+`demo_obj` additionally supports:
+- `--stencil-outline` - Enable outline effect using stencil buffer
+- `--obj FILE` or positional argument - Specify OBJ file
 
 ## Performance Considerations
 
@@ -130,50 +210,51 @@ The PixelForge GPU is implemented on an FPGA and runs at a modest clock speed. R
 - Start with low polygon count objects
 - The demos are already optimized for the GPU's speed (simple geometry, not too many vertices)
 
-**Frame counts chosen for each demo:**
-- `demo_lighting`: 60 frames (one full rotation at ~2 FPS if each frame takes 0.5s)
-- `demo_depth`: 120 frames (longer animation showing occlusion clearly)
-- `demo_stencil`: 90 frames (enough to see the outline effect from multiple angles)
-
 Reduce these if testing on slower hardware or if you want quicker results.
 
 ## Technical Details
 
 ### Geometry Complexity
-- **Icosahedron** (demo_lighting): 12 vertices, 20 triangles (60 indices)
-- **Cube** (demo_depth): 8 vertices, 12 triangles (36 indices), 3 cubes per frame
-- **Octahedron** (demo_stencil): 6 vertices, 8 triangles (24 indices), drawn twice per frame
+- **Triangle** (pixelforge_demo): Basic example
+- **Cube** (demo_depth, demo_cube): 8 vertices, 12 triangles (36 indices)
+- **Sphere** (sphere.obj): 482 vertices, 960 triangles (smooth per-vertex normals)
+- **Tetrahedron** (tetrahedron.obj): 4 vertices, 4 triangles (per-face normals)
+
+**Note:** demo_obj uses non-indexed rendering with vertex duplication, so the actual vertex count sent to GPU is 3× the triangle count.
 
 ### Buffer Usage
 All demos allocate:
 - Front and back color buffers (640x480x4 bytes each)
-- Depth/stencil buffer (640x480x4 bytes, D16_X8_S8 format)
+- Depth/stencil buffer if required (640x480x4 bytes, D16_X8_S8 format)
 - Vertex buffers (from VRAM allocator)
 
 ### Fixed-Point Format
-Vertex data and matrices używają formatów dostosowanych do bloków DSP:
-- Q13.13 dla pozycji, normalnych i macierzy
-- Q1.17 dla barycentrów/głębokości/znormalizowanych kierunków
-- UQ0.9 dla kanałów koloru/alph
+Vertex data and matrices use formats optimized for DSP blocks:
+- Q13.13 for positions, normals and matrices
+- Q1.17 for barycentric coordinates, depth, normalized directions
+- UQ0.9 for color/alpha channels
 
 ## Troubleshooting
 
 **GPU doesn't finish rendering:**
-- Check `/dev/mem` permissions (usually need root)
+- Check `/dev/mem` permissions (usually need root or `sudo`)
 - Verify VRAM is properly mapped at 0x3C000000
 - Check GPU CSR base at 0xFF200000
 - Use `--verbose` to see where it gets stuck
+- Use `dump_gpu_csr` to inspect current GPU state
 
 **Visual artifacts:**
 - Make sure depth/stencil buffer is properly cleared between frames
 - Check that matrices are correct (especially projection near/far planes)
 - Verify vertex normals are normalized
+- Use `dump_vga_dma` to verify framebuffer addresses
 
-**Performance is very slow:**
-- This is expected! The GPU is running on an FPGA at modest clock speeds
-- Reduce frame count with `--frames` option
-- Simplify geometry if needed (though these demos are already quite simple)
+**No display output:**
+- Check VGA DMA configuration with `dump_vga_dma`
+- Verify front/back buffer addresses are in valid VRAM range
+- Ensure resolution matches display expectations (640×480)
+- Reboot the FPGA board to reset VGA controller if needed
 
-## License
-
-Same as the main PixelForge project.
+**Memory access errors:**
+- Check kernel messages (`dmesg`) for memory mapping failures
+- Verify physical addresses match your hardware configuration

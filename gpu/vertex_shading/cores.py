@@ -81,9 +81,6 @@ class VertexShading(wiring.Component):
         # Output color (accumulated across all lights)
         out_color = Signal.like(self.o.p.color)
 
-        with m.If(self.o.ready):
-            m.d.sync += self.o.valid.eq(0)
-
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.i.ready.eq(1)
@@ -201,13 +198,13 @@ class VertexShading(wiring.Component):
                     m.next = next_state_name
 
             with m.State("SEND"):
-                with m.If(~self.o.valid | self.o.ready):
-                    m.d.sync += [
-                        self.o.p.position_ndc.eq(v_pos_ndc),
-                        self.o.p.texcoords.eq(v_texcoords),
-                        self.o.p.color.eq(out_color),
-                        self.o.valid.eq(1),
-                    ]
+                m.d.comb += [
+                    self.o.p.position_ndc.eq(v_pos_ndc),
+                    self.o.p.texcoords.eq(v_texcoords),
+                    self.o.p.color.eq(out_color),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
                     m.next = "IDLE"
 
         return m

@@ -60,7 +60,6 @@ class RasterizerLayoutNDC(data.Struct):
     position_ndc: data.ArrayLayout(
         fixed.UQ(1, 17), 3
     )  # x/w, y/w, z/w (perspective-divided, UQ(1,17))
-    w: FixedPoint  # Original w value for perspective correction
     inv_w: FixedPoint  # 1/w in standard FixedPoint format
     texcoords: texture_coords
     color: Vector4

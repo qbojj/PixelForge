@@ -47,7 +47,9 @@ module soc_system_mm_interconnect_0 (
 		output wire        hps_f2h_axi_slave_rready,                                       //                                                         .rready
 		input  wire        gpu_pll_outclk0_clk,                                            //                                          gpu_pll_outclk0.clk
 		input  wire        gpu_pll_outclk1_clk,                                            //                                          gpu_pll_outclk1.clk
+		input  wire        sys_pll_outclk0_clk,                                            //                                          sys_pll_outclk0.clk
 		input  wire        gpu_pixel_reset_reset_bridge_in_reset_reset,                    //                    gpu_pixel_reset_reset_bridge_in_reset.reset
+		input  wire        gpu_reset_reset_bridge_in_reset_reset,                          //                          gpu_reset_reset_bridge_in_reset.reset
 		input  wire        hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset, // hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset.reset
 		input  wire        vga_dma_reset_reset_bridge_in_reset_reset,                      //                      vga_dma_reset_reset_bridge_in_reset.reset
 		input  wire [31:0] gpu_avl_color_address,                                          //                                            gpu_avl_color.address
@@ -522,7 +524,7 @@ module soc_system_mm_interconnect_0 (
 		.AV_LINEWRAPBURSTS           (0),
 		.AV_REGISTERINCOMINGSIGNALS  (0)
 	) vga_dma_avalon_pixel_dma_master_translator (
-		.clk                    (gpu_pll_outclk1_clk),                                                                //                       clk.clk
+		.clk                    (sys_pll_outclk0_clk),                                                                //                       clk.clk
 		.reset                  (vga_dma_reset_reset_bridge_in_reset_reset),                                          //                     reset.reset
 		.uav_address            (vga_dma_avalon_pixel_dma_master_translator_avalon_universal_master_0_address),       // avalon_universal_master_0.address
 		.uav_burstcount         (vga_dma_avalon_pixel_dma_master_translator_avalon_universal_master_0_burstcount),    //                          .burstcount
@@ -582,7 +584,7 @@ module soc_system_mm_interconnect_0 (
 		.AV_LINEWRAPBURSTS           (0),
 		.AV_REGISTERINCOMINGSIGNALS  (0)
 	) gpu_avl_color_translator (
-		.clk                    (gpu_pll_outclk0_clk),                                              //                       clk.clk
+		.clk                    (gpu_pll_outclk1_clk),                                              //                       clk.clk
 		.reset                  (gpu_pixel_reset_reset_bridge_in_reset_reset),                      //                     reset.reset
 		.uav_address            (gpu_avl_color_translator_avalon_universal_master_0_address),       // avalon_universal_master_0.address
 		.uav_burstcount         (gpu_avl_color_translator_avalon_universal_master_0_burstcount),    //                          .burstcount
@@ -642,7 +644,7 @@ module soc_system_mm_interconnect_0 (
 		.AV_LINEWRAPBURSTS           (0),
 		.AV_REGISTERINCOMINGSIGNALS  (0)
 	) gpu_avl_depthstencil_translator (
-		.clk                    (gpu_pll_outclk0_clk),                                                     //                       clk.clk
+		.clk                    (gpu_pll_outclk1_clk),                                                     //                       clk.clk
 		.reset                  (gpu_pixel_reset_reset_bridge_in_reset_reset),                             //                     reset.reset
 		.uav_address            (gpu_avl_depthstencil_translator_avalon_universal_master_0_address),       // avalon_universal_master_0.address
 		.uav_burstcount         (gpu_avl_depthstencil_translator_avalon_universal_master_0_burstcount),    //                          .burstcount
@@ -703,7 +705,7 @@ module soc_system_mm_interconnect_0 (
 		.AV_REGISTERINCOMINGSIGNALS  (0)
 	) gpu_avl_index_translator (
 		.clk                    (gpu_pll_outclk0_clk),                                              //                       clk.clk
-		.reset                  (gpu_pixel_reset_reset_bridge_in_reset_reset),                      //                     reset.reset
+		.reset                  (gpu_reset_reset_bridge_in_reset_reset),                            //                     reset.reset
 		.uav_address            (gpu_avl_index_translator_avalon_universal_master_0_address),       // avalon_universal_master_0.address
 		.uav_burstcount         (gpu_avl_index_translator_avalon_universal_master_0_burstcount),    //                          .burstcount
 		.uav_read               (gpu_avl_index_translator_avalon_universal_master_0_read),          //                          .read
@@ -763,7 +765,7 @@ module soc_system_mm_interconnect_0 (
 		.AV_REGISTERINCOMINGSIGNALS  (0)
 	) gpu_avl_vertex_translator (
 		.clk                    (gpu_pll_outclk0_clk),                                               //                       clk.clk
-		.reset                  (gpu_pixel_reset_reset_bridge_in_reset_reset),                       //                     reset.reset
+		.reset                  (gpu_reset_reset_bridge_in_reset_reset),                             //                     reset.reset
 		.uav_address            (gpu_avl_vertex_translator_avalon_universal_master_0_address),       // avalon_universal_master_0.address
 		.uav_burstcount         (gpu_avl_vertex_translator_avalon_universal_master_0_burstcount),    //                          .burstcount
 		.uav_read               (gpu_avl_vertex_translator_avalon_universal_master_0_read),          //                          .read
@@ -850,7 +852,7 @@ module soc_system_mm_interconnect_0 (
 		.USE_READRESPONSE          (0),
 		.USE_WRITERESPONSE         (0)
 	) vga_dma_avalon_pixel_dma_master_agent (
-		.clk                   (gpu_pll_outclk1_clk),                                                                //       clk.clk
+		.clk                   (sys_pll_outclk0_clk),                                                                //       clk.clk
 		.reset                 (vga_dma_reset_reset_bridge_in_reset_reset),                                          // clk_reset.reset
 		.av_address            (vga_dma_avalon_pixel_dma_master_translator_avalon_universal_master_0_address),       //        av.address
 		.av_write              (vga_dma_avalon_pixel_dma_master_translator_avalon_universal_master_0_write),         //          .write
@@ -931,7 +933,7 @@ module soc_system_mm_interconnect_0 (
 		.USE_READRESPONSE          (0),
 		.USE_WRITERESPONSE         (0)
 	) gpu_avl_color_agent (
-		.clk                   (gpu_pll_outclk0_clk),                                              //       clk.clk
+		.clk                   (gpu_pll_outclk1_clk),                                              //       clk.clk
 		.reset                 (gpu_pixel_reset_reset_bridge_in_reset_reset),                      // clk_reset.reset
 		.av_address            (gpu_avl_color_translator_avalon_universal_master_0_address),       //        av.address
 		.av_write              (gpu_avl_color_translator_avalon_universal_master_0_write),         //          .write
@@ -1012,7 +1014,7 @@ module soc_system_mm_interconnect_0 (
 		.USE_READRESPONSE          (0),
 		.USE_WRITERESPONSE         (0)
 	) gpu_avl_depthstencil_agent (
-		.clk                   (gpu_pll_outclk0_clk),                                                     //       clk.clk
+		.clk                   (gpu_pll_outclk1_clk),                                                     //       clk.clk
 		.reset                 (gpu_pixel_reset_reset_bridge_in_reset_reset),                             // clk_reset.reset
 		.av_address            (gpu_avl_depthstencil_translator_avalon_universal_master_0_address),       //        av.address
 		.av_write              (gpu_avl_depthstencil_translator_avalon_universal_master_0_write),         //          .write
@@ -1094,7 +1096,7 @@ module soc_system_mm_interconnect_0 (
 		.USE_WRITERESPONSE         (0)
 	) gpu_avl_index_agent (
 		.clk                   (gpu_pll_outclk0_clk),                                              //       clk.clk
-		.reset                 (gpu_pixel_reset_reset_bridge_in_reset_reset),                      // clk_reset.reset
+		.reset                 (gpu_reset_reset_bridge_in_reset_reset),                            // clk_reset.reset
 		.av_address            (gpu_avl_index_translator_avalon_universal_master_0_address),       //        av.address
 		.av_write              (gpu_avl_index_translator_avalon_universal_master_0_write),         //          .write
 		.av_read               (gpu_avl_index_translator_avalon_universal_master_0_read),          //          .read
@@ -1175,7 +1177,7 @@ module soc_system_mm_interconnect_0 (
 		.USE_WRITERESPONSE         (0)
 	) gpu_avl_vertex_agent (
 		.clk                   (gpu_pll_outclk0_clk),                                               //       clk.clk
-		.reset                 (gpu_pixel_reset_reset_bridge_in_reset_reset),                       // clk_reset.reset
+		.reset                 (gpu_reset_reset_bridge_in_reset_reset),                             // clk_reset.reset
 		.av_address            (gpu_avl_vertex_translator_avalon_universal_master_0_address),       //        av.address
 		.av_write              (gpu_avl_vertex_translator_avalon_universal_master_0_write),         //          .write
 		.av_read               (gpu_avl_vertex_translator_avalon_universal_master_0_read),          //          .read
@@ -1257,7 +1259,7 @@ module soc_system_mm_interconnect_0 (
 		.WRITE_ACCEPTANCE_CAPABILITY (8),
 		.READ_ACCEPTANCE_CAPABILITY  (8)
 	) hps_f2h_axi_slave_agent (
-		.aclk                   (gpu_pll_outclk1_clk),                                             //        clock_sink.clk
+		.aclk                   (sys_pll_outclk0_clk),                                             //        clock_sink.clk
 		.aresetn                (~hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //        reset_sink.reset_n
 		.read_cp_valid          (cmd_mux_001_src_valid),                                           //           read_cp.valid
 		.read_cp_ready          (cmd_mux_001_src_ready),                                           //                  .ready
@@ -1330,7 +1332,7 @@ module soc_system_mm_interconnect_0 (
 		.sink_data          (vga_dma_avalon_pixel_dma_master_agent_cp_data),          //          .data
 		.sink_startofpacket (vga_dma_avalon_pixel_dma_master_agent_cp_startofpacket), //          .startofpacket
 		.sink_endofpacket   (vga_dma_avalon_pixel_dma_master_agent_cp_endofpacket),   //          .endofpacket
-		.clk                (gpu_pll_outclk1_clk),                                    //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                    //       clk.clk
 		.reset              (vga_dma_reset_reset_bridge_in_reset_reset),              // clk_reset.reset
 		.src_ready          (router_src_ready),                                       //       src.ready
 		.src_valid          (router_src_valid),                                       //          .valid
@@ -1346,7 +1348,7 @@ module soc_system_mm_interconnect_0 (
 		.sink_data          (gpu_avl_color_agent_cp_data),                 //          .data
 		.sink_startofpacket (gpu_avl_color_agent_cp_startofpacket),        //          .startofpacket
 		.sink_endofpacket   (gpu_avl_color_agent_cp_endofpacket),          //          .endofpacket
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready          (router_001_src_ready),                        //       src.ready
 		.src_valid          (router_001_src_valid),                        //          .valid
@@ -1362,7 +1364,7 @@ module soc_system_mm_interconnect_0 (
 		.sink_data          (gpu_avl_depthstencil_agent_cp_data),          //          .data
 		.sink_startofpacket (gpu_avl_depthstencil_agent_cp_startofpacket), //          .startofpacket
 		.sink_endofpacket   (gpu_avl_depthstencil_agent_cp_endofpacket),   //          .endofpacket
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready          (router_002_src_ready),                        //       src.ready
 		.src_valid          (router_002_src_valid),                        //          .valid
@@ -1373,35 +1375,35 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_router router_003 (
-		.sink_ready         (gpu_avl_index_agent_cp_ready),                //      sink.ready
-		.sink_valid         (gpu_avl_index_agent_cp_valid),                //          .valid
-		.sink_data          (gpu_avl_index_agent_cp_data),                 //          .data
-		.sink_startofpacket (gpu_avl_index_agent_cp_startofpacket),        //          .startofpacket
-		.sink_endofpacket   (gpu_avl_index_agent_cp_endofpacket),          //          .endofpacket
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.src_ready          (router_003_src_ready),                        //       src.ready
-		.src_valid          (router_003_src_valid),                        //          .valid
-		.src_data           (router_003_src_data),                         //          .data
-		.src_channel        (router_003_src_channel),                      //          .channel
-		.src_startofpacket  (router_003_src_startofpacket),                //          .startofpacket
-		.src_endofpacket    (router_003_src_endofpacket)                   //          .endofpacket
+		.sink_ready         (gpu_avl_index_agent_cp_ready),          //      sink.ready
+		.sink_valid         (gpu_avl_index_agent_cp_valid),          //          .valid
+		.sink_data          (gpu_avl_index_agent_cp_data),           //          .data
+		.sink_startofpacket (gpu_avl_index_agent_cp_startofpacket),  //          .startofpacket
+		.sink_endofpacket   (gpu_avl_index_agent_cp_endofpacket),    //          .endofpacket
+		.clk                (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset              (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.src_ready          (router_003_src_ready),                  //       src.ready
+		.src_valid          (router_003_src_valid),                  //          .valid
+		.src_data           (router_003_src_data),                   //          .data
+		.src_channel        (router_003_src_channel),                //          .channel
+		.src_startofpacket  (router_003_src_startofpacket),          //          .startofpacket
+		.src_endofpacket    (router_003_src_endofpacket)             //          .endofpacket
 	);
 
 	soc_system_mm_interconnect_0_router router_004 (
-		.sink_ready         (gpu_avl_vertex_agent_cp_ready),               //      sink.ready
-		.sink_valid         (gpu_avl_vertex_agent_cp_valid),               //          .valid
-		.sink_data          (gpu_avl_vertex_agent_cp_data),                //          .data
-		.sink_startofpacket (gpu_avl_vertex_agent_cp_startofpacket),       //          .startofpacket
-		.sink_endofpacket   (gpu_avl_vertex_agent_cp_endofpacket),         //          .endofpacket
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.src_ready          (router_004_src_ready),                        //       src.ready
-		.src_valid          (router_004_src_valid),                        //          .valid
-		.src_data           (router_004_src_data),                         //          .data
-		.src_channel        (router_004_src_channel),                      //          .channel
-		.src_startofpacket  (router_004_src_startofpacket),                //          .startofpacket
-		.src_endofpacket    (router_004_src_endofpacket)                   //          .endofpacket
+		.sink_ready         (gpu_avl_vertex_agent_cp_ready),         //      sink.ready
+		.sink_valid         (gpu_avl_vertex_agent_cp_valid),         //          .valid
+		.sink_data          (gpu_avl_vertex_agent_cp_data),          //          .data
+		.sink_startofpacket (gpu_avl_vertex_agent_cp_startofpacket), //          .startofpacket
+		.sink_endofpacket   (gpu_avl_vertex_agent_cp_endofpacket),   //          .endofpacket
+		.clk                (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset              (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.src_ready          (router_004_src_ready),                  //       src.ready
+		.src_valid          (router_004_src_valid),                  //          .valid
+		.src_data           (router_004_src_data),                   //          .data
+		.src_channel        (router_004_src_channel),                //          .channel
+		.src_startofpacket  (router_004_src_startofpacket),          //          .startofpacket
+		.src_endofpacket    (router_004_src_endofpacket)             //          .endofpacket
 	);
 
 	soc_system_mm_interconnect_0_router_005 router_005 (
@@ -1410,7 +1412,7 @@ module soc_system_mm_interconnect_0 (
 		.sink_data          (hps_f2h_axi_slave_agent_write_rp_data),                          //          .data
 		.sink_startofpacket (hps_f2h_axi_slave_agent_write_rp_startofpacket),                 //          .startofpacket
 		.sink_endofpacket   (hps_f2h_axi_slave_agent_write_rp_endofpacket),                   //          .endofpacket
-		.clk                (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset              (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready          (router_005_src_ready),                                           //       src.ready
 		.src_valid          (router_005_src_valid),                                           //          .valid
@@ -1426,7 +1428,7 @@ module soc_system_mm_interconnect_0 (
 		.sink_data          (hps_f2h_axi_slave_agent_read_rp_data),                           //          .data
 		.sink_startofpacket (hps_f2h_axi_slave_agent_read_rp_startofpacket),                  //          .startofpacket
 		.sink_endofpacket   (hps_f2h_axi_slave_agent_read_rp_endofpacket),                    //          .endofpacket
-		.clk                (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset              (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready          (router_006_src_ready),                                           //       src.ready
 		.src_valid          (router_006_src_valid),                                           //          .valid
@@ -1458,7 +1460,7 @@ module soc_system_mm_interconnect_0 (
 		.SUPPORTS_NONPOSTED_WRITES (0),
 		.REORDER                   (0)
 	) vga_dma_avalon_pixel_dma_master_limiter (
-		.clk                    (gpu_pll_outclk1_clk),                                           //       clk.clk
+		.clk                    (sys_pll_outclk0_clk),                                           //       clk.clk
 		.reset                  (vga_dma_reset_reset_bridge_in_reset_reset),                     // clk_reset.reset
 		.cmd_sink_ready         (router_src_ready),                                              //  cmd_sink.ready
 		.cmd_sink_valid         (router_src_valid),                                              //          .valid
@@ -1487,7 +1489,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_cmd_demux cmd_demux (
-		.clk                (gpu_pll_outclk1_clk),                       //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                       //       clk.clk
 		.reset              (vga_dma_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (limiter_pipeline_source0_ready),            //      sink.ready
 		.sink_channel       (limiter_pipeline_source0_channel),          //          .channel
@@ -1510,7 +1512,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_cmd_demux_001 cmd_demux_001 (
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (router_001_src_ready),                        //      sink.ready
 		.sink_channel       (router_001_src_channel),                      //          .channel
@@ -1533,7 +1535,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_cmd_demux_001 cmd_demux_002 (
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (router_002_src_ready),                        //      sink.ready
 		.sink_channel       (router_002_src_channel),                      //          .channel
@@ -1556,53 +1558,53 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_cmd_demux_001 cmd_demux_003 (
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.sink_ready         (router_003_src_ready),                        //      sink.ready
-		.sink_channel       (router_003_src_channel),                      //          .channel
-		.sink_data          (router_003_src_data),                         //          .data
-		.sink_startofpacket (router_003_src_startofpacket),                //          .startofpacket
-		.sink_endofpacket   (router_003_src_endofpacket),                  //          .endofpacket
-		.sink_valid         (router_003_src_valid),                        //          .valid
-		.src0_ready         (cmd_demux_003_src0_ready),                    //      src0.ready
-		.src0_valid         (cmd_demux_003_src0_valid),                    //          .valid
-		.src0_data          (cmd_demux_003_src0_data),                     //          .data
-		.src0_channel       (cmd_demux_003_src0_channel),                  //          .channel
-		.src0_startofpacket (cmd_demux_003_src0_startofpacket),            //          .startofpacket
-		.src0_endofpacket   (cmd_demux_003_src0_endofpacket),              //          .endofpacket
-		.src1_ready         (cmd_demux_003_src1_ready),                    //      src1.ready
-		.src1_valid         (cmd_demux_003_src1_valid),                    //          .valid
-		.src1_data          (cmd_demux_003_src1_data),                     //          .data
-		.src1_channel       (cmd_demux_003_src1_channel),                  //          .channel
-		.src1_startofpacket (cmd_demux_003_src1_startofpacket),            //          .startofpacket
-		.src1_endofpacket   (cmd_demux_003_src1_endofpacket)               //          .endofpacket
+		.clk                (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset              (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.sink_ready         (router_003_src_ready),                  //      sink.ready
+		.sink_channel       (router_003_src_channel),                //          .channel
+		.sink_data          (router_003_src_data),                   //          .data
+		.sink_startofpacket (router_003_src_startofpacket),          //          .startofpacket
+		.sink_endofpacket   (router_003_src_endofpacket),            //          .endofpacket
+		.sink_valid         (router_003_src_valid),                  //          .valid
+		.src0_ready         (cmd_demux_003_src0_ready),              //      src0.ready
+		.src0_valid         (cmd_demux_003_src0_valid),              //          .valid
+		.src0_data          (cmd_demux_003_src0_data),               //          .data
+		.src0_channel       (cmd_demux_003_src0_channel),            //          .channel
+		.src0_startofpacket (cmd_demux_003_src0_startofpacket),      //          .startofpacket
+		.src0_endofpacket   (cmd_demux_003_src0_endofpacket),        //          .endofpacket
+		.src1_ready         (cmd_demux_003_src1_ready),              //      src1.ready
+		.src1_valid         (cmd_demux_003_src1_valid),              //          .valid
+		.src1_data          (cmd_demux_003_src1_data),               //          .data
+		.src1_channel       (cmd_demux_003_src1_channel),            //          .channel
+		.src1_startofpacket (cmd_demux_003_src1_startofpacket),      //          .startofpacket
+		.src1_endofpacket   (cmd_demux_003_src1_endofpacket)         //          .endofpacket
 	);
 
 	soc_system_mm_interconnect_0_cmd_demux_001 cmd_demux_004 (
-		.clk                (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset              (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.sink_ready         (router_004_src_ready),                        //      sink.ready
-		.sink_channel       (router_004_src_channel),                      //          .channel
-		.sink_data          (router_004_src_data),                         //          .data
-		.sink_startofpacket (router_004_src_startofpacket),                //          .startofpacket
-		.sink_endofpacket   (router_004_src_endofpacket),                  //          .endofpacket
-		.sink_valid         (router_004_src_valid),                        //          .valid
-		.src0_ready         (cmd_demux_004_src0_ready),                    //      src0.ready
-		.src0_valid         (cmd_demux_004_src0_valid),                    //          .valid
-		.src0_data          (cmd_demux_004_src0_data),                     //          .data
-		.src0_channel       (cmd_demux_004_src0_channel),                  //          .channel
-		.src0_startofpacket (cmd_demux_004_src0_startofpacket),            //          .startofpacket
-		.src0_endofpacket   (cmd_demux_004_src0_endofpacket),              //          .endofpacket
-		.src1_ready         (cmd_demux_004_src1_ready),                    //      src1.ready
-		.src1_valid         (cmd_demux_004_src1_valid),                    //          .valid
-		.src1_data          (cmd_demux_004_src1_data),                     //          .data
-		.src1_channel       (cmd_demux_004_src1_channel),                  //          .channel
-		.src1_startofpacket (cmd_demux_004_src1_startofpacket),            //          .startofpacket
-		.src1_endofpacket   (cmd_demux_004_src1_endofpacket)               //          .endofpacket
+		.clk                (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset              (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.sink_ready         (router_004_src_ready),                  //      sink.ready
+		.sink_channel       (router_004_src_channel),                //          .channel
+		.sink_data          (router_004_src_data),                   //          .data
+		.sink_startofpacket (router_004_src_startofpacket),          //          .startofpacket
+		.sink_endofpacket   (router_004_src_endofpacket),            //          .endofpacket
+		.sink_valid         (router_004_src_valid),                  //          .valid
+		.src0_ready         (cmd_demux_004_src0_ready),              //      src0.ready
+		.src0_valid         (cmd_demux_004_src0_valid),              //          .valid
+		.src0_data          (cmd_demux_004_src0_data),               //          .data
+		.src0_channel       (cmd_demux_004_src0_channel),            //          .channel
+		.src0_startofpacket (cmd_demux_004_src0_startofpacket),      //          .startofpacket
+		.src0_endofpacket   (cmd_demux_004_src0_endofpacket),        //          .endofpacket
+		.src1_ready         (cmd_demux_004_src1_ready),              //      src1.ready
+		.src1_valid         (cmd_demux_004_src1_valid),              //          .valid
+		.src1_data          (cmd_demux_004_src1_data),               //          .data
+		.src1_channel       (cmd_demux_004_src1_channel),            //          .channel
+		.src1_startofpacket (cmd_demux_004_src1_startofpacket),      //          .startofpacket
+		.src1_endofpacket   (cmd_demux_004_src1_endofpacket)         //          .endofpacket
 	);
 
 	soc_system_mm_interconnect_0_cmd_mux cmd_mux (
-		.clk                 (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                 (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset               (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (cmd_mux_src_ready),                                              //       src.ready
 		.src_valid           (cmd_mux_src_valid),                                              //          .valid
@@ -1643,7 +1645,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_cmd_mux cmd_mux_001 (
-		.clk                 (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                 (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset               (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (cmd_mux_001_src_ready),                                          //       src.ready
 		.src_valid           (cmd_mux_001_src_valid),                                          //          .valid
@@ -1684,7 +1686,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_demux rsp_demux (
-		.clk                (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset              (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (router_005_src_ready),                                           //      sink.ready
 		.sink_channel       (router_005_src_channel),                                         //          .channel
@@ -1725,7 +1727,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_demux rsp_demux_001 (
-		.clk                (gpu_pll_outclk1_clk),                                            //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                            //       clk.clk
 		.reset              (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (router_006_src_ready),                                           //      sink.ready
 		.sink_channel       (router_006_src_channel),                                         //          .channel
@@ -1766,7 +1768,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_mux rsp_mux (
-		.clk                 (gpu_pll_outclk1_clk),                       //       clk.clk
+		.clk                 (sys_pll_outclk0_clk),                       //       clk.clk
 		.reset               (vga_dma_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (rsp_mux_src_ready),                         //       src.ready
 		.src_valid           (rsp_mux_src_valid),                         //          .valid
@@ -1789,7 +1791,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_mux rsp_mux_001 (
-		.clk                 (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                 (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset               (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (rsp_mux_001_src_ready),                       //       src.ready
 		.src_valid           (rsp_mux_001_src_valid),                       //          .valid
@@ -1812,7 +1814,7 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_mux rsp_mux_002 (
-		.clk                 (gpu_pll_outclk0_clk),                         //       clk.clk
+		.clk                 (gpu_pll_outclk1_clk),                         //       clk.clk
 		.reset               (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (rsp_mux_002_src_ready),                       //       src.ready
 		.src_valid           (rsp_mux_002_src_valid),                       //          .valid
@@ -1835,49 +1837,49 @@ module soc_system_mm_interconnect_0 (
 	);
 
 	soc_system_mm_interconnect_0_rsp_mux rsp_mux_003 (
-		.clk                 (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset               (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.src_ready           (rsp_mux_003_src_ready),                       //       src.ready
-		.src_valid           (rsp_mux_003_src_valid),                       //          .valid
-		.src_data            (rsp_mux_003_src_data),                        //          .data
-		.src_channel         (rsp_mux_003_src_channel),                     //          .channel
-		.src_startofpacket   (rsp_mux_003_src_startofpacket),               //          .startofpacket
-		.src_endofpacket     (rsp_mux_003_src_endofpacket),                 //          .endofpacket
-		.sink0_ready         (crosser_010_out_ready),                       //     sink0.ready
-		.sink0_valid         (crosser_010_out_valid),                       //          .valid
-		.sink0_channel       (crosser_010_out_channel),                     //          .channel
-		.sink0_data          (crosser_010_out_data),                        //          .data
-		.sink0_startofpacket (crosser_010_out_startofpacket),               //          .startofpacket
-		.sink0_endofpacket   (crosser_010_out_endofpacket),                 //          .endofpacket
-		.sink1_ready         (crosser_014_out_ready),                       //     sink1.ready
-		.sink1_valid         (crosser_014_out_valid),                       //          .valid
-		.sink1_channel       (crosser_014_out_channel),                     //          .channel
-		.sink1_data          (crosser_014_out_data),                        //          .data
-		.sink1_startofpacket (crosser_014_out_startofpacket),               //          .startofpacket
-		.sink1_endofpacket   (crosser_014_out_endofpacket)                  //          .endofpacket
+		.clk                 (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset               (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.src_ready           (rsp_mux_003_src_ready),                 //       src.ready
+		.src_valid           (rsp_mux_003_src_valid),                 //          .valid
+		.src_data            (rsp_mux_003_src_data),                  //          .data
+		.src_channel         (rsp_mux_003_src_channel),               //          .channel
+		.src_startofpacket   (rsp_mux_003_src_startofpacket),         //          .startofpacket
+		.src_endofpacket     (rsp_mux_003_src_endofpacket),           //          .endofpacket
+		.sink0_ready         (crosser_010_out_ready),                 //     sink0.ready
+		.sink0_valid         (crosser_010_out_valid),                 //          .valid
+		.sink0_channel       (crosser_010_out_channel),               //          .channel
+		.sink0_data          (crosser_010_out_data),                  //          .data
+		.sink0_startofpacket (crosser_010_out_startofpacket),         //          .startofpacket
+		.sink0_endofpacket   (crosser_010_out_endofpacket),           //          .endofpacket
+		.sink1_ready         (crosser_014_out_ready),                 //     sink1.ready
+		.sink1_valid         (crosser_014_out_valid),                 //          .valid
+		.sink1_channel       (crosser_014_out_channel),               //          .channel
+		.sink1_data          (crosser_014_out_data),                  //          .data
+		.sink1_startofpacket (crosser_014_out_startofpacket),         //          .startofpacket
+		.sink1_endofpacket   (crosser_014_out_endofpacket)            //          .endofpacket
 	);
 
 	soc_system_mm_interconnect_0_rsp_mux rsp_mux_004 (
-		.clk                 (gpu_pll_outclk0_clk),                         //       clk.clk
-		.reset               (gpu_pixel_reset_reset_bridge_in_reset_reset), // clk_reset.reset
-		.src_ready           (rsp_mux_004_src_ready),                       //       src.ready
-		.src_valid           (rsp_mux_004_src_valid),                       //          .valid
-		.src_data            (rsp_mux_004_src_data),                        //          .data
-		.src_channel         (rsp_mux_004_src_channel),                     //          .channel
-		.src_startofpacket   (rsp_mux_004_src_startofpacket),               //          .startofpacket
-		.src_endofpacket     (rsp_mux_004_src_endofpacket),                 //          .endofpacket
-		.sink0_ready         (crosser_011_out_ready),                       //     sink0.ready
-		.sink0_valid         (crosser_011_out_valid),                       //          .valid
-		.sink0_channel       (crosser_011_out_channel),                     //          .channel
-		.sink0_data          (crosser_011_out_data),                        //          .data
-		.sink0_startofpacket (crosser_011_out_startofpacket),               //          .startofpacket
-		.sink0_endofpacket   (crosser_011_out_endofpacket),                 //          .endofpacket
-		.sink1_ready         (crosser_015_out_ready),                       //     sink1.ready
-		.sink1_valid         (crosser_015_out_valid),                       //          .valid
-		.sink1_channel       (crosser_015_out_channel),                     //          .channel
-		.sink1_data          (crosser_015_out_data),                        //          .data
-		.sink1_startofpacket (crosser_015_out_startofpacket),               //          .startofpacket
-		.sink1_endofpacket   (crosser_015_out_endofpacket)                  //          .endofpacket
+		.clk                 (gpu_pll_outclk0_clk),                   //       clk.clk
+		.reset               (gpu_reset_reset_bridge_in_reset_reset), // clk_reset.reset
+		.src_ready           (rsp_mux_004_src_ready),                 //       src.ready
+		.src_valid           (rsp_mux_004_src_valid),                 //          .valid
+		.src_data            (rsp_mux_004_src_data),                  //          .data
+		.src_channel         (rsp_mux_004_src_channel),               //          .channel
+		.src_startofpacket   (rsp_mux_004_src_startofpacket),         //          .startofpacket
+		.src_endofpacket     (rsp_mux_004_src_endofpacket),           //          .endofpacket
+		.sink0_ready         (crosser_011_out_ready),                 //     sink0.ready
+		.sink0_valid         (crosser_011_out_valid),                 //          .valid
+		.sink0_channel       (crosser_011_out_channel),               //          .channel
+		.sink0_data          (crosser_011_out_data),                  //          .data
+		.sink0_startofpacket (crosser_011_out_startofpacket),         //          .startofpacket
+		.sink0_endofpacket   (crosser_011_out_endofpacket),           //          .endofpacket
+		.sink1_ready         (crosser_015_out_ready),                 //     sink1.ready
+		.sink1_valid         (crosser_015_out_valid),                 //          .valid
+		.sink1_channel       (crosser_015_out_channel),               //          .channel
+		.sink1_data          (crosser_015_out_data),                  //          .data
+		.sink1_startofpacket (crosser_015_out_startofpacket),         //          .startofpacket
+		.sink1_endofpacket   (crosser_015_out_endofpacket)            //          .endofpacket
 	);
 
 	altera_avalon_st_handshake_clock_crosser #(
@@ -1892,9 +1894,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser (
-		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
+		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
 		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_001_src0_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_001_src0_valid),                                       //              .valid
@@ -1926,9 +1928,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_001 (
-		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
+		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
 		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_001_src1_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_001_src1_valid),                                       //              .valid
@@ -1960,9 +1962,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_002 (
-		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
+		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
 		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_002_src0_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_002_src0_valid),                                       //              .valid
@@ -1994,9 +1996,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_003 (
-		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
+		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
 		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_002_src1_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_002_src1_valid),                                       //              .valid
@@ -2029,8 +2031,8 @@ module soc_system_mm_interconnect_0 (
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_004 (
 		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
-		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.in_reset          (gpu_reset_reset_bridge_in_reset_reset),                          //  in_clk_reset.reset
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_003_src0_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_003_src0_valid),                                       //              .valid
@@ -2063,8 +2065,8 @@ module soc_system_mm_interconnect_0 (
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_005 (
 		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
-		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.in_reset          (gpu_reset_reset_bridge_in_reset_reset),                          //  in_clk_reset.reset
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_003_src1_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_003_src1_valid),                                       //              .valid
@@ -2097,8 +2099,8 @@ module soc_system_mm_interconnect_0 (
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_006 (
 		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
-		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.in_reset          (gpu_reset_reset_bridge_in_reset_reset),                          //  in_clk_reset.reset
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_004_src0_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_004_src0_valid),                                       //              .valid
@@ -2131,8 +2133,8 @@ module soc_system_mm_interconnect_0 (
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_007 (
 		.in_clk            (gpu_pll_outclk0_clk),                                            //        in_clk.clk
-		.in_reset          (gpu_pixel_reset_reset_bridge_in_reset_reset),                    //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
+		.in_reset          (gpu_reset_reset_bridge_in_reset_reset),                          //  in_clk_reset.reset
+		.out_clk           (sys_pll_outclk0_clk),                                            //       out_clk.clk
 		.out_reset         (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), // out_clk_reset.reset
 		.in_ready          (cmd_demux_004_src1_ready),                                       //            in.ready
 		.in_valid          (cmd_demux_004_src1_valid),                                       //              .valid
@@ -2164,9 +2166,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_008 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
+		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
 		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
 		.in_ready          (rsp_demux_src1_ready),                                           //            in.ready
 		.in_valid          (rsp_demux_src1_valid),                                           //              .valid
@@ -2198,9 +2200,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_009 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
+		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
 		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
 		.in_ready          (rsp_demux_src2_ready),                                           //            in.ready
 		.in_valid          (rsp_demux_src2_valid),                                           //              .valid
@@ -2232,10 +2234,10 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_010 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
 		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
-		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
+		.out_reset         (gpu_reset_reset_bridge_in_reset_reset),                          // out_clk_reset.reset
 		.in_ready          (rsp_demux_src3_ready),                                           //            in.ready
 		.in_valid          (rsp_demux_src3_valid),                                           //              .valid
 		.in_startofpacket  (rsp_demux_src3_startofpacket),                                   //              .startofpacket
@@ -2266,10 +2268,10 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_011 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
 		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
-		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
+		.out_reset         (gpu_reset_reset_bridge_in_reset_reset),                          // out_clk_reset.reset
 		.in_ready          (rsp_demux_src4_ready),                                           //            in.ready
 		.in_valid          (rsp_demux_src4_valid),                                           //              .valid
 		.in_startofpacket  (rsp_demux_src4_startofpacket),                                   //              .startofpacket
@@ -2300,9 +2302,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_012 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
+		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
 		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
 		.in_ready          (rsp_demux_001_src1_ready),                                       //            in.ready
 		.in_valid          (rsp_demux_001_src1_valid),                                       //              .valid
@@ -2334,9 +2336,9 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_013 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
-		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
+		.out_clk           (gpu_pll_outclk1_clk),                                            //       out_clk.clk
 		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
 		.in_ready          (rsp_demux_001_src2_ready),                                       //            in.ready
 		.in_valid          (rsp_demux_001_src2_valid),                                       //              .valid
@@ -2368,10 +2370,10 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_014 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
 		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
-		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
+		.out_reset         (gpu_reset_reset_bridge_in_reset_reset),                          // out_clk_reset.reset
 		.in_ready          (rsp_demux_001_src3_ready),                                       //            in.ready
 		.in_valid          (rsp_demux_001_src3_valid),                                       //              .valid
 		.in_startofpacket  (rsp_demux_001_src3_startofpacket),                               //              .startofpacket
@@ -2402,10 +2404,10 @@ module soc_system_mm_interconnect_0 (
 		.READY_SYNC_DEPTH    (2),
 		.USE_OUTPUT_PIPELINE (0)
 	) crosser_015 (
-		.in_clk            (gpu_pll_outclk1_clk),                                            //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                            //        in_clk.clk
 		.in_reset          (hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset), //  in_clk_reset.reset
 		.out_clk           (gpu_pll_outclk0_clk),                                            //       out_clk.clk
-		.out_reset         (gpu_pixel_reset_reset_bridge_in_reset_reset),                    // out_clk_reset.reset
+		.out_reset         (gpu_reset_reset_bridge_in_reset_reset),                          // out_clk_reset.reset
 		.in_ready          (rsp_demux_001_src4_ready),                                       //            in.ready
 		.in_valid          (rsp_demux_001_src4_valid),                                       //              .valid
 		.in_startofpacket  (rsp_demux_001_src4_startofpacket),                               //              .startofpacket
@@ -2435,7 +2437,7 @@ module soc_system_mm_interconnect_0 (
 		.ERROR_WIDTH      (0),
 		.PIPELINE_READY   (1)
 	) limiter_pipeline (
-		.clk               (gpu_pll_outclk1_clk),                                           //       cr0.clk
+		.clk               (sys_pll_outclk0_clk),                                           //       cr0.clk
 		.reset             (vga_dma_reset_reset_bridge_in_reset_reset),                     // cr0_reset.reset
 		.in_ready          (vga_dma_avalon_pixel_dma_master_limiter_cmd_src_ready),         //     sink0.ready
 		.in_valid          (vga_dma_avalon_pixel_dma_master_limiter_cmd_src_valid),         //          .valid
@@ -2466,7 +2468,7 @@ module soc_system_mm_interconnect_0 (
 		.ERROR_WIDTH      (0),
 		.PIPELINE_READY   (1)
 	) limiter_pipeline_001 (
-		.clk               (gpu_pll_outclk1_clk),                        //       cr0.clk
+		.clk               (sys_pll_outclk0_clk),                        //       cr0.clk
 		.reset             (vga_dma_reset_reset_bridge_in_reset_reset),  // cr0_reset.reset
 		.in_ready          (rsp_mux_src_ready),                          //     sink0.ready
 		.in_valid          (rsp_mux_src_valid),                          //          .valid

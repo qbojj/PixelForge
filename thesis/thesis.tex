@@ -8,22 +8,52 @@
 \usepackage[utf8]{inputenc}
 \usepackage[polish]{babel}
 \usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{listings}
+%\usepackage[table]{xcolor}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{multirow}
+\usepackage{booktabs}
+\usepackage{enumitem}
 
 %%%%% DANE DO STRONY TYTUŁOWEJ
 \polishtitle    {Akcelerator graficzny fixed-pipeline\fmlinebreak oparty na FPGA}
 \englishtitle   {Fixed-Pipeline Graphics Accelerator\fmlinebreak Based on FPGA}
 
 \polishabstract {%
+Celem pracy było zaprojektowanie i zaimplementowanie akceleratora graficznego o~architekturze fixed-pipeline, realizującego wybrany podzbiór funkcjonalności OpenGL~ES~1.1 Common-Lite. Projekt wykorzystuje układ FPGA Intel Cyclone~V oraz język opisu sprzętu Amaranth HDL. Zaimplementowany potok graficzny obejmuje: transformacje geometryczne, rasteryzację trójkątów z~perspektywiczną interpolacją, system oświetlenia (ambient, diffuse), testy głębokości i~szablonu oraz operacje mieszania kolorów. Akcelerator zintegrowano z~systemem SoC poprzez magistralę Wishbone i~interfejs CSR. Projekt zawiera również kompletne środowisko testowe oraz aplikacje demonstracyjne, które weryfikują poprawność działania zaimplementowanych funkcjonalności.
 }
 
+\englishabstract {%
+The aim of this work was to design and implement a fixed-pipeline graphics accelerator that realizes a selected subset of OpenGL~ES~1.1 Common-Lite functionality. The project uses an Intel Cyclone~V FPGA and the Amaranth HDL hardware description language. The implemented graphics pipeline includes: geometric transformations, triangle rasterization with perspective-correct interpolation, lighting system (ambient, diffuse), depth and stencil tests, and color blending operations. The accelerator was integrated with the SoC system through the Wishbone bus and CSR interface. The project also includes a complete testing environment and demonstration applications that verify the correctness of the implemented functionalities.
+}
 
 \author         {Jakub Janeczko}
+\transcriptnum  {337670}
 \advisor        {dr Marek Materzok}
 \advisorgen     {dr. Marka Materzoka}
 
 %%%%% WŁASNE DODATKOWE PAKIETY
 
+%%%%% KONFIGURACJA LISTINGÓW
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny,
+  captionpos=b,
+  tabsize=2,
+  showstringspaces=false
+}
+
 %%%%% WŁASNE DEFINICJE I POLECENIA
+
+\newcommand{\code}[1]{\texttt{#1}}
 
 %%%%%
 
@@ -31,10 +61,1066 @@
 
 %%%%% POCZĄTEK ZASADNICZEGO TEKSTU PRACY
 
+\chapter{Wprowadzenie}
+
+\section{Motywacja}
+
+Renderowanie grafiki trójwymiarowej w~czasie rzeczywistym stanowi kluczową funkcjonalność współczesnych systemów komputerowych --- od urządzeń mobilnych, przez komputery osobiste, po zaawansowane stacje robocze. Tradycyjnie zadanie to realizowane jest przez wyspecjalizowane procesory graficzne (GPU) wykonane w~technologii ASIC (Application-Specific Integrated Circuit). Implementacja akceleratora graficznego w~układzie FPGA (Field-Programmable Gate Array) stanowi alternatywne podejście, które łączy elastyczność konfigurowalnego sprzętu z~możliwością pełnej kontroli nad architekturą i~zużyciem zasobów.
+
+Projekty oparte na FPGA znajdują szczególne zastosowanie w~systemach wbudowanych, gdzie wymagania dotyczące zużycia energii, kosztu i~możliwości dostosowania są często równie istotne jak wydajność obliczeniowa. Ponadto, implementacja GPU w~FPGA oferuje doskonałe możliwości edukacyjne, pozwalając na~głębokie zrozumienie działania potoku graficznego na~poziomie sprzętowym.
+
+\section{Cel pracy}
+
+Głównym celem niniejszej pracy było zaprojektowanie i~zaimplementowanie akceleratora graficznego o~architekturze fixed-pipeline, realizującego wybrany podzbiór funkcjonalności specyfikacji OpenGL~ES~1.1 Common-Lite. Fixed-pipeline oznacza architekturę, w~której kolejność i~rodzaj operacji graficznych są ustalone i~nie mogą być modyfikowane przez programy użytkownika (shadery), w~przeciwieństwie do współczesnych GPU o~programowalnym potoku graficznym.
+
+W~ramach pracy zaimplementowano następujące elementy potoku graficznego:
+\begin{itemize}
+  \item transformacje geometryczne wierzchołków,
+  \item rasteryzację trójkątów z~perspektywiczną interpolacją,
+  \item wybrane elementy systemu oświetlenia (ambient, diffuse),
+  \item testy głębokości i~szablonu (depth/stencil tests),
+  \item operacje mieszania kolorów (blending).
+\end{itemize}
+
+Projekt obejmuje również zbudowanie kompletnego środowiska testowego oraz aplikacji demonstracyjnych weryfikujących poprawność działania akceleratora.
+
+\section{Struktura pracy}
+
+Praca składa się z~następujących rozdziałów:
+
+\textbf{Rozdział~2} przedstawia podstawy teoretyczne grafiki komputerowej oraz potoku renderowania 3D, w~tym transformacje geometryczne, rasteryzację oraz techniki cieniowania.
+
+\textbf{Rozdział~3} opisuje zastosowane technologie i~narzędzia, ze szczególnym uwzględnieniem języka opisu sprzętu Amaranth HDL oraz platformy sprzętowej DE1-SoC.
+
+\textbf{Rozdział~4} zawiera szczegółowy opis architektury zaprojektowanego akceleratora graficznego, wraz z~opisem poszczególnych modułów potoku.
+
+\textbf{Rozdział~5} prezentuje szczegóły implementacji kluczowych komponentów systemu, z~naciskiem na rozwiązania specyficzne dla platformy FPGA.
+
+\textbf{Rozdział~6} opisuje metodologię testowania oraz środowisko uruchomieniowe, w~tym aplikacje demonstracyjne.
+
+\textbf{Rozdział~7} podsumowuje osiągnięte wyniki oraz przedstawia możliwe kierunki rozwoju projektu.
+
+
+\chapter{Podstawy teoretyczne}
+
+\section{Potok renderowania grafiki 3D}
+
+Rendering grafiki trójwymiarowej w~czasie rzeczywistym opiera się na~złożonym procesie przekształcania reprezentacji trójwymiarowej sceny w~obraz dwuwymiarowy wyświetlany na~ekranie. Proces ten realizowany jest przez \emph{potok graficzny} (graphics pipeline) --- sekwencję operacji przekształcających dane wierzchołków i~prymitywów geometrycznych w~piksele obrazu.
+
+Klasyczny potok graficzny fixed-pipeline, na~którym opiera się specyfikacja OpenGL~ES~1.1, składa się z~następujących głównych etapów:
+
+\begin{enumerate}
+  \item \textbf{Przetwarzanie wierzchołków} (Vertex Processing) --- transformacja współrzędnych wierzchołków z~przestrzeni modelu przez kolejne przestrzenie: świata, widoku, obcinania (clip space) aż do~współrzędnych znormalizowanych urządzenia (Normalized Device Coordinates, NDC).
+
+  \item \textbf{Cieniowanie wierzchołków} (Vertex Shading) --- obliczanie koloru wierzchołków na~podstawie modelu oświetlenia, właściwości materiału i~parametrów źródeł światła.
+
+  \item \textbf{Przycinanie} (Clipping) --- odrzucanie lub obcinanie fragmentów prymitywów znajdujących się poza obszarem widoczności (frustum).
+
+  \item \textbf{Rasteryzacja} (Rasterization) --- przekształcanie prymitywów geometrycznych (np. trójkątów) w~zbiór fragmentów odpowiadających poszczególnym pikselom obrazu.
+
+  \item \textbf{Przetwarzanie fragmentów} (Fragment Processing) --- wykonywanie testów głębokości, szablonu, mieszania kolorów i~zapisywanie finalnych wartości pikseli do~bufora ramki.
+\end{enumerate}
+
+\section{Transformacje geometryczne}
+
+\subsection{Przestrzenie współrzędnych}
+
+W~grafice komputerowej wierzchołki przechodzą przez~szereg transformacji między różnymi przestrzeniami współrzędnych:
+
+\begin{itemize}
+  \item \textbf{Przestrzeń modelu} (Model Space) --- lokalna przestrzeń współrzędnych obiektu 3D.
+  \item \textbf{Przestrzeń świata} (World Space) --- wspólna przestrzeń dla wszystkich obiektów w~scenie.
+  \item \textbf{Przestrzeń widoku} (View/Eye Space) --- przestrzeń względem kamery obserwatora.
+  \item \textbf{Przestrzeń obcinania} (Clip Space) --- współrzędne jednorodne po~zastosowaniu macierzy projekcji.
+  \item \textbf{NDC} (Normalized Device Coordinates) --- znormalizowane współrzędne w~zakresie $[-1, 1]$.
+  \item \textbf{Przestrzeń ekranu} (Screen Space) --- współrzędne w~pikselach na~ekranie.
+\end{itemize}
+
+\subsection{Macierze transformacji}
+
+Transformacje między przestrzeniami realizowane są przy~użyciu mnożenia przez~macierze $4 \times 4$. Kluczowe macierze to:
+
+\begin{itemize}
+  \item \textbf{Macierz model-widok} ($M_{mv}$) --- przekształca wierzchołki z~przestrzeni modelu do~przestrzeni widoku.
+  \item \textbf{Macierz projekcji} ($M_p$) --- przekształca współrzędne z~przestrzeni widoku do~przestrzeni obcinania, realizując projekcję perspektywiczną lub ortogonalną.
+  \item \textbf{Macierz model-widok-projekcja} ($M_{mvp} = M_p \cdot M_{mv}$) --- pełna transformacja wierzchołka.
+\end{itemize}
+
+Dla wektora jednorodnego wierzchołka $\mathbf{v} = [x, y, z, 1]^T$ transformacja ma~postać:
+\[
+\mathbf{v}_{clip} = M_{mvp} \cdot \mathbf{v}
+\]
+
+Transformacje wektorów normalnych wymagają użycia odwrotności transpozycji macierzy model-widok:
+\[
+\mathbf{n}_{view} = (M_{mv}^{-1})^T \cdot \mathbf{n}
+\]
+
+\section{Model oświetlenia Phonga}
+
+Model oświetlenia Phonga to empiryczny model oświetlenia lokalnego, który aproksymuje oddziaływanie światła z~powierzchnią obiektu. Składa się z~trzech składowych:
+
+\subsection{Oświetlenie ambient}
+
+Symuluje rozproszone światło otoczenia, niezależne od~kierunku i~położenia źródła światła:
+\[
+I_{ambient} = k_a \cdot I_a
+\]
+gdzie $k_a$ to współczynnik odblaskowości materiału, a~$I_a$ to intensywność światła otoczenia.
+
+\subsection{Oświetlenie diffuse}
+
+Symuluje rozpraszanie światła na~matowej powierzchni zgodnie z~prawem Lamberta:
+\[
+I_{diffuse} = k_d \cdot I_l \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)
+\]
+gdzie $k_d$ to współczynnik rozpraszania, $I_l$ to intensywność światła, $\mathbf{n}$ to wektor normalny powierzchni, a~$\mathbf{l}$ to wektor kierunku do~źródła światła.
+
+\subsection{Oświetlenie specular}
+
+Symuluje odbicia zwierciadlane (w~niniejszym projekcie niezaimplementowane):
+\[
+I_{specular} = k_s \cdot I_l \cdot \max(\mathbf{r} \cdot \mathbf{v}, 0)^{\alpha}
+\]
+gdzie $k_s$ to współczynnik odbicia, $\mathbf{r}$ to wektor odbity, $\mathbf{v}$ to wektor kierunku do~obserwatora, a~$\alpha$ to wykładnik połysku.
+
+W~zaimplementowanym akceleratorze wykorzystano składowe ambient i~diffuse, obliczane w~przestrzeni widoku dla każdego wierzchołka, a~następnie interpolowane na~powierzchni trójkąta podczas rasteryzacji.
+
+\section{Rasteryzacja trójkątów}
+
+Rasteryzacja to proces określania, które piksele ekranu są~pokryte przez~prymityw geometryczny. Dla trójkątów wykorzystuje się następujące metody:
+
+\subsection{Funkcje krawędziowe}
+
+Dla trójkąta o~wierzchołkach $\mathbf{v}_0$, $\mathbf{v}_1$, $\mathbf{v}_2$ definiuje się trzy funkcje krawędziowe:
+\[
+E_i(x, y) = (x - x_i)(y_{i+1} - y_i) - (y - y_i)(x_{i+1} - x_i)
+\]
+
+Piksel $(x, y)$ należy do~wnętrza trójkąta, jeśli wszystkie trzy funkcje krawędziowe mają ten sam znak (zgodny z~orientacją trójkąta).
+
+\subsection{Współrzędne barycentryczne}
+
+Współrzędne barycentryczne $(\lambda_0, \lambda_1, \lambda_2)$ określają, jak~piksel jest~kombinacją trzech wierzchołków trójkąta. Dla punktu $(x, y)$:
+\[
+\lambda_i = \frac{E_i(x, y)}{E_i(x_k, y_k)}
+\]
+gdzie $(x_k, y_k)$ to wierzchołek przeciwległy do~krawędzi $i$.
+
+Współrzędne te służą do~interpolacji atrybutów (koloru, głębokości, współrzędnych tekstury) na~powierzchni trójkąta.
+
+\subsection{Interpolacja perspektywiczna}
+
+W~przypadku projekcji perspektywicznej, liniowa interpolacja w~przestrzeni ekranu nie jest~poprawna. Aby uzyskać poprawne wartości atrybutów, należy:
+
+\begin{enumerate}
+  \item Pomnożyć atrybuty przez~odwrotność współrzędnej $w$ ($1/w$) w~wierzchołkach.
+  \item Wykonać liniową interpolację tak~przygotowanych wartości oraz~samej wartości $1/w$.
+  \item Podzielić wyinterpolowane wartości atrybutów przez~wyinterpolowaną wartość $1/w$.
+\end{enumerate}
+
+Matematycznie, dla atrybutu $A$:
+\[
+A(x,y) = \frac{\sum_{i=0}^{2} \lambda_i \cdot A_i / w_i}{\sum_{i=0}^{2} \lambda_i / w_i}
+\]
+
+\section{Testy głębokości i szablonu}
+
+\subsection{Test głębokości (Z-buffer)}
+
+Test głębokości (depth test) służy do~rozwiązywania problemu widoczności --- określania, które fragmenty znajdują się~najbliżej obserwatora i~powinny być~widoczne. Dla każdego fragmentu o~współrzędnej głębokości $z$ porównywana jest~wartość z~aktualną wartością w~buforze głębokości $z_{buffer}$. Fragment przechodzi test, jeśli:
+\[
+z \;  \text{op} \; z_{buffer}
+\]
+gdzie $\text{op}$ to operator porównania (np. LESS, LEQUAL, GREATER).
+
+Jeśli fragment przejdzie test, jego wartość $z$ zastępuje wartość w~buforze (jeśli zapis jest~włączony).
+
+\subsection{Test szablonu (Stencil buffer)}
+
+Bufor szablonu (stencil buffer) służy do~selektywnego maskowania pikseli i~realizacji złożonych efektów renderowania (np. cienie, odbicia, kontury). Test szablonu porównuje wartość referencyjną $s_{ref}$ z~wartością w~buforze szablonu $s_{buffer}$ przy~użyciu operatora porównania i~maski:
+\[
+(s_{ref} \; \& \; \text{mask}) \; \text{op} \; (s_{buffer} \; \& \; \text{mask})
+\]
+
+W~zależności od~wyniku testu szablonu i~testu głębokości, wartość w~buforze szablonu może być~modyfikowana według~określonych operacji (KEEP, ZERO, REPLACE, INCR, DECR, INVERT).
+
+\section{Mieszanie kolorów (Alpha blending)}
+
+Alpha blending umożliwia renderowanie obiektów przezroczystych lub półprzezroczystych poprzez~mieszanie koloru fragmentu ($C_{src}$) z~kolorem już~znajdującym się w~buforze ramki ($C_{dst}$). Operacja ta~opisywana jest~wzorem:
+\[
+C_{final} = C_{src} \cdot f_{src} \; \text{op} \; C_{dst} \cdot f_{dst}
+\]
+gdzie:
+\begin{itemize}
+  \item $f_{src}$, $f_{dst}$ --- współczynniki blendingu (np. $\alpha_{src}$, $1 - \alpha_{src}$),
+  \item $\text{op}$ --- operator blendingu (np. ADD, SUBTRACT, REVERSE\_SUBTRACT).
+\end{itemize}
+
+Typowe ustawienie dla przezroczystości to:
+\[
+C_{final} = C_{src} \cdot \alpha_{src} + C_{dst} \cdot (1 - \alpha_{src})
+\]
+
+
+\chapter{Technologie i~narzędzia}
+
+\section{OpenGL ES 1.1 Common-Lite}
+
+OpenGL~ES (OpenGL for Embedded Systems) to specyfikacja API grafiki 3D przeznaczona dla systemów wbudowanych. Wersja 1.1 definiuje fixed-pipeline, czyli potok graficzny o~ustalonej strukturze, w~przeciwieństwie do~nowszych wersji obsługujących programowalne shadery.
+
+Profil \emph{Common-Lite} stanowi uproszczoną wersję profilu Common, przeznaczoną dla platform o~ograniczonej mocy obliczeniowej, które nie~posiadają sprzętowej obsługi arytmetyki zmiennoprzecinkowej. W~profilu tym operacje matematyczne wykonywane są~w~arytmetyce stałoprzecinkowej (fixed-point).
+
+Kluczowe cechy OpenGL~ES~1.1 Common-Lite obejmują:
+\begin{itemize}
+  \item obsługę transformacji geometrycznych macierzami,
+  \item model oświetlenia Phonga z~wieloma źródłami światła,
+  \item teksturowanie 2D,
+  \item rasteryzację trójkątów, linii i~punktów,
+  \item testy głębokości i~szablonu,
+  \item mieszanie kolorów (alpha blending),
+  \item arytmetykę stałoprzecinkową.
+\end{itemize}
+
+Niniejszy projekt implementuje wybrany podzbiór tej specyfikacji, koncentrując się~na~kluczowych funkcjonalnościach potoku graficznego.
+
+\section{Język opisu sprzętu Amaranth HDL}
+
+Amaranth HDL (wcześniej znany jako~nMigen) to nowoczesny język opisu sprzętu wbudowany w~język Python. W~przeciwieństwie do~klasycznych języków HDL takich jak~Verilog czy~VHDL, Amaranth wykorzystuje możliwości języka wysokiego poziomu (Python) do~generowania i~kompozycji modułów sprzętowych.
+
+\subsection{Główne cechy Amaranth}
+
+\begin{itemize}
+  \item \textbf{Generatywność} --- możliwość programowego tworzenia złożonych struktur sprzętowych przy~użyciu pętli, funkcji i~klas Pythona.
+
+  \item \textbf{Modularność} --- system komponentów i~sygnatur (\code{wiring.Component}, \code{wiring.Signature}) ułatwia budowę hierarchicznych projektów.
+
+  \item \textbf{Biblioteka standardowa} --- gotowe komponenty takie jak~FIFO (\code{fifo.SyncFIFO}, \code{fifo.AsyncFIFO}), strumienie (\code{stream}), oraz~narzędzia do~synchronizacji sygnałów między~domenami zegarowymi.
+
+  \item \textbf{Symulacja} --- zintegrowane środowisko symulacyjne umożliwia testowanie projektów bez~konieczności syntezy sprzętowej.
+
+  \item \textbf{Interoperacyjność} --- możliwość eksportu do~Verilog/SystemVerilog oraz~integracji z~istniejącymi projektami.
+\end{itemize}
+
+\subsection{Struktura projektu w Amaranth}
+
+Podstawową jednostką w~Amaranth jest~\code{Module}, który grupuje logikę kombinacyjną (\code{m.d.comb}) i~synchroniczną (\code{m.d.sync}). Moduły mogą być~zagnieżdżane i~łączone za~pomocą systemu portów i~sygnałów.
+
+Przykładowy moduł w~Amaranth:
+\begin{lstlisting}[language=Python,caption={Przykład modułu Amaranth}]
+from amaranth import *
+from amaranth.lib import wiring
+from amaranth.lib.wiring import Component, In, Out
+
+class Adder(Component):
+    a: In(unsigned(32))
+    b: In(unsigned(32))
+    result: Out(unsigned(33))
+
+    def elaborate(self, platform):
+        m = Module()
+        m.d.comb += self.result.eq(self.a + self.b)
+        return m
+\end{lstlisting}
+
+\section{Platforma sprzętowa DE1-SoC}
+
+Projekt został zaimplementowany i~przetestowany na~płycie deweloperskiej DE1-SoC firmy Terasic, wyposażonej w~układ FPGA Intel Cyclone~V~SoC.
+
+\subsection{Specyfikacja układu Cyclone V SoC}
+
+Intel Cyclone~V~SoC to hybryda łącząca:
+\begin{itemize}
+  \item \textbf{FPGA} --- programowalna logika z 32~070 elementów logicznych (ALM), 4~065~280 bity pamięci wbudowanej (M10K i MLAB), 87~bloków DSP (jedno mnożenie 27x27, dwa 18x18 lub trzy 9x9).
+
+  \item \textbf{HPS} (Hard Processor System) --- dwurdzeniowy procesor ARM Cortex-A9 o~taktowaniu 800~MHz, 1~GB pamięci DDR3, kontrolery pamięci i~interfejsów peryferyjnych.
+\end{itemize}
+
+\subsection{Zasoby płyty DE1-SoC}
+
+Płyta DE1-SoC oferuje:
+\begin{itemize}
+  \item wyjście VGA (DAC 4-bit na~kanał RGB),
+  \item 64~MB pamięci SDRAM podłączonej do~FPGA,
+  \item 1~GB pamięci DDR3 współdzielonej z~HPS,
+  \item interfejsy GPIO, Ethernet, USB,
+  \item obsługę kart SD do~bootowania systemu Linux.
+\end{itemize}
+
+Architektura SoC pozwala na~ścisłą integrację logiki programowalnej (akcelerator graficzny) z~procesorem ARM (system operacyjny, aplikacje).
+
+\section{Integracja z systemem --- SoC i magistrale}
+
+\subsection{Magistrala Wishbone}
+
+Magistrala Wishbone to otwarty standard magistrali systemowej, powszechnie stosowany w~projektach open-source i~SoC. Specyfikacja definiuje synchroniczny interfejs master-slave z~sygnałami:
+\begin{itemize}
+  \item \code{adr} --- adres,
+  \item \code{dat\_w}, \code{dat\_r} --- dane do~zapisu/odczytu,
+  \item \code{we} --- sygnał zapisu (write enable),
+  \item \code{sel} --- wybór bajtów,
+  \item \code{cyc}, \code{stb} --- sygnały cyklu i~aktywacji transferu,
+  \item \code{ack} --- potwierdzenie transakcji.
+\end{itemize}
+
+W~projekcie magistrala Wishbone służy do~komunikacji akceleratora z~pamięcią oraz~systemem HPS poprzez~mostek AXI--Wishbone.
+
+\subsection{Magistrala Avalon}
+
+Avalon to zastrzeżony standard magistrali firmy Intel, wykorzystywany w~środowisku Qsys/Platform Designer. Magistrala Avalon Memory-Mapped (Avalon-MM) umożliwia dostęp do~pamięci i~rejestrów sterujących.
+
+W~projekcie wykorzystano:
+\begin{itemize}
+  \item \textbf{Avalon-MM Master} --- do~dostępu akceleratora do~pamięci (bufory wierzchołków, indeksów, ramki, głębokości).
+  \item \textbf{Avalon-MM Slave} --- do~rejestrów CSR (Control and Status Registers), dostępnych z~poziomu procesora ARM.
+\end{itemize}
+
+\subsection{Interfejs CSR}
+
+Moduł \code{GraphicsPipelineAvalonCSR} definiuje mapę rejestrów sterujących akceleratorem. Oprogramowanie z~poziomu systemu Linux może odczytywać i~zapisywać te~rejestry przez~mapowanie pamięci (\code{/dev/mem}), konfigurując parametry renderowania:
+\begin{itemize}
+  \item adresy i~formaty buforów (wierzchołki, indeksy, ramka, głębokość, szablon),
+  \item topologię prymitywów (TRIANGLE\_LIST, TRIANGLE\_STRIP, TRIANGLE\_FAN),
+  \item macierze transformacji,
+  \item parametry oświetlenia,
+  \item ustawienia testów głębokości, szablonu, mieszania kolorów,
+  \item parametry viewport i~scissor.
+\end{itemize}
+
+\section{Arytmetyka stałoprzecinkowa}
+
+Ze względu na~charakter platformy FPGA oraz~zgodność ze~specyfikacją OpenGL~ES~1.1 Common-Lite, projekt wykorzystuje arytmetykę stałoprzecinkową zamiast zmiennoprzecinkowej.
+
+\subsection{Formaty reprezentacji}
+
+W~projekcie zastosowano następujące formaty:
+\begin{itemize}
+  \item \textbf{Q13.13} --- 26-bitowy format ze~znakiem: 13~bitów całkowitych, 13~bitów ułamkowych. Używany do~reprezentacji pozycji, normalnych, macierzy transformacji.
+
+  \item \textbf{Q1.17} --- 18-bitowy format: 1~bit całkowity, 17~bitów ułamkowych. Używany do~współrzędnych barycentrycznych, głębokości, znormalizowanych wektorów.
+
+  \item \textbf{UQ0.9} --- 9-bitowy format bez~znaku: 0~bitów całkowitych, 9~bitów ułamkowych. Używany do~kanałów koloru (wartości w~zakresie $[0, 1)$).
+\end{itemize}
+
+\subsection{Operacje arytmetyczne}
+
+Amaranth HDL automatycznie zarządza szerokością sygnałów w~operacjach arytmetycznych. W~projekcie zdefiniowano własne typy stałoprzecinkowe (klasa \code{`gpu.utils.fixed.Shape'}), które integrują się z~systemem typów Amaranth i~zapewniają automatyczną obsługę:
+\begin{itemize}
+  \item dodawania i~odejmowania (z~poszerzeniem wyniku),
+  \item mnożenia (wykorzystanie bloków DSP FPGA),
+  \item nasycania (saturate) --- ograniczanie wartości do~zakresu docelowego typu.
+\end{itemize}
+
+Bloki DSP układu Cyclone~V umożliwiają efektywne realizowanie mnożeń stałoprzecinkowych, co~jest~kluczowe dla~wydajności transformacji geometrycznych i~cieniowania.
+Wybrane szerokości sygnałów zostały dostosowane do~optymalnego wykorzystania tych bloków (mnożenie Q13.13 działające na~27-bitowych operandach, UQ1.17 na 18-bitowych, a UQ0.9 na 9-bitowych).
+
+\chapter{Architektura akceleratora}
+
+\section{Ogólny przegląd architektury}
+
+Zaprojektowany akcelerator graficzny PixelForge realizuje kompletny potok renderowania fixed-pipeline zgodny z~podzbiorem specyfikacji OpenGL~ES~1.1 Common-Lite. Architektura jest~w~pełni potokowa, co~oznacza, że~różne etapy przetwarzania mogą działać równolegle nad~różnymi danymi, maksymalizując przepustowość systemu.
+
+Potok składa się~z~następujących głównych modułów (w~kolejności przetwarzania):
+
+\begin{enumerate}
+  \item Index Generator --- generator indeksów wierzchołków
+  \item Input Topology Processor --- procesor topologii wejściowej
+  \item Input Assembly --- asembler danych wejściowych
+  \item Vertex Transform --- transformacja wierzchołków
+  \item Vertex Shading --- cieniowanie wierzchołków
+  \item Primitive Clipper --- przycinanie prymitywów
+  \item Perspective Divide --- dzielenie perspektywiczne
+  \item Triangle Prep --- przygotowanie trójkątów
+  \item Triangle Rasterizer --- rasteryzacja trójkątów (wiele równoległych jednostek)
+  \item Depth/Stencil Test --- test głębokości i~szablonu
+  \item Swapchain Output --- wyjście do~bufora ramki
+\end{enumerate}
+
+Moduły połączone są~interfejsami strumieniowymi (\code{amaranth.lib.stream}), a~między~nimi znajdują się~bufory FIFO synchroniczne lub~asynchroniczne, które:
+\begin{itemize}
+  \item izolują moduły od~siebie, ułatwiając osiąganie wymagań czasowych,
+  \item obsługują zmienną latencję poszczególnych etapów (np. przycinanie może generować różną liczbę trójkątów),
+  \item umożliwiają pracę w~różnych domenach zegarowych.
+\end{itemize}
+
+\section{Podział na domeny zegarowe}
+
+Potok graficzny podzielony jest~na~dwie główne domeny zegarowe w~celu optymalizacji wydajności i~spełnienia wymagań czasowych:
+
+\begin{itemize}
+  \item \textbf{Domena wierzchołkowa/prymitywów} --- obejmuje moduły od~Index Generator do~Triangle Prep. Moduły te~wykonują złożone obliczenia na~wierzchołkach (transformacje macierzowe, cieniowanie, przycinanie). Mogą działać przy~niższej częstotliwości zegarowej, gdyż ich~przepustowość nie~jest~krytyczna dla~ogólnej wydajności.
+
+  \item \textbf{Domena rasteryzacji/fragmentów} --- obejmuje moduły od~Triangle Rasterizer do~Swapchain Output. Moduły te~operują na~pikselach i~stanowią wąskie gardło wydajnościowe (fill-rate limited). Działają przy~wyższej częstotliwości zegarowej, aby maksymalizować liczbę przetwarzanych pikseli na~sekundę.
+\end{itemize}
+
+Połączenie między~domenami realizowane jest~poprzez~asynchroniczne FIFO (\code{AsyncFIFO}), które bezpiecznie przekazują dane między~różnymi zegarami.
+
+\section{Moduły przetwarzania wierzchołków}
+
+\subsection{Index Generator}
+
+Moduł \code{IndexGenerator} generuje strumień indeksów wierzchołków na~podstawie skonfigurowanego bufora indeksów. Obsługuje formaty:
+\begin{itemize}
+  \item \code{U8} --- 8-bitowe indeksy bez~znaku,
+  \item \code{U16} --- 16-bitowe indeksy bez~znaku,
+  \item \code{U32} --- 32-bitowe indeksy bez~znaku,
+  \item \code{NOT\_INDEXED} --- tryb bezindeksowy (generowanie sekwencji 0, 1, 2, ...).
+\end{itemize}
+
+Moduł odczytuje dane z~pamięci poprzez~interfejs Wishbone Master, obsługując różne szerokości odczytu w~zależności od~formatu indeksów. Rozpoczęcie generowania indeksów następuje po~impulsie sygnału \code{start}.
+
+\subsection{Input Topology Processor}
+
+Moduł \code{InputTopologyProcessor} przetwarza strumień indeksów zgodnie z~wybraną topologią prymitywów:
+\begin{itemize}
+  \item \code{TRIANGLE\_LIST} --- każde trzy kolejne indeksy tworzą niezależny trójkąt,
+  \item \code{TRIANGLE\_STRIP} --- kolejne trójkąty współdzielą dwa wierzchołki,
+  \item \code{TRIANGLE\_FAN} --- wszystkie trójkąty mają wspólny pierwszy wierzchołek.
+  \item \code{LINE\_LIST} --- każde dwa kolejne indeksy tworzą niezależną linię,
+  \item \code{LINE\_STRIP} --- kolejne linie współdzielą jeden wierzchołek.
+  \item \code{POINTS} --- każdy indeks reprezentuje pojedynczy punkt.
+\end{itemize}
+
+Moduł obsługuje również funkcję \emph{primitive restart} --- specjalną wartość indeksu, która przerywa bieżący strip/fan i~rozpoczyna nowy, oraz~\emph{base vertex offset} --- wartość dodawaną do~każdego indeksu.
+
+\subsection{Input Assembly}
+
+Moduł \code{InputAssembly} pobiera dane atrybutów wierzchołków z~pamięci na~podstawie strumienia indeksów. Każdy atrybut (pozycja, normalna, kolor, współrzędne tekstury) może być~skonfigurowany jako:
+\begin{itemize}
+  \item \textbf{atrybut z~bufora} --- pobierany z~pamięci pod~adresem: $\text{base} + \text{index} \times \text{stride}$,
+  \item \textbf{atrybut stały} --- ta~sama wartość dla~wszystkich wierzchołków.
+\end{itemize}
+
+Obecnie moduł obsługuje jedynie format Q16.16 dla~atrybutów w~pamięci (dane są~przechowywane jako~32-bitowe wartości ze~znakiem). Dane są~odczytywane z~pamięci poprzez~magistralę Wishbone.
+
+\subsection{Vertex Transform}
+
+Moduł \code{VertexTransform} wykonuje transformacje geometryczne wierzchołków przy~użyciu macierzy $4 \times 4$ (dla~pozycji i~współrzędnych tekstury) oraz~$3 \times 3$ (dla~normalnych). Transformacje obejmują:
+
+\begin{itemize}
+  \item transformację pozycji do~przestrzeni widoku: $\mathbf{p}_{view} = M_{mv} \cdot \mathbf{p}_{model}$,
+  \item transformację pozycji do~przestrzeni obcinania: $\mathbf{p}_{clip} = M_p \cdot \mathbf{p}_{view}$,
+  \item transformację normalnej do~przestrzeni widoku: $\mathbf{n}_{view} = M_{norm} \cdot \mathbf{n}_{model}$, gdzie $M_{norm} = (M_{mv}^{-1})^T$.
+\end{itemize}
+
+Cały układ wykorzystuje tylko jeden układ mnożący, co pozwala na~oszczędność zasobów sprzętowych kosztem wydłużenia latencji przetwarzania wierzchołka.
+Nie jest to jednak problemem, gdyż istnieją inne etapy potoku o~znacznie wyższej latencji (np. rasteryzacja).
+
+\subsection{Vertex Shading}
+
+Moduł \code{VertexShading} oblicza kolor wierzchołka na~podstawie modelu oświetlenia Phonga. Implementuje składowe:
+\begin{itemize}
+  \item \textbf{Ambient} --- $C_{ambient} = k_{ambient} \cdot I_{ambient}$,
+  \item \textbf{Diffuse} --- $C_{diffuse} = k_{diffuse} \cdot I_{light} \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)$.
+\end{itemize}
+
+Moduł obsługuje konfigurowalną liczbę kierunkowych źródeł światła.
+Obliczenia wykonywane są~w~przestrzeni widoku, zgodnie ze specyfikacją OpenGL~ES~1.1.
+Kolor wierzchołka obliczony tutaj będzie iterpolowany (z~użyciem perspektywicznej interpolacji) podczas rasteryzacji.
+
+\section{Moduły przetwarzania prymitywów}
+
+\subsection{Primitive Clipper}
+
+Moduł \code{PrimitiveClipper} implementuje algorytm przycinania Sutherlanda-Hodgmana, który przycina trójkąty do~bryły obcinania (frustum).
+Bryła ta~w~przestrzeni obcinania definiowana jest~sześcioma płaszczyznami:
+\[
+-w \leq x \leq w, \quad -w \leq y \leq w, \quad -w \leq z \leq w
+\]
+
+Dla każdego trójkąta algorytm iteracyjnie przycina go~względem kolejnych płaszczyzn. Wynikiem może być:
+\begin{itemize}
+  \item brak trójkąta (cały poza~frustum),
+  \item ten~sam trójkąt (cały wewnątrz),
+  \item wiele trójkątów (częściowe przecięcie --- powstają nowe wierzchołki w~miejscach przecięć z~płaszczyznami).
+\end{itemize}
+
+Ten modół, ze względu na iteracyjną naturę algorytmu oraz próbę minimalizacji zużycia zasobów, jest potencjalnie wązkim gardłem potoku,
+ale trójkąty wychodzące poza frustum są stosunkowo rzadkie, więc ogólna wydajność jest ograniczana tylko w patologicznych przypadkach.
+
+\subsection{Perspective Divide}
+
+Moduł \code{PerspectiveDivide} wykonuje dzielenie perspektywiczne --- przekształcenie współrzędnych jednorodnych z~przestrzeni obcinania do~znormalizowanych współrzędnych urządzenia (NDC):
+\[
+x_{ndc} = \frac{x_{clip}}{w}, \quad y_{ndc} = \frac{y_{clip}}{w}, \quad z_{ndc} = \frac{z_{clip}}{w}
+\]
+
+Dodatkowo obliczana jest~wartość $1/w$, która będzie potrzebna do~perspektywicznej interpolacji atrybutów podczas rasteryzacji.
+
+Dzielenie realizowane jest~poprzez~obliczenie odwrotności $w$, a~następnie mnożenie współrzędnych przez~tę odwrotność.
+
+Modół obliczający odwrotność (\code{FixedPointInv}) zamienia dzielnik do dziedziny [1, 2) poprzez odpowiednie przesunięcie bitowe,
+bierze początkowe przybliżenie z~tablicy LUT, a~następnie poprawia wynik za~pomocą jednej iteracji metody Newtona-Raphsona.
+Całość używa jedynie jeden blok DSP o szerokości takiej, jak wejście.
+
+Po~tej~operacji współrzędne są w zakresie $[-1, 1]$, zamieniamy je do zakresu $[0, 1]$ dla ułatwienia dalszych obliczeń:
+\[
+x'_{ndc} = \frac{x_{ndc} + 1}{2}, \quad y'_{ndc} = \frac{y_{ndc} + 1}{2}, \quad z'_{ndc} = \frac{z_{ndc} + 1}{2}
+\]
+Dzięki temu możemy użyć formatu UQ1.17 do reprezentacji współrzędnych NDC, co pozwoli na efektywniejsze wykorzystanie zasobów sprzętowych w dalszych etapach potoku.
+
+\subsection{Triangle Prep}
+
+Moduł \code{TrianglePrep} zbiera trzy wierzchołki trójkąta (w~przestrzeni NDC) i~przygotowuje dane do~rasteryzacji:
+
+\begin{enumerate}
+  \item \textbf{Transformacja viewport} --- przekształcenie współrzędnych NDC $[0, 1]$ do~współrzędnych ekranu w~pikselach:
+  \[
+  x_{screen} = x'_{ndc} \cdot \text{width} + x_{offset}
+  \]
+  \[
+  y_{screen} = y'_{ndc} \cdot \text{height} + y_{offset}
+  \]
+
+  Każdy wierzchołek otrzymuje swój zestaw współrzędnych ekranowych $(x_{screen}, y_{screen})$.
+  Niech $ (x_0, y_0), (x_1, y_1), (x_2, y_2) $ będą współrzędnymi ekranowymi trzech wierzchołków trójkąta.
+
+  \item \textbf{Obliczenie pola powierzchni} trójkąta (dwukrotność pola):
+  \[
+  A = (x_1 - x_0)(y_2 - y_0) - (x_2 - x_0)(y_1 - y_0)
+  \]
+
+  \item \textbf{Face culling} --- na~podstawie znaku pola powierzchni i~konfiguracji (front-face, cull-mode) decyzja, czy~trójkąt powinien być~renderowany. Odrzucane są~trójkąty zwrócone tyłem (back-facing) lub~przodem (front-facing), zgodnie z~konfiguracją.
+
+  \item \textbf{Obliczenie odwrotności pola} ($1/A$) --- wykorzystywane do~normalizacji współrzędnych barycentrycznych.
+
+  \item \textbf{Obliczenie bounding box} --- prostokąt ograniczający trójkąt w~pikselach, ograniczony dodatkowo przez~viewport i~scissor rectangle.
+\end{enumerate}
+
+Wynikiem jest~struktura \code{TriangleContext}, która zawiera wszystkie dane potrzebne do~rasteryzacji.
+
+\section{Rasteryzacja i przetwarzanie fragmentów}
+
+\subsection{Triangle Rasterizer}
+
+Moduł \code{TriangleRasterizer} jest~najbardziej złożonym elementem potoku. Realizuje rasteryzację trójkąta --- określenie, które piksele są~pokryte przez~trójkąt, oraz~obliczenie interpolowanych atrybutów dla~każdego fragmentu.
+
+Architektura modułu:
+\begin{itemize}
+  \item \textbf{Generator pikseli} --- przechodzi po~bounding box trójkąta, generując współrzędne $(x, y)$ kolejnych pikseli.
+
+  \item \textbf{Distributor} --- rozdziela strumień pikseli do~wielu równoległych procesorów fragmentów.
+
+  \item \textbf{Procesory fragmentów} (wiele równoległych jednostek) --- dla~każdego piksela:
+  \begin{enumerate}
+    \item obliczają wartości funkcji krawędziowych (edge functions),
+    \item sprawdzają, czy~piksel jest~wewnątrz trójkąta (wszystkie funkcje mają ten~sam znak),
+    \item obliczają liniowe współrzędne barycentryczne,
+    \item interpolują liniowo głębokość $z$,
+    \item obliczają perspektywicznie poprawne współrzędne barycentryczne (z~użyciem $1/w$),
+    \item interpolują atrybuty (kolor, współrzędne tekstury) perspektywicznie.
+  \end{enumerate}
+
+  \item \textbf{Recombiner} --- zbiera wyniki z~procesorów fragmentów i~przekazuje je~dalej w~kolejności, zapewniając zgodność z~semantyką OpenGL
+    (fragmenty muszą być przetwarzane zgodnie z kolejnością trójkątów, z których pochodzą).
+\end{itemize}
+
+Zastosowanie wielu równoległych procesorów fragmentów pozwala na~ukrycie latencji dzielenia (potrzebnego do~obliczenia współrzędnych perspektywicznych) poprzez~przetwarzanie wielu pikseli jednocześnie.
+
+\subsection{Depth/Stencil Test}
+
+Moduł \code{DepthStencilTest} dla~każdego fragmentu:
+\begin{enumerate}
+  \item Odczytuje aktualną wartość głębokości i~szablonu z~pamięci (bufor depth/stencil w~formacie D16\_X8\_S8 --- 16~bitów głębokości, 8~bitów szablonu).
+
+  \item Wykonuje test szablonu zgodnie z~konfiguracją (operator porównania, wartość referencyjna, maska).
+
+  \item Wykonuje test głębokości (jeśli test szablonu się~powiódł).
+
+  \item Aktualizuje wartość w~buforze szablonu zgodnie z~operacjami SFAIL, ZFAIL, ZPASS.
+
+  \item Aktualizuje wartość w~buforze głębokości (jeśli test głębokości się~powiódł i~zapis jest~włączony).
+
+  \item Przekazuje fragment dalej (do~Swapchain Output) tylko wtedy, gdy~oba testy się~powiodły.
+\end{enumerate}
+
+Moduł obsługuje dwa zestawy konfiguracji --- dla~trójkątów front-facing i~back-facing, zgodnie ze~specyfikacją OpenGL.
+
+\subsection{Swapchain Output}
+
+Moduł \code{SwapchainOutput} wykonuje ostatni etap potoku:
+\begin{enumerate}
+  \item Dla fragmentu, który przeszedł testy głębokości/szablonu, odczytuje aktualny kolor z~bufora ramki.
+
+  \item Wykonuje operację blendingu (mieszania kolorów) zgodnie z~konfiguracją:
+  \[
+  C_{out} = C_{src} \cdot f_{src} \; \text{op} \; C_{dst} \cdot f_{dst}
+  \]
+  gdzie $C_{src}$ to kolor fragmentu, $C_{dst}$ to kolor w~buforze, $f_{src}$, $f_{dst}$ to współczynniki, a~$\text{op}$ to operator (ADD, SUBTRACT, REVERSE\_SUBTRACT).
+
+  \item Zapisuje wynikowy kolor do~bufora ramki.
+\end{enumerate}
+
+Moduł wykorzystuje format koloru UQ0.9 (9-bitowy bez~znaku) dla~każdego kanału RGB i~A, co~odpowiada zakresowi $[0, 1)$ i~pozwala na~efektywne wykorzystanie małych bloków DSP ($9 \times 9$ bitów).
+
+\section{Interfejs sterowania --- CSR}
+
+Moduł \code{GraphicsPipelineCSR} oraz~jego~wariant z~interfejsem Avalon (\code{GraphicsPipelineAvalonCSR}) zapewniają dostęp do~rejestrów sterujących akceleratorem z~poziomu procesora ARM.
+
+Rejestry podzielone są~na~grupy funkcjonalne:
+\begin{itemize}
+  \item \textbf{Index configuration} --- adres bufora indeksów, liczba indeksów, format, sygnał start.
+
+  \item \textbf{Input topology} --- topologia (LIST/STRIP/FAN), primitive restart, base vertex.
+
+  \item \textbf{Vertex attributes} --- dla~każdego atrybutu (pozycja, normalna, kolor, współrzędne tekstury): adres bazowy, stride, offset, flaga czy~używać bufora czy~stałej wartości.
+
+  \item \textbf{Transformation matrices} --- macierze model-view ($4 \times 4$), projekcji ($4 \times 4$), normalnych ($3 \times 3$), tekstur ($4 \times 4$ dla~każdej jednostki teksturującej).
+
+  \item \textbf{Lighting} --- dla~każdego źródła światła: kierunek, kolory ambient/diffuse/specular.
+
+  \item \textbf{Material} --- kolory ambient/diffuse/specular materiału, połysk.
+
+  \item \textbf{Framebuffer} --- adresy buforów koloru, głębokości, szablonu; formaty; rozdzielczość.
+
+  \item \textbf{Primitive assembly} --- front-face, cull-mode, polygon-mode.
+
+  \item \textbf{Viewport/Scissor} --- parametry transformacji viewport, prostokąt scissor.
+
+  \item \textbf{Depth/Stencil} --- konfiguracje testów głębokości i~szablonu (operatory, maski, wartości referencyjne, operacje aktualizacji).
+
+  \item \textbf{Blending} --- włączenie blendingu, współczynniki, operator.
+
+  \item \textbf{Status} --- flagi busy dla~poszczególnych etapów potoku, pozwalające na~synchronizację (oczekiwanie na~zakończenie renderowania).
+\end{itemize}
+
+Oprogramowanie może odczytywać status potoku, aby~określić, kiedy bezpiecznie jest~zmieniać konfigurację lub~rozpoczynać nowe wywołanie rysowania. Statusy \code{busy} wskazują, które etapy wciąż przetwarzają dane:
+\begin{itemize}
+  \item \code{busy\_ia} --- Input Assembly (bezpieczna zmiana vertex/index buffers po~wyzerowaniu),
+  \item \code{busy\_vs} --- Vertex Shading (bezpieczna zmiana macierzy/oświetlenia po~wyzerowaniu),
+  \item \code{busy\_prep} --- Triangle Prep (bezpieczna zmiana viewport/scissor po~wyzerowaniu),
+  \item \code{busy\_all} --- cały potok (bezpieczna zmiana adresu bufora ramki po~wyzerowaniu).
+\end{itemize}
+
+
+\chapter{Implementacja}
+
+\section{Struktura projektu}
+
+Projekt zorganizowany jest~w~strukturę modułową, wykorzystującą możliwości języka Python i~Amaranth HDL. Główne katalogi:
+
+\begin{itemize}
+  \item \code{gpu/} --- moduły akceleratora graficznego w~Amaranth HDL:
+  \begin{itemize}
+    \item \code{input\_assembly/} --- moduły generowania indeksów, topologii i~asemblera wierzchołków,
+    \item \code{vertex\_transform/} --- transformacje geometryczne,
+    \item \code{vertex\_shading/} --- cieniowanie wierzchołków,
+    \item \code{rasterizer/} --- przycinanie, dzielenie perspektywiczne, przygotowanie i~rasteryzacja trójkątów,
+    \item \code{pixel\_shading/} --- testy głębokości/szablonu, blending, wyjście do~framebuffer,
+    \item \code{utils/} --- narzędzia pomocnicze (arytmetyka stałoprzecinkowa, interfejsy magistral, matematyka),
+    \item \code{pipeline.py} --- główny moduł łączący cały potok.
+  \end{itemize}
+
+  \item \code{tests/} --- testy jednostkowe i~integracyjne w~pytest,
+
+  \item \code{quartus/} --- projekt Intel Quartus (Qsys, syntetyka, konfiguracja pinów),
+
+  \item \code{software/} --- aplikacje demonstracyjne i~narzędzia diagnostyczne w~C dla~ARM Linux:
+  \begin{itemize}
+    \item \code{src/} --- kod źródłowy aplikacji,
+    \item \code{include/} --- nagłówki (mapa CSR, mapa pamięci SoC, API PixelForge),
+  \end{itemize}
+
+  \item \code{tools/} --- skrypty pomocnicze (generowanie nagłówków C z~map CSR).
+\end{itemize}
+
+\section{Generacja kodu sprzętowego}
+
+Główny moduł \code{gpu/pipeline.py} definiuje klasę \code{GraphicsPipelineAvalonCSR}, która instancjonuje wszystkie moduły potoku i~łączy je~interfejsami strumieniowymi oraz~rejestrami CSR.
+
+Elaboracja projektu (konwersja z~Amaranth do~SystemVerilog) odbywa się~poprzez~wywołanie:
+\begin{lstlisting}[language=bash]
+python -m gpu.pipeline
+\end{lstlisting}
+
+które generuje:
+\begin{itemize}
+  \item \code{graphics\_pipeline\_avalon\_csr.sv} --- plik SystemVerilog z~całym potokiem graficznym,
+  \item \code{graphics\_pipeline\_csr\_map.json} --- mapa rejestrów CSR (nazwy, adresy, szerokości).
+\end{itemize}
+
+Plik \code{.sv} jest~następnie integrowany z~projektem Qsys jako~komponent IP.
+
+\section{Integracja z~Qsys}
+
+W~środowisku Intel Quartus Prime wykorzystano narzędzie Qsys (Platform Designer) do~budowy systemu SoC. Projekt \code{soc\_system.qsys} zawiera:
+
+\begin{itemize}
+  \item \textbf{HPS} --- Hard Processor System (ARM Cortex-A9, kontrolery pamięci DDR3, peryferyjne),
+
+  \item \textbf{PixelForge GPU} --- zaimplementowany akcelerator graficzny (\code{graphics\_pipeline\_avalon\_csr}):
+  \begin{itemize}
+    \item interfejs Avalon-MM Slave (CSR) --- podłączony do~magistrali HPS,
+    \item interfejsy Avalon-MM Master (vertex, depth/stencil, color) --- podłączone do~kontrolera pamięci SDRAM lub~DDR3.
+  \end{itemize}
+
+  \item \textbf{VGA Pixel Buffer DMA} --- kontroler DMA przekazujący dane z~bufora ramki do~przetwornika DAC VGA.
+
+  \item \textbf{PLL} --- generatory zegarów dla~różnych części systemu (domena wierzchołków, domena fragmentów, VGA pixel clock).
+
+  \item \textbf{Mosty i magistrale} --- mosty AXI-to-Avalon, Avalon-to-Wishbone, magistrale łączące komponenty.
+\end{itemize}
+
+Po~wygenerowaniu systemu w~Qsys, projekt kompilowany jest~w~Quartus, generując plik konfiguracyjny \code{.sof} (SRAM Object File), który następnie konwertowany jest~do~formatu \code{.rbf} (Raw Binary File) umożliwiającego bootowanie z~karty SD.
+
+\section{Kluczowe decyzje implementacyjne}
+
+\subsection{Wykorzystanie bloków DSP}
+
+Układ Cyclone~V~SoC posiada 87~bloków DSP, które wspierają:
+\begin{itemize}
+  \item mnożenie $9 \times 9$ bitów (dla~kolorów),
+  \item mnożenie $18 \times 18$ bitów (dla~współrzędnych NDC/ekranu),
+  \item mnożenie $27 \times 27$ bitów (dla~transformacji wierzchołków).
+\end{itemize}
+
+W~implementacji wykorzystano te~bloki do~realizacji operacji arytmetyki stałoprzecinkowej. Po~dzieleniu perspektywicznym dane są~konwertowane z~formatu Q13.13 (wymagającego bloków $27 \times 27$) do~formatu Q1.17 (wymagającego bloków $18 \times 18$), co~podwaja efektywność użycia DSP w~etapach rasteryzacji.
+
+\subsection{Równoległe procesory fragmentów}
+
+Rasteryzacja jest~najbardziej czasochłonnym etapem potoku (fill-rate limited). Aby zwiększyć przepustowość, zaimplementowano wiele równoległych procesorów fragmentów. Każdy procesor może niezależnie sprawdzać, czy~piksel należy do~trójkąta, i~obliczać interpolowane atrybuty.
+
+Liczba procesorów jest~parametrem konfigurowalnym. W~przykładzie użyto 5~procesorów, co~pozwala na~osiągnięcie zadowalającej wydajności przy~rozsądnym zużyciu zasobów FPGA.
+
+\subsection{Bufory FIFO}
+
+Między~każdym etapem potoku umieszczono bufory FIFO o~głębokości 256~elementów (domyślnie). Pozwala to~na:
+\begin{itemize}
+  \item ukrycie opóźnień związanych z~dostępem do~pamięci,
+  \item obsługę zmiennej latencji (np. przycinanie może generować więcej trójkątów),
+  \item ułatwienie spełnienia wymagań czasowych (timing closure) poprzez~izolację sygnałów.
+\end{itemize}
+
+\subsection{Dostęp do~pamięci}
+
+Akcelerator posiada trzy niezależne interfejsy Wishbone Master do~dostępu do~pamięci:
+\begin{itemize}
+  \item \code{index\_bus} --- odczyt bufora indeksów (Index Generator),
+  \item \code{vertex\_bus} --- odczyt buforów wierzchołków i~indeksów (Input Assembly),
+  \item \code{depthstencil\_bus} --- odczyt/zapis bufora głębokości i~szablonu (Depth/Stencil Test),
+  \item \code{color\_bus} --- odczyt/zapis bufora ramki (Swapchain Output).
+\end{itemize}
+
+Rozdzielenie magistral zapobiega konfliktom dostępu i~maksymalizuje przepustowość pamięci. W~implementacji Qsys wszystkie cztery magistrale są~podłączone do~wspólnego kontrolera pamięci, który arbitruje dostęp.
+
+\section{Oprogramowanie systemowe}
+
+\subsection{Środowisko uruchomieniowe}
+
+System uruchomieniowy na~płycie DE1-SoC oparty jest~na~Linuksie dla~ARM. Obraz systemu (\code{disk.img}) zawiera:
+\begin{itemize}
+  \item bootloader U-Boot,
+  \item jądro Linux skonfigurowane dla~DE1-SoC,
+  \item filesystem z~minimalnym środowiskiem użytkownika (BusyBox),
+  \item plik \code{.rbf} z~konfiguracją FPGA, ładowany automatycznie przy~starcie.
+  \item testowe aplikacje demonstracyjne i~biblioteka PixelForge.
+\end{itemize}
+
+Po~uruchomieniu systemu użytkownik loguje się~jako~\code{root} (bez~hasła) i~uzyskuje dostęp do~aplikacji demonstracyjnych.
+
+\subsection{Biblioteka PixelForge}
+
+Oprogramowanie zawiera bibliotekę \code{libpixelforge.a}, która enkapsuluje niskopoziomowy dostęp do~rejestrów CSR i~zapewnia API do:
+\begin{itemize}
+  \item mapowania rejestrów CSR i~pamięci VRAM przez~\code{/dev/mem},
+  \item konfiguracji potoku graficznego (ustawianie macierzy, parametrów oświetlenia, buforów),
+  \item inicjowania wywołań rysowania (draw calls),
+  \item oczekiwania na~zakończenie renderowania,
+  \item zarządzania pamięcią VRAM (alokator bufora ramki, wierzchołków, głębokości).
+\end{itemize}
+
+\subsection{Aplikacje demonstracyjne}
+
+Projekt zawiera kilka aplikacji demonstracyjnych:
+
+\begin{itemize}
+  \item \textbf{pixelforge\_demo} --- minimalna aplikacja rysująca dwa trójkąty (nałożone na siebie), demonstrująca podstawowy przepływ danych.
+
+  \item \textbf{demo\_cube} --- rysowanie obracającego się~kolorowego sześcianu, demonstrująca transformacje geometryczne i~interpolację kolorów.
+
+  \item \textbf{demo\_depth} --- cztery sześciany obracające się w przestrzeni 3D, które czasami się przysłaniają, demonstrująca test głębokości.
+
+  \item \textbf{demo\_obj} --- wczytywanie i~renderowanie modeli w~formacie Wavefront OBJ (np. kule, wielościany) z~oświetleniem diffuse oraz~opcjonalnym efektem konturu za~pomocą bufora szablonu.
+
+  \item \textbf{dump\_gpu\_csr} --- narzędzie diagnostyczne wyświetlające zawartość wszystkich rejestrów CSR akceleratora.
+
+  \item \textbf{dump\_vga\_dma} --- narzędzie diagnostyczne wyświetlające rejestry kontrolera VGA DMA.
+\end{itemize}
+
+Aplikacje budowane są~przy~użyciu cross-compilera ARM (np. \code{arm-linux-gnueabihf-gcc}) i~uruchamiane bezpośrednio na~płycie DE1-SoC.
+
+
+\chapter{Testowanie i~weryfikacja}
+
+\section{Metodologia testowania}
+
+Projekt obejmuje wielopoziomową strategię testowania:
+
+\begin{enumerate}
+  \item \textbf{Testy jednostkowe modułów} --- każdy moduł potoku testowany jest~niezależnie w~środowisku symulacyjnym Amaranth. Testy weryfikują poprawność obliczeń (np. transformacji macierzowych, interpolacji) dla~różnych danych wejściowych.
+
+  \item \textbf{Testy integracyjne potoku} --- pełny potok testowany jest~z~użyciem syntetycznych danych wejściowych (np. prosty trójkąt), następnie generowany jest obraz w formacie .ppm, do inspekcji wizualnej.
+
+  \item \textbf{Testy sprzętowe na~FPGA} --- akcelerator uruchomiony na~płycie DE1-SoC renderuje różne sceny 3D, weryfikując zarówno poprawność funkcjonalną, jak~i~wydajność.
+\end{enumerate}
+
+Testy realizowane są~za~pomocą frameworka \code{pytest} oraz~wbudowanego symulatora Amaranth.
+
+\section{Test renderowania trójkąta}
+
+Test integracyjny \code{test\_render\_triangle.py} weryfikuje cały potok, renderując prosty trójkąt:
+
+\begin{enumerate}
+  \item Konfiguracja symulowanej pamięci z~danymi wierzchołków (pozycje, kolory).
+  \item Ustawienie macierzy transformacji (model-view, projekcja).
+  \item Wywołanie rysowania (start signal).
+  \item Odczyt bufora ramki po~zakończeniu renderowania.
+  \item Generowanie pliku obrazu do inspekcji wizualnej.
+\end{enumerate}
+
+Test wykorzystuje wbudowany symulowany kontroler pamięci Wishbone, który emuluje zachowanie rzeczywistej pamięci.
+
+\section{Weryfikacja na~sprzęcie}
+
+Po~syntezie i~wgraniu bitstreamu do~FPGA, wykonano szereg testów sprzętowych:
+
+\subsection{Test podstawowy --- trójkąt}
+
+Aplikacja \code{pixelforge\_demo} renderuje dwa nałożone na siebie trójkąty o~interpolowanych kolorach wierzchołków. Test weryfikuje:
+\begin{itemize}
+  \item poprawność rasteryzacji i~interpolacji kolorów,
+  \item poprawność zapisu do~bufora ramki,
+  \item poprawność wyświetlania na~wyjściu VGA.
+\end{itemize}
+
+\subsection{Test rotacji --- sześcian}
+
+Aplikacja \code{demo\_cube} renderuje obracający się~sześcian. Test weryfikuje:
+\begin{itemize}
+  \item poprawność transformacji w~czasie (animacja),
+  \item poprawność rysowania wielu trójkątów,
+  \item wizualną płynność animacji (frame rate).
+\end{itemize}
+
+\subsection{Test bufora głębokości}
+
+Aplikacja \code{demo\_depth} renderuje cztery sześciany obracające się w przestrzeni 3D, które czasami się przysłaniają, demonstrująca test głębokości. Test weryfikuje:
+\begin{itemize}
+  \item poprawność testu głębokości (przednie obiekty zasłaniają tylne),
+  \item poprawność zapisu i~odczytu bufora głębokości,
+  \item brak artefaktów (z-fighting, niepoprawna kolejność).
+\end{itemize}
+
+\subsection{Test oświetlenia i~bufora szablonu}
+
+Aplikacja \code{demo\_obj} wczytuje model 3D (kula) i~renderuje go~z~oświetleniem diffuse. Opcjonalnie włącza efekt konturu za~pomocą bufora szablonu (dwuprzebiegowe renderowanie). Test weryfikuje:
+\begin{itemize}
+  \item poprawność obliczeń oświetlenia (model Phonga),
+  \item poprawność testu szablonu,
+  \item poprawność operacji na~buforze szablonu (INCR, KEEP, REPLACE),
+  \item wizualną jakość efektu konturu.
+\end{itemize}
+
+\section{Metryki wydajności}
+
+Zaimplementowany akcelerator osiąga następujące parametry wydajnościowe na~płycie DE1-SoC:
+
+\begin{itemize}
+    \item Dla testów \code{pixelforge\_demo} i~\code{demo\_cube}, akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640x480.
+    \item Dla testu \code{demo\_obj} z dostarczonymi modelami (około 500-1000 trójkątów), akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640x480.
+    \item Dla testu \code{demo\_depth} akcelerator widocznie traci na wydajności, gdy kostki zbliżają się do kamery, przez to zajmują dużą część pikseli ekranu.
+\end{itemize}
+
+Dla modelu kuli (960~trójkątów) w~\code{demo\_obj}, akcelerator osiąga stabilne 60~FPS, co~potwierdza, że~implementacja jest~fill-rate limited (wydajność zależy od~liczby rysowanych pikseli, a~nie liczby trójkątów).
+
+\section{Zużycie zasobów FPGA}
+
+Po~syntezie projektu w~Intel Quartus Prime dla~układu Cyclone~V~5CSEMA5F31C6, zużycie zasobów wynosi:
+
+\begin{table}[H]
+\centering
+\caption{Zużycie zasobów FPGA}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Zasób} & \textbf{Użyte} & \textbf{Dostępne} \\
+\midrule
+Elementy logiczne (ALM) & 27,702 & 32,070 \\
+Pamięć wbudowana (bit) & 552,407 & 4,065,280 \\
+Bloki DSP & 62 & 87 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Projekt wykorzystuje w znacznym stopniu dostępne zasoby FPGA, pozostawiając niewiele marginesu na dalsze rozszerzenia bez~przenoszenia na~większy układ.
+
+\chapter{Podsumowanie i~perspektywy rozwoju}
+
+\section{Osiągnięte cele}
+
+W~ramach niniejszej pracy udało się~zrealizować wszystkie założone cele:
+
+\begin{enumerate}
+  \item \textbf{Zaprojektowanie i~zaimplementowanie potoku graficznego fixed-pipeline} --- zbudowano kompletny akcelerator graficzny obejmujący transformacje wierzchołków, cieniowanie, przycinanie, rasteryzację i~przetwarzanie fragmentów.
+
+  \item \textbf{Implementacja kluczowych funkcjonalności OpenGL~ES~1.1 Common-Lite}:
+  \begin{itemize}
+    \item transformacje geometryczne (macierze model-view, projekcji),
+    \item rasteryzacja trójkątów z~perspektywiczną interpolacją,
+    \item oświetlenie Phonga (ambient, diffuse),
+    \item testy głębokości i~szablonu,
+    \item mieszanie kolorów (alpha blending).
+  \end{itemize}
+
+  \item \textbf{Integracja z~systemem SoC} --- akcelerator został zintegrowany z~procesorem ARM poprzez~magistralę Wishbone/Avalon i~interfejs CSR, umożliwiając konfigurację i~sterowanie z~poziomu systemu Linux.
+
+  \item \textbf{Weryfikacja działania} --- zbudowano kompletne środowisko testowe (testy jednostkowe, integracyjne) oraz~aplikacje demonstracyjne, które potwierdzają poprawność i~użyteczność akceleratora.
+\end{enumerate}
+
+Projekt PixelForge stanowi w~pełni funkcjonalny akcelerator graficzny 3D, zdolny do~renderowania scen w~czasie rzeczywistym na~platformie FPGA.
+
+\section{Wnioski}
+
+\subsection{Amaranth HDL jako narzędzie projektowania sprzętu}
+
+Język Amaranth HDL okazał się~niezwykle efektywnym narzędziem do~projektowania złożonych systemów cyfrowych. Możliwość wykorzystania abstrakcji języka Python (klasy, funkcje, generatory) znacznie przyspieszyła proces tworzenia modułów i~ułatwiła ich~testowanie. System \code{wiring} oraz~biblioteka \code{stream} zapewniły spójne interfejsy między~modułami, redukując błędy integracyjne.
+
+\subsection{Arytmetyka stałoprzecinkowa}
+
+Zastosowanie arytmetyki stałoprzecinkowej zamiast zmiennoprzecinkowej pozwoliło na~efektywne wykorzystanie bloków DSP układu FPGA oraz~uproszczenie logiki. Odpowiedni dobór formatów (Q13.13, Q1.17, UQ0.9) dla~różnych etapów potoku zoptymalizował zużycie zasobów sprzętowych, zachowując wystarczającą precyzję obliczeń.
+
+\subsection{Równoległość na~poziomie fragmentów}
+
+Kluczowym elementem osiągnięcia zadowalającej wydajności było zrównoleglenie przetwarzania fragmentów. Użycie wielu procesorów fragmentów pozwoliło na~ukrycie latencji dzielenia perspektywicznego i~znaczące zwiększenie fill-rate.
+
+\subsection{Ograniczenia wydajnościowe}
+
+Akcelerator jest~fill-rate limited --- wydajność zależy głównie od~liczby rysowanych pikseli, a~nie liczby trójkątów. Dla rozdzielczości 640×480 i~typowych scen osiągnięto 60~FPS. Zwiększenie rozdzielczości wymaga dalszej optymalizacji.
+
+\section{Prace pokrewne}
+
+Zagadnienie implementacji potoku graficznego na~platformach FPGA było już~wcześniej podejmowane w~literaturze.
+
+Przykładowo, praca \cite{fpga-gpu} przedstawia akcelerator 3D o~architekturze zbliżonej do~fixed-pipeline,
+implementowany na~FPGA, z~naciskiem na~algorytmy rasteryzacji i~zarządzania pamięcią. Praca ta nie obejmuje
+transformacji geometrycznych ani oświetlenia, koncentrując się~głównie na~etapie rasteryzacji.
+
+Praca magisterska \cite{fpga-gpu-2} opisuje implementację prostego akceleratora graficznego na~platformie FPGA, z~obsługą
+transformacji wierzchołków, obcinania i~rasteryzacji lini. Jednakże nie posiada możliwości prymityw trójkątów ani
+obsługi cienowania fragmentów.
+
+Ta praca wyróżnia się tym, że~implementuje kompletny potok, który może bez udziału procesora wykonać pełną komendę rysowania
+dla trójkątów, od pobrania danych z~pamięci, przez~transformacje, rasteryzację, aż~po~zapis do~bufora ramki.
+
+\section{Możliwe rozszerzenia}
+
+Projekt stanowi solidną podstawę do~dalszego rozwoju. Możliwe kierunki rozszerzeń obejmują:
+
+\subsection{Teksturowanie}
+
+Dodanie obsługi tekstur 2D zgodnie ze~specyfikacją OpenGL~ES~1.1. Wymaga to:
+\begin{itemize}
+  \item modułu próbkowania tekstur (texture sampling) z~buforów w~pamięci,
+  \item filtrowania (nearest, bilinear),
+  \item obsługi różnych formatów tekstur (RGB, RGBA, paletyzowane).
+\end{itemize}
+
+\subsection{Oświetlenie specularne}
+
+Rozszerzenie modułu \code{VertexShading} o~składową specular modelu Phonga, co~pozwoli na~renderowanie błyszczących powierzchni.
+
+\subsection{Obsługa linii i~punktów}
+
+Obecnie akcelerator obsługuje jedynie prymitywy typu trójkąt. Dodanie rasteryzacji linii (algorytm Bresenhama) i~punktów rozszerzy możliwości renderowania.
+
+\subsection{Guard-band clipping}
+
+Zaimplementowanie techniki guard-band clipping, która redukuje konieczność przycinania dla~większości trójkątów, poprawiając wydajność.
+
+\subsection{Mipmapping}
+
+Obsługa mipmap dla~tekstur, poprawiająca jakość renderowania obiektów w~różnych odległościach i~redukująca aliasing.
+
+\subsection{Większe rozdzielczości}
+
+Dostosowanie systemu do~wyższych rozdzielczości (np. 1280×720, 1920×1080) poprzez~zwiększenie przepustowości pamięci i~liczby procesorów fragmentów.
+
+\subsection{TBR (Tile-Based Rendering)}
+
+Implementacja techniki Tile-Based Rendering, która dzieli scenę na~mniejsze kafelki, co~pozwala na~efektywniejsze zarządzanie pamięcią i~redukcję nadmiarowego renderowania.
+Pozwoliło by to na oddzielenie fazy rasteryzacji od magistrali pamięci, co by pozwoliło na osiągnięcie częstotliwości wyższych niż maksymalna częstotliwość magistrali pamięci.
+
+\subsection{Programowalne shadery}
+
+Ostatecznym rozszerzeniem byłoby wprowadzenie programowalnych shaderów (vertex shader, fragment shader), co~przybliżyłoby architekturę do~współczesnych GPU. Wymagałoby to~zaprojektowania
+procesora wektorowego w sprzęcie oraz back-endu kompilującego shadery do~kodów maszynowych.
+
+\section{Wkład edukacyjny}
+
+Projekt PixelForge ma~istotną wartość edukacyjną, demonstrując:
+\begin{itemize}
+  \item pełny cykl projektowania systemu cyfrowego --- od~specyfikacji, przez~implementację w~HDL, syntezę, aż~po~weryfikację na~sprzęcie,
+  \item zastosowanie języka wysokiego poziomu (Python/Amaranth) do~opisu sprzętu,
+  \item integrację logiki programowalnej (FPGA) z~procesorem (SoC),
+  \item praktyczną implementację algorytmów grafiki komputerowej na~poziomie sprzętowym.
+\end{itemize}
+
+Kod projektu został udostępniony jako~open-source, co~umożliwia innym studentom i~inżynierom naukę oraz~dalszy rozwój akceleratora.
+
+\section{Słowa końcowe}
+
+Niniejsza praca dowodzi, że~implementacja akceleratora graficznego w~układzie FPGA jest~możliwa i~praktyczna, nawet przy~użyciu stosunkowo niedrogiej platformy deweloperskiej. Zastosowanie nowoczesnego języka opisu sprzętu (Amaranth HDL) oraz~podejścia modułowego pozwoliło na~efektywne zarządzanie złożonością projektu i~osiągnięcie funkcjonalnego, wydajnego systemu graficznego.
+
+Akcelerator PixelForge stanowi przykład, jak~elastyczność FPGA może być~wykorzystana do~budowy wyspecjalizowanych systemów obliczeniowych, oferując pełną kontrolę nad~architekturą i~optymalizacją zasobów --- co~jest~szczególnie istotne w~zastosowaniach wbudowanych i~edukacyjnych.
+
 
 %%%%% BIBLIOGRAFIA
 
 \begin{thebibliography}{99}
+
+\bibitem{opengl-es}
+Khronos Group,
+\emph{OpenGL ES 1.1 Specification},
+\url{https://registry.khronos.org/OpenGL/specs/es/1.1/es_full_spec_1.1.pdf}, 2008.
+
+\bibitem{amaranth}
+Amaranth HDL Documentation,
+\url{https://amaranth-lang.org/docs/amaranth/latest/}, 2026.
+
+\bibitem{cyclone-v}
+Intel Corporation,
+\emph{Cyclone V Device Handbook},
+\url{https://www.intel.com/programmable/technical-pdfs/683375.pdf}, 2023.
+
+\bibitem{de1-soc}
+Terasic Technologies,
+\emph{DE1-SoC User Manual},
+\url{http://www.ee.ic.ac.uk/pcheung/teaching/ee2_digital/de1-soc_user_manual.pdf}, 2013.
+
+\bibitem{wishbone}
+OpenCores,
+\emph{Wishbone B4 Specification},
+\url{https://opencores.org/cdn/downloads/wbspec_b3.pdf}, 2010.
+
+\bibitem{avalon}
+Intel Corporation,
+\emph{Avalon Interface Specifications},
+\url{https://docs.altera.com/r/docs/683091/22.3/avalon-interface-specifications/introduction-to-the-avalon-interface-specifications}, 2020.
+
+\bibitem{phong}
+Phong, B. Illumination for computer generated pictures.
+{\em Seminal Graphics: Pioneering Efforts That Shaped The Field, Volume 1}.
+pp. 95-101 (1998),
+\url{https://doi.org/10.1145/280811.280980}.
+
+\bibitem{fpga-gpu}
+Eric Nadeau, Skyler Whorton,
+\emph{FPGA-Based Graphics Acceleration}
+\url{https://digital.wpi.edu/pdfviewer/ws859h34g}, 2010.
+
+\bibitem{fpga-gpu-2}
+Kibret Abebe
+\emph{Design of 3D Graphics Accelerator Code for FPGA}
+\url{https://www.scribd.com/document/489506912/Kibret-Abebe-1-pdf}, 2011.
 
 \end{thebibliography}
 

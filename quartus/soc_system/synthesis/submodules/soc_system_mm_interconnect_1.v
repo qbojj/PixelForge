@@ -45,7 +45,7 @@ module soc_system_mm_interconnect_1 (
 		input  wire        hps_h2f_lw_axi_master_rready,                                      //                                                            .rready
 		input  wire        clk_clk_clk,                                                       //                                                     clk_clk.clk
 		input  wire        gpu_pll_outclk0_clk,                                               //                                             gpu_pll_outclk0.clk
-		input  wire        gpu_pll_outclk1_clk,                                               //                                             gpu_pll_outclk1.clk
+		input  wire        sys_pll_outclk0_clk,                                               //                                             sys_pll_outclk0.clk
 		input  wire        gpu_reset_reset_bridge_in_reset_reset,                             //                             gpu_reset_reset_bridge_in_reset.reset
 		input  wire        hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset, // hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset.reset
 		input  wire        vga_dma_reset_reset_bridge_in_reset_reset,                         //                         vga_dma_reset_reset_bridge_in_reset.reset
@@ -377,7 +377,7 @@ module soc_system_mm_interconnect_1 (
 		.AV_SETUP_WAIT_CYCLES           (0),
 		.AV_DATA_HOLD_CYCLES            (0)
 	) vga_dma_avalon_control_slave_translator (
-		.clk                    (gpu_pll_outclk1_clk),                                 //                      clk.clk
+		.clk                    (sys_pll_outclk0_clk),                                 //                      clk.clk
 		.reset                  (vga_dma_reset_reset_bridge_in_reset_reset),           //                    reset.reset
 		.uav_address            (vga_dma_avalon_control_slave_agent_m0_address),       // avalon_universal_slave_0.address
 		.uav_burstcount         (vga_dma_avalon_control_slave_agent_m0_burstcount),    //                         .burstcount
@@ -645,7 +645,7 @@ module soc_system_mm_interconnect_1 (
 		.USE_WRITERESPONSE         (0),
 		.ECC_ENABLE                (0)
 	) vga_dma_avalon_control_slave_agent (
-		.clk                     (gpu_pll_outclk1_clk),                                              //             clk.clk
+		.clk                     (sys_pll_outclk0_clk),                                              //             clk.clk
 		.reset                   (vga_dma_reset_reset_bridge_in_reset_reset),                        //       clk_reset.reset
 		.m0_address              (vga_dma_avalon_control_slave_agent_m0_address),                    //              m0.address
 		.m0_burstcount           (vga_dma_avalon_control_slave_agent_m0_burstcount),                 //                .burstcount
@@ -704,7 +704,7 @@ module soc_system_mm_interconnect_1 (
 		.USE_ALMOST_FULL_IF  (0),
 		.USE_ALMOST_EMPTY_IF (0)
 	) vga_dma_avalon_control_slave_agent_rsp_fifo (
-		.clk               (gpu_pll_outclk1_clk),                                           //       clk.clk
+		.clk               (sys_pll_outclk0_clk),                                           //       clk.clk
 		.reset             (vga_dma_reset_reset_bridge_in_reset_reset),                     // clk_reset.reset
 		.in_data           (vga_dma_avalon_control_slave_agent_rf_source_data),             //        in.data
 		.in_valid          (vga_dma_avalon_control_slave_agent_rf_source_valid),            //          .valid
@@ -745,7 +745,7 @@ module soc_system_mm_interconnect_1 (
 		.USE_ALMOST_FULL_IF  (0),
 		.USE_ALMOST_EMPTY_IF (0)
 	) vga_dma_avalon_control_slave_agent_rdata_fifo (
-		.clk               (gpu_pll_outclk1_clk),                                     //       clk.clk
+		.clk               (sys_pll_outclk0_clk),                                     //       clk.clk
 		.reset             (vga_dma_reset_reset_bridge_in_reset_reset),               // clk_reset.reset
 		.in_data           (vga_dma_avalon_control_slave_agent_rdata_fifo_src_data),  //        in.data
 		.in_valid          (vga_dma_avalon_control_slave_agent_rdata_fifo_src_valid), //          .valid
@@ -976,7 +976,7 @@ module soc_system_mm_interconnect_1 (
 		.sink_data          (vga_dma_avalon_control_slave_agent_rp_data),          //          .data
 		.sink_startofpacket (vga_dma_avalon_control_slave_agent_rp_startofpacket), //          .startofpacket
 		.sink_endofpacket   (vga_dma_avalon_control_slave_agent_rp_endofpacket),   //          .endofpacket
-		.clk                (gpu_pll_outclk1_clk),                                 //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                                 //       clk.clk
 		.reset              (vga_dma_reset_reset_bridge_in_reset_reset),           // clk_reset.reset
 		.src_ready          (router_002_src_ready),                                //       src.ready
 		.src_valid          (router_002_src_valid),                                //          .valid
@@ -1136,7 +1136,7 @@ module soc_system_mm_interconnect_1 (
 		.BURSTWRAP_CONST_VALUE     (0),
 		.ADAPTER_VERSION           ("13.1")
 	) vga_dma_avalon_control_slave_burst_adapter (
-		.clk                   (gpu_pll_outclk1_clk),                                              //       cr0.clk
+		.clk                   (sys_pll_outclk0_clk),                                              //       cr0.clk
 		.reset                 (vga_dma_reset_reset_bridge_in_reset_reset),                        // cr0_reset.reset
 		.sink0_valid           (cmd_mux_src_valid),                                                //     sink0.valid
 		.sink0_data            (cmd_mux_src_data),                                                 //          .data
@@ -1249,7 +1249,7 @@ module soc_system_mm_interconnect_1 (
 	);
 
 	soc_system_mm_interconnect_1_cmd_mux cmd_mux (
-		.clk                 (gpu_pll_outclk1_clk),                       //       clk.clk
+		.clk                 (sys_pll_outclk0_clk),                       //       clk.clk
 		.reset               (vga_dma_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.src_ready           (cmd_mux_src_ready),                         //       src.ready
 		.src_valid           (cmd_mux_src_valid),                         //          .valid
@@ -1295,7 +1295,7 @@ module soc_system_mm_interconnect_1 (
 	);
 
 	soc_system_mm_interconnect_1_rsp_demux rsp_demux (
-		.clk                (gpu_pll_outclk1_clk),                       //       clk.clk
+		.clk                (sys_pll_outclk0_clk),                       //       clk.clk
 		.reset              (vga_dma_reset_reset_bridge_in_reset_reset), // clk_reset.reset
 		.sink_ready         (router_002_src_ready),                      //      sink.ready
 		.sink_channel       (router_002_src_channel),                    //          .channel
@@ -1400,7 +1400,7 @@ module soc_system_mm_interconnect_1 (
 	) async_fifo (
 		.in_clk            (clk_clk_clk),                                                        //        in_clk.clk
 		.in_reset_n        (~hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset), //  in_clk_reset.reset_n
-		.out_clk           (gpu_pll_outclk1_clk),                                                //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                                //       out_clk.clk
 		.out_reset_n       (~vga_dma_reset_reset_bridge_in_reset_reset),                         // out_clk_reset.reset_n
 		.in_data           (cmd_demux_src0_data),                                                //            in.data
 		.in_valid          (cmd_demux_src0_valid),                                               //              .valid
@@ -1490,7 +1490,7 @@ module soc_system_mm_interconnect_1 (
 	) async_fifo_002 (
 		.in_clk            (clk_clk_clk),                                                        //        in_clk.clk
 		.in_reset_n        (~hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset), //  in_clk_reset.reset_n
-		.out_clk           (gpu_pll_outclk1_clk),                                                //       out_clk.clk
+		.out_clk           (sys_pll_outclk0_clk),                                                //       out_clk.clk
 		.out_reset_n       (~vga_dma_reset_reset_bridge_in_reset_reset),                         // out_clk_reset.reset_n
 		.in_data           (cmd_demux_001_src0_data),                                            //            in.data
 		.in_valid          (cmd_demux_001_src0_valid),                                           //              .valid
@@ -1578,7 +1578,7 @@ module soc_system_mm_interconnect_1 (
 		.WR_SYNC_DEPTH      (3),
 		.RD_SYNC_DEPTH      (3)
 	) async_fifo_004 (
-		.in_clk            (gpu_pll_outclk1_clk),                                                //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                                //        in_clk.clk
 		.in_reset_n        (~vga_dma_reset_reset_bridge_in_reset_reset),                         //  in_clk_reset.reset_n
 		.out_clk           (clk_clk_clk),                                                        //       out_clk.clk
 		.out_reset_n       (~hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset), // out_clk_reset.reset_n
@@ -1623,7 +1623,7 @@ module soc_system_mm_interconnect_1 (
 		.WR_SYNC_DEPTH      (3),
 		.RD_SYNC_DEPTH      (3)
 	) async_fifo_005 (
-		.in_clk            (gpu_pll_outclk1_clk),                                                //        in_clk.clk
+		.in_clk            (sys_pll_outclk0_clk),                                                //        in_clk.clk
 		.in_reset_n        (~vga_dma_reset_reset_bridge_in_reset_reset),                         //  in_clk_reset.reset_n
 		.out_clk           (clk_clk_clk),                                                        //       out_clk.clk
 		.out_reset_n       (~hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset), // out_clk_reset.reset_n
@@ -1888,7 +1888,7 @@ module soc_system_mm_interconnect_1 (
 		.outUseReady     (1),
 		.outReadyLatency (0)
 	) avalon_st_adapter (
-		.in_clk_0_clk   (gpu_pll_outclk1_clk),                                     // in_clk_0.clk
+		.in_clk_0_clk   (sys_pll_outclk0_clk),                                     // in_clk_0.clk
 		.in_rst_0_reset (vga_dma_reset_reset_bridge_in_reset_reset),               // in_rst_0.reset
 		.in_0_data      (vga_dma_avalon_control_slave_agent_rdata_fifo_out_data),  //     in_0.data
 		.in_0_valid     (vga_dma_avalon_control_slave_agent_rdata_fifo_out_valid), //         .valid

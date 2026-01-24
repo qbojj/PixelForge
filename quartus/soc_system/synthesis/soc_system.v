@@ -97,9 +97,10 @@ module soc_system (
 	wire         vga_dma_avalon_pixel_source_ready;                         // vga_resampler:stream_in_ready -> vga_dma:stream_ready
 	wire         vga_dma_avalon_pixel_source_startofpacket;                 // vga_dma:stream_startofpacket -> vga_resampler:stream_in_startofpacket
 	wire         vga_dma_avalon_pixel_source_endofpacket;                   // vga_dma:stream_endofpacket -> vga_resampler:stream_in_endofpacket
-	wire         vga_pll_outclk0_clk;                                       // vga_pll:outclk_0 -> [avalon_st_adapter_001:in_clk_0_clk, rst_controller_001:clk, vga_ctrl:clk, vga_fifo:out_clk]
-	wire         gpu_pll_outclk0_clk;                                       // gpu_pll:outclk_0 -> [gpu:clk, gpu:pixel_clk, mm_interconnect_0:gpu_pll_outclk0_clk, mm_interconnect_1:gpu_pll_outclk0_clk, rst_controller:clk]
-	wire         gpu_pll_outclk1_clk;                                       // gpu_pll:outclk_1 -> [avalon_st_adapter:in_clk_0_clk, hps:f2h_axi_clk, mm_interconnect_0:gpu_pll_outclk1_clk, mm_interconnect_1:gpu_pll_outclk1_clk, rst_controller_002:clk, rst_controller_003:clk, vga_dma:clk, vga_fifo:in_clk, vga_resampler:clk]
+	wire         vga_pll_outclk0_clk;                                       // vga_pll:outclk_0 -> [avalon_st_adapter_001:in_clk_0_clk, rst_controller_002:clk, vga_ctrl:clk, vga_fifo:out_clk]
+	wire         sys_pll_outclk0_clk;                                       // sys_pll:outclk_0 -> [avalon_st_adapter:in_clk_0_clk, hps:f2h_axi_clk, mm_interconnect_0:sys_pll_outclk0_clk, mm_interconnect_1:sys_pll_outclk0_clk, rst_controller_003:clk, rst_controller_004:clk, vga_dma:clk, vga_fifo:in_clk, vga_resampler:clk]
+	wire         gpu_pll_outclk0_clk;                                       // gpu_pll:outclk_0 -> [gpu:clk, mm_interconnect_0:gpu_pll_outclk0_clk, mm_interconnect_1:gpu_pll_outclk0_clk, rst_controller:clk]
+	wire         gpu_pll_outclk1_clk;                                       // gpu_pll:outclk_1 -> [gpu:pixel_clk, mm_interconnect_0:gpu_pll_outclk1_clk, rst_controller_001:clk]
 	wire         vga_dma_avalon_pixel_dma_master_waitrequest;               // mm_interconnect_0:vga_dma_avalon_pixel_dma_master_waitrequest -> vga_dma:master_waitrequest
 	wire  [31:0] vga_dma_avalon_pixel_dma_master_readdata;                  // mm_interconnect_0:vga_dma_avalon_pixel_dma_master_readdata -> vga_dma:master_readdata
 	wire  [31:0] vga_dma_avalon_pixel_dma_master_address;                   // vga_dma:master_address -> mm_interconnect_0:vga_dma_avalon_pixel_dma_master_address
@@ -240,11 +241,12 @@ module soc_system (
 	wire         avalon_st_adapter_001_out_0_ready;                         // vga_ctrl:ready -> avalon_st_adapter_001:out_0_ready
 	wire         avalon_st_adapter_001_out_0_startofpacket;                 // avalon_st_adapter_001:out_0_startofpacket -> vga_ctrl:startofpacket
 	wire         avalon_st_adapter_001_out_0_endofpacket;                   // avalon_st_adapter_001:out_0_endofpacket -> vga_ctrl:endofpacket
-	wire         rst_controller_reset_out_reset;                            // rst_controller:reset_out -> [gpu:pixel_rst, gpu:rst, mm_interconnect_0:gpu_pixel_reset_reset_bridge_in_reset_reset, mm_interconnect_1:gpu_reset_reset_bridge_in_reset_reset]
-	wire         rst_controller_001_reset_out_reset;                        // rst_controller_001:reset_out -> [avalon_st_adapter_001:in_rst_0_reset, vga_ctrl:reset, vga_fifo:out_reset_n]
-	wire         rst_controller_002_reset_out_reset;                        // rst_controller_002:reset_out -> [avalon_st_adapter:in_rst_0_reset, mm_interconnect_0:vga_dma_reset_reset_bridge_in_reset_reset, mm_interconnect_1:vga_dma_reset_reset_bridge_in_reset_reset, vga_dma:reset, vga_fifo:in_reset_n, vga_resampler:reset]
-	wire         rst_controller_003_reset_out_reset;                        // rst_controller_003:reset_out -> mm_interconnect_0:hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset
-	wire         rst_controller_004_reset_out_reset;                        // rst_controller_004:reset_out -> mm_interconnect_1:hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset
+	wire         rst_controller_reset_out_reset;                            // rst_controller:reset_out -> [gpu:rst, mm_interconnect_0:gpu_reset_reset_bridge_in_reset_reset, mm_interconnect_1:gpu_reset_reset_bridge_in_reset_reset]
+	wire         rst_controller_001_reset_out_reset;                        // rst_controller_001:reset_out -> [gpu:pixel_rst, mm_interconnect_0:gpu_pixel_reset_reset_bridge_in_reset_reset]
+	wire         rst_controller_002_reset_out_reset;                        // rst_controller_002:reset_out -> [avalon_st_adapter_001:in_rst_0_reset, vga_ctrl:reset, vga_fifo:out_reset_n]
+	wire         rst_controller_003_reset_out_reset;                        // rst_controller_003:reset_out -> [avalon_st_adapter:in_rst_0_reset, mm_interconnect_0:vga_dma_reset_reset_bridge_in_reset_reset, mm_interconnect_1:vga_dma_reset_reset_bridge_in_reset_reset, vga_dma:reset, vga_fifo:in_reset_n, vga_resampler:reset]
+	wire         rst_controller_004_reset_out_reset;                        // rst_controller_004:reset_out -> mm_interconnect_0:hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset
+	wire         rst_controller_005_reset_out_reset;                        // rst_controller_005:reset_out -> mm_interconnect_1:hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset
 
 	top gpu (
 		.avl_index__address            (gpu_avl_index_address),                 //        avl_index.address
@@ -280,8 +282,8 @@ module soc_system (
 		.avl_csr__readdata             (mm_interconnect_1_gpu_csr_readdata),    //                 .readdata
 		.avl_csr__waitrequest          (mm_interconnect_1_gpu_csr_waitrequest), //                 .waitrequest
 		.rst                           (rst_controller_reset_out_reset),        //            reset.reset
-		.pixel_clk                     (gpu_pll_outclk0_clk),                   //      pixel_clock.clk
-		.pixel_rst                     (rst_controller_reset_out_reset)         //      pixel_reset.reset
+		.pixel_clk                     (gpu_pll_outclk1_clk),                   //      pixel_clock.clk
+		.pixel_rst                     (rst_controller_001_reset_out_reset)     //      pixel_reset.reset
 	);
 
 	soc_system_gpu_pll gpu_pll (
@@ -372,7 +374,7 @@ module soc_system (
 		.hps_io_gpio_inst_GPIO54  (hps_0_hps_io_hps_io_gpio_inst_GPIO54),        //                    .hps_io_gpio_inst_GPIO54
 		.hps_io_gpio_inst_GPIO61  (hps_0_hps_io_hps_io_gpio_inst_GPIO61),        //                    .hps_io_gpio_inst_GPIO61
 		.h2f_rst_n                (hps_0_h2f_reset_reset_n),                     //           h2f_reset.reset_n
-		.f2h_axi_clk              (gpu_pll_outclk1_clk),                         //       f2h_axi_clock.clk
+		.f2h_axi_clk              (sys_pll_outclk0_clk),                         //       f2h_axi_clock.clk
 		.f2h_AWID                 (mm_interconnect_0_hps_f2h_axi_slave_awid),    //       f2h_axi_slave.awid
 		.f2h_AWADDR               (mm_interconnect_0_hps_f2h_axi_slave_awaddr),  //                    .awaddr
 		.f2h_AWLEN                (mm_interconnect_0_hps_f2h_axi_slave_awlen),   //                    .awlen
@@ -452,9 +454,16 @@ module soc_system (
 		.f2h_irq_p1               (hps_f2h_irq1_irq)                             //            f2h_irq1.irq
 	);
 
+	soc_system_sys_pll sys_pll (
+		.refclk   (clk_clk),             //  refclk.clk
+		.rst      (~reset_reset_n),      //   reset.reset
+		.outclk_0 (sys_pll_outclk0_clk), // outclk0.clk
+		.locked   ()                     // (terminated)
+	);
+
 	soc_system_vga_ctrl vga_ctrl (
 		.clk           (vga_pll_outclk0_clk),                       //                clk.clk
-		.reset         (rst_controller_001_reset_out_reset),        //              reset.reset
+		.reset         (rst_controller_002_reset_out_reset),        //              reset.reset
 		.data          (avalon_st_adapter_001_out_0_data),          //    avalon_vga_sink.data
 		.startofpacket (avalon_st_adapter_001_out_0_startofpacket), //                   .startofpacket
 		.endofpacket   (avalon_st_adapter_001_out_0_endofpacket),   //                   .endofpacket
@@ -471,8 +480,8 @@ module soc_system (
 	);
 
 	soc_system_vga_dma vga_dma (
-		.clk                  (gpu_pll_outclk1_clk),                                       //                     clk.clk
-		.reset                (rst_controller_002_reset_out_reset),                        //                   reset.reset
+		.clk                  (sys_pll_outclk0_clk),                                       //                     clk.clk
+		.reset                (rst_controller_003_reset_out_reset),                        //                   reset.reset
 		.master_readdatavalid (vga_dma_avalon_pixel_dma_master_readdatavalid),             // avalon_pixel_dma_master.readdatavalid
 		.master_waitrequest   (vga_dma_avalon_pixel_dma_master_waitrequest),               //                        .waitrequest
 		.master_address       (vga_dma_avalon_pixel_dma_master_address),                   //                        .address
@@ -504,10 +513,10 @@ module soc_system (
 		.WR_SYNC_DEPTH      (3),
 		.RD_SYNC_DEPTH      (3)
 	) vga_fifo (
-		.in_clk            (gpu_pll_outclk1_clk),                   //        in_clk.clk
-		.in_reset_n        (~rst_controller_002_reset_out_reset),   //  in_clk_reset.reset_n
+		.in_clk            (sys_pll_outclk0_clk),                   //        in_clk.clk
+		.in_reset_n        (~rst_controller_003_reset_out_reset),   //  in_clk_reset.reset_n
 		.out_clk           (vga_pll_outclk0_clk),                   //       out_clk.clk
-		.out_reset_n       (~rst_controller_001_reset_out_reset),   // out_clk_reset.reset_n
+		.out_reset_n       (~rst_controller_002_reset_out_reset),   // out_clk_reset.reset_n
 		.in_data           (avalon_st_adapter_out_0_data),          //            in.data
 		.in_valid          (avalon_st_adapter_out_0_valid),         //              .valid
 		.in_ready          (avalon_st_adapter_out_0_ready),         //              .ready
@@ -545,8 +554,8 @@ module soc_system (
 	);
 
 	soc_system_vga_resampler vga_resampler (
-		.clk                      (gpu_pll_outclk1_clk),                           //               clk.clk
-		.reset                    (rst_controller_002_reset_out_reset),            //             reset.reset
+		.clk                      (sys_pll_outclk0_clk),                           //               clk.clk
+		.reset                    (rst_controller_003_reset_out_reset),            //             reset.reset
 		.stream_in_startofpacket  (vga_dma_avalon_pixel_source_startofpacket),     //   avalon_rgb_sink.startofpacket
 		.stream_in_endofpacket    (vga_dma_avalon_pixel_source_endofpacket),       //                  .endofpacket
 		.stream_in_valid          (vga_dma_avalon_pixel_source_valid),             //                  .valid
@@ -602,9 +611,11 @@ module soc_system (
 		.hps_f2h_axi_slave_rready                                       (mm_interconnect_0_hps_f2h_axi_slave_rready),    //                                                         .rready
 		.gpu_pll_outclk0_clk                                            (gpu_pll_outclk0_clk),                           //                                          gpu_pll_outclk0.clk
 		.gpu_pll_outclk1_clk                                            (gpu_pll_outclk1_clk),                           //                                          gpu_pll_outclk1.clk
-		.gpu_pixel_reset_reset_bridge_in_reset_reset                    (rst_controller_reset_out_reset),                //                    gpu_pixel_reset_reset_bridge_in_reset.reset
-		.hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset (rst_controller_003_reset_out_reset),            // hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset.reset
-		.vga_dma_reset_reset_bridge_in_reset_reset                      (rst_controller_002_reset_out_reset),            //                      vga_dma_reset_reset_bridge_in_reset.reset
+		.sys_pll_outclk0_clk                                            (sys_pll_outclk0_clk),                           //                                          sys_pll_outclk0.clk
+		.gpu_pixel_reset_reset_bridge_in_reset_reset                    (rst_controller_001_reset_out_reset),            //                    gpu_pixel_reset_reset_bridge_in_reset.reset
+		.gpu_reset_reset_bridge_in_reset_reset                          (rst_controller_reset_out_reset),                //                          gpu_reset_reset_bridge_in_reset.reset
+		.hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset_reset (rst_controller_004_reset_out_reset),            // hps_f2h_axi_slave_agent_reset_sink_reset_bridge_in_reset.reset
+		.vga_dma_reset_reset_bridge_in_reset_reset                      (rst_controller_003_reset_out_reset),            //                      vga_dma_reset_reset_bridge_in_reset.reset
 		.gpu_avl_color_address                                          (gpu_avl_color_address),                         //                                            gpu_avl_color.address
 		.gpu_avl_color_waitrequest                                      (gpu_avl_color_waitrequest),                     //                                                         .waitrequest
 		.gpu_avl_color_read                                             (gpu_avl_color_read),                            //                                                         .read
@@ -676,10 +687,10 @@ module soc_system (
 		.hps_h2f_lw_axi_master_rready                                      (hps_h2f_lw_axi_master_rready),                              //                                                            .rready
 		.clk_clk_clk                                                       (clk_clk),                                                   //                                                     clk_clk.clk
 		.gpu_pll_outclk0_clk                                               (gpu_pll_outclk0_clk),                                       //                                             gpu_pll_outclk0.clk
-		.gpu_pll_outclk1_clk                                               (gpu_pll_outclk1_clk),                                       //                                             gpu_pll_outclk1.clk
+		.sys_pll_outclk0_clk                                               (sys_pll_outclk0_clk),                                       //                                             sys_pll_outclk0.clk
 		.gpu_reset_reset_bridge_in_reset_reset                             (rst_controller_reset_out_reset),                            //                             gpu_reset_reset_bridge_in_reset.reset
-		.hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset (rst_controller_004_reset_out_reset),                        // hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset.reset
-		.vga_dma_reset_reset_bridge_in_reset_reset                         (rst_controller_002_reset_out_reset),                        //                         vga_dma_reset_reset_bridge_in_reset.reset
+		.hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset_reset (rst_controller_005_reset_out_reset),                        // hps_h2f_lw_axi_master_agent_clk_reset_reset_bridge_in_reset.reset
+		.vga_dma_reset_reset_bridge_in_reset_reset                         (rst_controller_003_reset_out_reset),                        //                         vga_dma_reset_reset_bridge_in_reset.reset
 		.gpu_csr_address                                                   (mm_interconnect_1_gpu_csr_address),                         //                                                     gpu_csr.address
 		.gpu_csr_write                                                     (mm_interconnect_1_gpu_csr_write),                           //                                                            .write
 		.gpu_csr_read                                                      (mm_interconnect_1_gpu_csr_read),                            //                                                            .read
@@ -724,8 +735,8 @@ module soc_system (
 		.outUseReady     (1),
 		.outReadyLatency (0)
 	) avalon_st_adapter (
-		.in_clk_0_clk        (gpu_pll_outclk1_clk),                           // in_clk_0.clk
-		.in_rst_0_reset      (rst_controller_002_reset_out_reset),            // in_rst_0.reset
+		.in_clk_0_clk        (sys_pll_outclk0_clk),                           // in_clk_0.clk
+		.in_rst_0_reset      (rst_controller_003_reset_out_reset),            // in_rst_0.reset
 		.in_0_data           (vga_resampler_avalon_rgb_source_data),          //     in_0.data
 		.in_0_valid          (vga_resampler_avalon_rgb_source_valid),         //         .valid
 		.in_0_ready          (vga_resampler_avalon_rgb_source_ready),         //         .ready
@@ -758,7 +769,7 @@ module soc_system (
 		.outReadyLatency (0)
 	) avalon_st_adapter_001 (
 		.in_clk_0_clk        (vga_pll_outclk0_clk),                       // in_clk_0.clk
-		.in_rst_0_reset      (rst_controller_001_reset_out_reset),        // in_rst_0.reset
+		.in_rst_0_reset      (rst_controller_002_reset_out_reset),        // in_rst_0.reset
 		.in_0_data           (vga_fifo_out_data),                         //     in_0.data
 		.in_0_valid          (vga_fifo_out_valid),                        //         .valid
 		.in_0_ready          (vga_fifo_out_ready),                        //         .ready
@@ -862,7 +873,7 @@ module soc_system (
 		.ADAPT_RESET_REQUEST       (0)
 	) rst_controller_001 (
 		.reset_in0      (~reset_reset_n),                     // reset_in0.reset
-		.clk            (vga_pll_outclk0_clk),                //       clk.clk
+		.clk            (gpu_pll_outclk1_clk),                //       clk.clk
 		.reset_out      (rst_controller_001_reset_out_reset), // reset_out.reset
 		.reset_req      (),                                   // (terminated)
 		.reset_req_in0  (1'b0),                               // (terminated)
@@ -925,7 +936,7 @@ module soc_system (
 		.ADAPT_RESET_REQUEST       (0)
 	) rst_controller_002 (
 		.reset_in0      (~reset_reset_n),                     // reset_in0.reset
-		.clk            (gpu_pll_outclk1_clk),                //       clk.clk
+		.clk            (vga_pll_outclk0_clk),                //       clk.clk
 		.reset_out      (rst_controller_002_reset_out_reset), // reset_out.reset
 		.reset_req      (),                                   // (terminated)
 		.reset_req_in0  (1'b0),                               // (terminated)
@@ -987,8 +998,8 @@ module soc_system (
 		.USE_RESET_REQUEST_IN15    (0),
 		.ADAPT_RESET_REQUEST       (0)
 	) rst_controller_003 (
-		.reset_in0      (~hps_0_h2f_reset_reset_n),           // reset_in0.reset
-		.clk            (gpu_pll_outclk1_clk),                //       clk.clk
+		.reset_in0      (~reset_reset_n),                     // reset_in0.reset
+		.clk            (sys_pll_outclk0_clk),                //       clk.clk
 		.reset_out      (rst_controller_003_reset_out_reset), // reset_out.reset
 		.reset_req      (),                                   // (terminated)
 		.reset_req_in0  (1'b0),                               // (terminated)
@@ -1051,8 +1062,71 @@ module soc_system (
 		.ADAPT_RESET_REQUEST       (0)
 	) rst_controller_004 (
 		.reset_in0      (~hps_0_h2f_reset_reset_n),           // reset_in0.reset
-		.clk            (clk_clk),                            //       clk.clk
+		.clk            (sys_pll_outclk0_clk),                //       clk.clk
 		.reset_out      (rst_controller_004_reset_out_reset), // reset_out.reset
+		.reset_req      (),                                   // (terminated)
+		.reset_req_in0  (1'b0),                               // (terminated)
+		.reset_in1      (1'b0),                               // (terminated)
+		.reset_req_in1  (1'b0),                               // (terminated)
+		.reset_in2      (1'b0),                               // (terminated)
+		.reset_req_in2  (1'b0),                               // (terminated)
+		.reset_in3      (1'b0),                               // (terminated)
+		.reset_req_in3  (1'b0),                               // (terminated)
+		.reset_in4      (1'b0),                               // (terminated)
+		.reset_req_in4  (1'b0),                               // (terminated)
+		.reset_in5      (1'b0),                               // (terminated)
+		.reset_req_in5  (1'b0),                               // (terminated)
+		.reset_in6      (1'b0),                               // (terminated)
+		.reset_req_in6  (1'b0),                               // (terminated)
+		.reset_in7      (1'b0),                               // (terminated)
+		.reset_req_in7  (1'b0),                               // (terminated)
+		.reset_in8      (1'b0),                               // (terminated)
+		.reset_req_in8  (1'b0),                               // (terminated)
+		.reset_in9      (1'b0),                               // (terminated)
+		.reset_req_in9  (1'b0),                               // (terminated)
+		.reset_in10     (1'b0),                               // (terminated)
+		.reset_req_in10 (1'b0),                               // (terminated)
+		.reset_in11     (1'b0),                               // (terminated)
+		.reset_req_in11 (1'b0),                               // (terminated)
+		.reset_in12     (1'b0),                               // (terminated)
+		.reset_req_in12 (1'b0),                               // (terminated)
+		.reset_in13     (1'b0),                               // (terminated)
+		.reset_req_in13 (1'b0),                               // (terminated)
+		.reset_in14     (1'b0),                               // (terminated)
+		.reset_req_in14 (1'b0),                               // (terminated)
+		.reset_in15     (1'b0),                               // (terminated)
+		.reset_req_in15 (1'b0)                                // (terminated)
+	);
+
+	altera_reset_controller #(
+		.NUM_RESET_INPUTS          (1),
+		.OUTPUT_RESET_SYNC_EDGES   ("deassert"),
+		.SYNC_DEPTH                (2),
+		.RESET_REQUEST_PRESENT     (0),
+		.RESET_REQ_WAIT_TIME       (1),
+		.MIN_RST_ASSERTION_TIME    (3),
+		.RESET_REQ_EARLY_DSRT_TIME (1),
+		.USE_RESET_REQUEST_IN0     (0),
+		.USE_RESET_REQUEST_IN1     (0),
+		.USE_RESET_REQUEST_IN2     (0),
+		.USE_RESET_REQUEST_IN3     (0),
+		.USE_RESET_REQUEST_IN4     (0),
+		.USE_RESET_REQUEST_IN5     (0),
+		.USE_RESET_REQUEST_IN6     (0),
+		.USE_RESET_REQUEST_IN7     (0),
+		.USE_RESET_REQUEST_IN8     (0),
+		.USE_RESET_REQUEST_IN9     (0),
+		.USE_RESET_REQUEST_IN10    (0),
+		.USE_RESET_REQUEST_IN11    (0),
+		.USE_RESET_REQUEST_IN12    (0),
+		.USE_RESET_REQUEST_IN13    (0),
+		.USE_RESET_REQUEST_IN14    (0),
+		.USE_RESET_REQUEST_IN15    (0),
+		.ADAPT_RESET_REQUEST       (0)
+	) rst_controller_005 (
+		.reset_in0      (~hps_0_h2f_reset_reset_n),           // reset_in0.reset
+		.clk            (clk_clk),                            //       clk.clk
+		.reset_out      (rst_controller_005_reset_out_reset), // reset_out.reset
 		.reset_req      (),                                   // (terminated)
 		.reset_req_in0  (1'b0),                               // (terminated)
 		.reset_in1      (1'b0),                               // (terminated)

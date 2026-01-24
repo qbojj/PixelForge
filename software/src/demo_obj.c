@@ -208,7 +208,7 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
     pixelforge_light_t light = {0};
     light.position[0] = fp16_16(1.0f);
     light.position[1] = fp16_16(1.0f);
-    light.position[2] = fp16_16(1.0f);
+    light.position[2] = fp16_16(-1.0f);
     light.position[3] = fp16_16(0.0f);
     light.ambient[0] = fp16_16(0.3f);
     light.ambient[1] = fp16_16(0.3f);

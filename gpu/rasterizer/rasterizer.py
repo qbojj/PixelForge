@@ -106,7 +106,6 @@ class PerspectiveDivide(wiring.Component):
                     self.o.p.position_ndc[0].eq(div_x),
                     self.o.p.position_ndc[1].eq(div_y),
                     self.o.p.position_ndc[2].eq(div_z),
-                    self.o.p.w.eq(vtx_buf.position_ndc[3]),
                     self.o.p.inv_w.eq(inv_w),
                     self.o.p.color.eq(vtx_buf.color),
                     self.o.p.texcoords.eq(vtx_buf.texcoords),
@@ -408,14 +407,20 @@ class FragmentGenerator(wiring.Component):
         weight_linear = Signal(data.ArrayLayout(fixed.UQ(1, 17), 3))
         weight_persp = Signal(data.ArrayLayout(fixed.UQ(1, 17), 3))
 
-        inv_w_sum = Signal(weight_shape)
-        inv_w_sum_recip = Signal(recip_shape)
+        inv_w_sum = Signal(FixedPoint)
+        inv_w_sum_recip = Signal(FixedPoint)
 
         # Shared multiplier for weights/perspective sums (reduces implicit DSPs)
         weight_mul_a = Signal(weight_shape)
         weight_mul_b = Signal(recip_shape)
         weight_mul_p = Signal.like(weight_mul_a * weight_mul_b)
         m.d.comb += weight_mul_p.eq(weight_mul_a * weight_mul_b)
+
+        # Perspective-correct bary multipliers
+        persp_mul_a = Signal(FixedPoint)  # linear weight is weight_shape
+        persp_mul_b = Signal(FixedPoint)  # 1/w is FixedPoint
+        persp_mul_p = Signal.like(persp_mul_a * persp_mul_b)
+        m.d.comb += persp_mul_p.eq(persp_mul_a * persp_mul_b)
 
         # Shared multiplier for interpolation (UQ(1,17) output with saturation)
         mul_a_interp = Signal(fixed.UQ(1, 17))
@@ -428,7 +433,7 @@ class FragmentGenerator(wiring.Component):
         color_sat = Array(Signal(_persp_div_shape) for _ in range(4))
 
         m.submodules.inv = inv = gpu_math.FixedPointInv(
-            weight_shape, steps=self._inv_steps
+            FixedPoint, steps=self._inv_steps
         )
 
         zero = fixed.Const(0.0)
@@ -502,10 +507,11 @@ class FragmentGenerator(wiring.Component):
                 ]
 
                 m.d.comb += [
-                    weight_mul_a.eq(w0),
-                    weight_mul_b.eq(self.ctx.vtx[0].w),
+                    persp_mul_a.eq(weight_linear[0] << 4),  # UQ1.17 to Q13.13
+                    persp_mul_b.eq(self.ctx.vtx[0].inv_w),
                 ]
-                m.d.sync += inv_w_sum.eq(weight_mul_p)
+                m.d.sync += inv_w_sum.eq(persp_mul_p)
+                m.d.sync += persp_pre[0].eq(persp_mul_p)
 
                 m.next = "EDGE2_MUL1"
 
@@ -530,10 +536,11 @@ class FragmentGenerator(wiring.Component):
                 )
 
                 m.d.comb += [
-                    weight_mul_a.eq(w1),
-                    weight_mul_b.eq(self.ctx.vtx[1].w),
+                    persp_mul_a.eq(weight_linear[1] << 4),
+                    persp_mul_b.eq(self.ctx.vtx[1].inv_w),
                 ]
-                m.d.sync += inv_w_sum.eq(inv_w_sum + weight_mul_p)
+                m.d.sync += inv_w_sum.eq(inv_w_sum + persp_mul_p)
+                m.d.sync += persp_pre[1].eq(persp_mul_p)
 
                 m.next = "EDGE_INSIDE"
 
@@ -546,11 +553,10 @@ class FragmentGenerator(wiring.Component):
                 ]
 
                 m.d.comb += [
-                    weight_mul_a.eq(w2),
-                    weight_mul_b.eq(self.ctx.vtx[2].w),
+                    persp_mul_a.eq(weight_linear[2] << 4),
+                    persp_mul_b.eq(self.ctx.vtx[2].inv_w),
                 ]
-                m.d.sync += inv_w_sum.eq(inv_w_sum + weight_mul_p)
-                m.d.comb += inv.i.payload.eq(inv_w_sum + weight_mul_p)
+                m.d.comb += inv.i.payload.eq(inv_w_sum + persp_mul_p)
 
                 with m.If(edge_pos.all() | edge_neg.all()):
                     m.d.comb += inv.i.valid.eq(1)
@@ -561,9 +567,6 @@ class FragmentGenerator(wiring.Component):
                     m.next = "IDLE"
 
             with m.State("GET_PRE_PERSP_0"):
-                m.d.comb += [weight_mul_a.eq(w0), weight_mul_b.eq(self.ctx.vtx[0].w)]
-                m.d.sync += persp_pre[0].eq(weight_mul_p)
-
                 m.d.comb += [
                     mul_a_interp.eq(self.ctx.vtx[0].position_ndc[2]),
                     mul_b_interp.eq(weight_linear[0]),
@@ -573,9 +576,6 @@ class FragmentGenerator(wiring.Component):
                 m.next = "GET_PRE_PERSP_1"
 
             with m.State("GET_PRE_PERSP_1"):
-                m.d.comb += [weight_mul_a.eq(w1), weight_mul_b.eq(self.ctx.vtx[1].w)]
-                m.d.sync += persp_pre[1].eq(weight_mul_p)
-
                 m.d.comb += [
                     mul_a_interp.eq(self.ctx.vtx[1].position_ndc[2]),
                     mul_b_interp.eq(weight_linear[1]),
@@ -602,19 +602,19 @@ class FragmentGenerator(wiring.Component):
 
             with m.State("PERSPECTIVE_W0_M1"):
                 m.d.comb += [
-                    weight_mul_a.eq(persp_pre[0]),
-                    weight_mul_b.eq(inv_w_sum_recip),
+                    persp_mul_a.eq(persp_pre[0]),
+                    persp_mul_b.eq(inv_w_sum_recip),
                 ]
-                m.d.sync += weight_persp[0].eq(weight_mul_p.clamp(zero, one))
+                m.d.sync += weight_persp[0].eq(persp_mul_p.clamp(zero, one))
 
                 m.next = "PERSPECTIVE_W1"
 
             with m.State("PERSPECTIVE_W1"):
                 m.d.comb += [
-                    weight_mul_a.eq(persp_pre[1]),
-                    weight_mul_b.eq(inv_w_sum_recip),
+                    persp_mul_a.eq(persp_pre[1]),
+                    persp_mul_b.eq(inv_w_sum_recip),
                 ]
-                m.d.sync += weight_persp[1].eq((weight_mul_p).clamp(zero, one))
+                m.d.sync += weight_persp[1].eq(persp_mul_p.clamp(zero, one))
 
                 m.d.comb += [
                     mul_a_interp.eq(self.ctx.vtx[0].color[0].clamp(zero, one)),

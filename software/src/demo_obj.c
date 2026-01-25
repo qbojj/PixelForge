@@ -5,7 +5,7 @@
  * - Loading 3D models from OBJ files
  * - Automatic model scaling and centering
  * - Rotation animation
- * - Depth testing with loaded geometry
+ * - Optional depth testing with loaded geometry
  */
 
 #define _GNU_SOURCE
@@ -55,15 +55,6 @@ struct vertex {
     int32_t norm[3];
     int32_t col[4];
 };
-
-static int wait_for_gpu_ready(pixelforge_dev *dev) {
-    for (int i = 0; i < 10000000 && keep_running; ++i) {
-        uint32_t ready = pf_csr_get_ready(dev->csr_base);
-        if (ready & 0x1) return 0;
-        usleep(50);
-    }
-    return -1;
-}
 
 /* Convert OBJ model to GPU vertex format, duplicating vertices for per-face normals */
 static size_t convert_obj_to_vertices(const obj_model *model, struct vertex **out_vertices,
@@ -147,7 +138,7 @@ static size_t convert_obj_to_vertices(const obj_model *model, struct vertex **ou
 static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
                          uint32_t pos_addr, uint32_t norm_addr, uint32_t col_addr,
                          uint16_t stride, uint32_t color_addr, uint32_t ds_addr,
-                         const float mv[16], const float p[16]) {
+                         bool depth_enabled, const float mv[16], const float p[16]) {
     volatile uint8_t *csr = dev->csr_base;
 
     pixelforge_idx_config_t idx_cfg = {
@@ -176,18 +167,14 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
     pf_csr_set_attr_color(csr, &attr);
 
     /* Set transforms */
-    pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = true;
-    for (int i = 0; i < 16; i++) {
-        xf.position_mv[i] = fp16_16(mv[i]);
-        xf.position_p[i] = fp16_16(p[i]);
-    }
-
     float nm[9];
     mat3_from_mat4(nm, mv);
-    for (int i = 0; i < 9; i++) {
-        xf.normal_mv_inv_t[i] = fp16_16(nm[i]);
-    }
+
+    pixelforge_vtx_xf_config_t xf = {0};
+    xf.enabled.normal_enable = true;
+    mat4_to_fp16_16(xf.position_mv, mv);
+    mat4_to_fp16_16(xf.position_p, p);
+    mat3_to_fp16_16(xf.normal_mv_inv_t, nm);
     pf_csr_set_vtx_xf(csr, &xf);
 
     /* Material: simple ambient + diffuse */
@@ -249,8 +236,8 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
 
     /* Depth test enabled */
     pixelforge_depth_test_config_t depth = {
-        .test_enabled = true,
-        .write_enabled = true,
+        .test_enabled = depth_enabled,
+        .write_enabled = depth_enabled,
         .compare_op = PIXELFORGE_CMP_GREATER_OR_EQUAL,
     };
     pf_csr_set_depth(csr, &depth);
@@ -340,17 +327,21 @@ int main(int argc, char **argv) {
     int frames = 120;
     const char *obj_file = NULL;
     bool stencil_outline = false;
+    bool use_depth = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) g_verbose = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--stencil-outline")) stencil_outline = true;
+        else if (!strcmp(argv[i], "--use-depth")) use_depth = true;
         else if (!strcmp(argv[i], "--obj") && i + 1 < argc) obj_file = argv[++i];
         else if (argv[i][0] != '-') obj_file = argv[i];
     }
 
+    if (stencil_outline) use_depth = true;
+
     if (!obj_file) {
-        fprintf(stderr, "Usage: %s [--verbose] [--frames N] [--stencil-outline] <model.obj>\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--verbose] [--frames N] [--stencil-outline] [--use-depth] <model.obj>\n", argv[0]);
         return 1;
     }
 
@@ -434,19 +425,21 @@ int main(int argc, char **argv) {
                          vb_block.phys + offsetof(struct vertex, pos),
                          vb_block.phys + offsetof(struct vertex, norm),
                          vb_block.phys + offsetof(struct vertex, col),
-                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p);
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, use_depth, mv, p);
             pf_csr_start(dev->csr_base);
-            if (wait_for_gpu_ready(dev) != 0) break;
         } else {
             /* Pass 1: draw model and write stencil */
             configure_gpu(dev, vertex_count,
                          vb_block.phys + offsetof(struct vertex, pos),
                          vb_block.phys + offsetof(struct vertex, norm),
                          vb_block.phys + offsetof(struct vertex, col),
-                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv, p);
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, use_depth, mv, p);
             set_stencil_write_mode(dev);
             pf_csr_start(dev->csr_base);
-            if (wait_for_gpu_ready(dev) != 0) break;
+            if (!pixelforge_wait_for_gpu_ready(dev, GPU_STAGE_PER_PIXEL, &keep_running)) {
+                fprintf(stderr, "Frame %d: GPU timeout\n", frame);
+                break;
+            }
 
             /* Pass 2: draw enlarged model where stencil != 1 (outline) */
             float scale_m[16], mv_outline[16];
@@ -457,21 +450,23 @@ int main(int argc, char **argv) {
                          vb_block.phys + offsetof(struct vertex, pos),
                          vb_block.phys + offsetof(struct vertex, norm),
                          vb_block.phys + offsetof(struct vertex, col),
-                         sizeof(struct vertex), buffer_phys, ds_block.phys, mv_outline, p);
+                         sizeof(struct vertex), buffer_phys, ds_block.phys, false, mv_outline, p);
             set_stencil_outline_mode(dev);
             set_object_color(dev, 1.0f, 0.8f, 0.0f, 1.0f);
 
             pixelforge_depth_test_config_t depth = {
                 .test_enabled = false,
                 .write_enabled = false,
-                .compare_op = PIXELFORGE_CMP_ALWAYS,
             };
             pf_csr_set_depth(dev->csr_base, &depth);
 
             pf_csr_start(dev->csr_base);
-            if (wait_for_gpu_ready(dev) != 0) break;
         }
 
+        if (!pixelforge_wait_for_gpu_ready(dev, GPU_STAGE_PER_PIXEL, &keep_running)) {
+            fprintf(stderr, "Frame %d: GPU timeout\n", frame);
+            break;
+        }
         pixelforge_swap_buffers(dev);
         if (stencil_outline) printf("Frame %d/%d rendered (stencil-outline)\n", frame + 1, frames);
         else printf("Frame %d/%d rendered\n", frame + 1, frames);

@@ -136,11 +136,13 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.clip = clip = PrimitiveClipper()
         m.submodules.div = div = PerspectiveDivide()
         m.submodules.tri_prep = tri_prep = TrianglePrep()
-        m.submodules.rast = rast = TriangleRasterizer(num_generators=5)
 
-        m.submodules.tex = tex = Texturing()
-        m.submodules.ds = ds = DepthStencilTest()
-        m.submodules.sc = sc = SwapchainOutput()
+        m.submodules.rast = rast = DomainRenamer("pixel")(
+            TriangleRasterizer(num_generators=8, inv_steps=2)
+        )
+        m.submodules.tex = tex = DomainRenamer("pixel")(Texturing())
+        m.submodules.ds = ds = DomainRenamer("pixel")(DepthStencilTest())
+        m.submodules.sc = sc = DomainRenamer("pixel")(SwapchainOutput())
 
         fifo_size_default = 256
 
@@ -166,11 +168,13 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.div_to_tri_prep_fifo = fifo_div_tri_prep = fifo.SyncFIFOBuffered(
             width=Shape.cast(tri_prep.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = fifo.AsyncFIFO(
-            width=Shape.cast(rast.i.p.shape()).width,
-            depth=fifo_size_default,
-            w_domain="sync",
-            r_domain="pixel",
+        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = (
+            fifo.AsyncFIFOBuffered(
+                width=Shape.cast(rast.i.p.shape()).width,
+                depth=fifo_size_default,
+                w_domain="sync",
+                r_domain="pixel",
+            )
         )
         m.submodules.rast_to_tex_fifo = fifo_rast_tex = DomainRenamer("pixel")(
             fifo.SyncFIFOBuffered(
@@ -771,10 +775,12 @@ class GraphicsPipelineAvalonCSR(wiring.Component):
 
         m.submodules.bridge_index = bridge_index = self._bridge_index
         m.submodules.bridge_vertex = bridge_vertex = self._bridge_vertex
-        m.submodules.bridge_depthstencil = bridge_depthstencil = (
+        m.submodules.bridge_depthstencil = bridge_depthstencil = DomainRenamer("pixel")(
             self._bridge_depthstencil
         )
-        m.submodules.bridge_color = bridge_color = self._bridge_color
+        m.submodules.bridge_color = bridge_color = DomainRenamer("pixel")(
+            self._bridge_color
+        )
         m.submodules.bridge_csr = bridge_csr = self._bridge_csr
 
         # Connect memory buses

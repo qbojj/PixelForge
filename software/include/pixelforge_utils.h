@@ -44,7 +44,18 @@ pixelforge_dev* pixelforge_open_dev(void);
 void pixelforge_close_dev(pixelforge_dev *dev);
 
 void pixelforge_swap_buffers(pixelforge_dev *dev);
+void pixelforge_swap_buffers_novsync(pixelforge_dev *dev);
+
 uint8_t* pixelforge_get_back_buffer(pixelforge_dev *dev);
 uint8_t* pixelforge_get_front_buffer(pixelforge_dev *dev);
+
+enum gpu_stage {
+    GPU_STAGE_IA = 0,
+    GPU_STAGE_VTX_TRANSFORM = 1,
+    GPU_STAGE_PREP_RASTER = 2,
+    GPU_STAGE_PER_PIXEL = 3,
+};
+
+bool pixelforge_wait_for_gpu_ready(pixelforge_dev *dev, enum gpu_stage stage, volatile bool *keep_running);
 
 #endif /* PIXELFORGE_UTILS_H */

@@ -43,8 +43,10 @@ test.gtkw
 *.sof
 *.sopc_builder
 *.summary
-*.tcl
+# *.tcl
 *.txt # Explicitly add any text files used
+*.cdf
+*.sld
 *~
 *example*
 *sopc_*
@@ -57,10 +59,21 @@ test.gtkw
 */timing/
 */testbench/
 */*_sim/
-incremental_db/
-db/
-output_files/
-PLLJ_PLLSPE_INFO.txt
+quartus/output_files/
+quartus/hps_isw_handoff/
+quartus/dse/
+quartus/soc_system
 
+# include only .pdf, .tex and .cls from thesis
+thesis/
+!thesis/*.tex
+!thesis/*.cls
+!thesis/*.pdf
+
+# do not include software artefacts
 *.d
 *.o
+*.a
+software/demo_*
+software/*_demo
+software/dump_*

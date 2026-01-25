@@ -1,6 +1,91 @@
 #include <string.h>
 #include "demo_utils.h"
 
+static int32_t fp16_16(float v) {
+    return (int32_t)(v * 65536.0f);
+}
+
+/* Create cube with colorful faces */
+void demo_create_cube(struct demo_vertex *vertices, uint16_t *indices, uint32_t *idx_count) {
+    // Cube vertex positions, normals, and colors
+    float vtx_pos[24][3] = {
+        // Front face (+Z)
+        {-0.5f, -0.5f,  0.5f}, {0.5f, -0.5f,  0.5f}, {0.5f,  0.5f,  0.5f}, {-0.5f,  0.5f,  0.5f},
+        // Back face (-Z)
+        { 0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f, -0.5f}, {-0.5f,  0.5f, -0.5f}, { 0.5f,  0.5f, -0.5f},
+        // Left face (-X)
+        {-0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f,  0.5f}, {-0.5f,  0.5f,  0.5f}, {-0.5f,  0.5f, -0.5f},
+        // Right face (+X)
+        { 0.5f, -0.5f,  0.5f}, { 0.5f, -0.5f, -0.5f}, { 0.5f,  0.5f, -0.5f}, { 0.5f,  0.5f,  0.5f},
+        // Top face (+Y)
+        {-0.5f,  0.5f,  0.5f}, { 0.5f,  0.5f,  0.5f}, { 0.5f,  0.5f, -0.5f}, {-0.5f,  0.5f, -0.5f},
+        // Bottom face (-Y)
+        {-0.5f, -0.5f, -0.5f}, { 0.5f, -0.5f, -0.5f}, { 0.5f, -0.5f,  0.5f}, {-0.5f, -0.5f,  0.5f},
+    };
+
+    float vtx_norm[24][3] = {
+        // Front face (+Z)
+        {0,0,1}, {0,0,1}, {0,0,1}, {0,0,1},
+        // Back face (-Z)
+        {0,0,-1}, {0,0,-1}, {0,0,-1}, {0,0,-1},
+        // Left face (-X)
+        {-1,0,0}, {-1,0,0}, {-1,0,0}, {-1,0,0},
+        // Right face (+X)
+        {1,0,0}, {1,0,0}, {1,0,0}, {1,0,0},
+        // Top face (+Y)
+        {0,1,0}, {0,1,0}, {0,1,0}, {0,1,0},
+        // Bottom face (-Y)
+        {0,-1,0}, {0,-1,0}, {0,-1,0}, {0,-1,0},
+    };
+
+    float vtx_color[24][3] = {
+        // Front face (red)
+        {1,0,0}, {1,0,0}, {1,0,0}, {1,0,0},
+        // Back face (green)
+        {0,1,0}, {0,1,0}, {0,1,0}, {0,1,0},
+        // Left face (blue)
+        {0,0,1}, {0,0,1}, {0,0,1}, {0,0,1},
+        // Right face (yellow)
+        {1,1,0}, {1,1,0}, {1,1,0}, {1,1,0},
+        // Top face (cyan)
+        {0,1,1}, {0,1,1}, {0,1,1}, {0,1,1},
+        // Bottom face (magenta)
+        {1,0,1}, {1,0,1}, {1,0,1}, {1,0,1},
+    };
+
+    // Triangle list indices (2 triangles per face)
+    int idx[36] = {
+        0,1,2, 0,2,3,       // Front
+        4,5,6, 4,6,7,       // Back
+        8,9,10, 8,10,11,    // Left
+        12,13,14, 12,14,15, // Right
+        16,17,18, 16,18,19, // Top
+        20,21,22, 20,22,23  // Bottom
+    };
+
+    // Populate vertex buffer
+    for (int i = 0; i < 24; i++) {
+        vertices[i].pos[0] = fp16_16(vtx_pos[i][0]);
+        vertices[i].pos[1] = fp16_16(vtx_pos[i][1]);
+        vertices[i].pos[2] = fp16_16(vtx_pos[i][2]);
+        vertices[i].pos[3] = fp16_16(1.0f);
+        vertices[i].norm[0] = fp16_16(vtx_norm[i][0]);
+        vertices[i].norm[1] = fp16_16(vtx_norm[i][1]);
+        vertices[i].norm[2] = fp16_16(vtx_norm[i][2]);
+        vertices[i].col[0] = fp16_16(vtx_color[i][0]);
+        vertices[i].col[1] = fp16_16(vtx_color[i][1]);
+        vertices[i].col[2] = fp16_16(vtx_color[i][2]);
+        vertices[i].col[3] = fp16_16(1.0f);
+    }
+
+    // Populate index buffer
+    for (int i = 0; i < 36; i++) {
+        indices[i] = (uint16_t)idx[i];
+    }
+
+    *idx_count = 36;
+}
+
 /* Column-major (OpenGL-style) implementations */
 
 void mat4_identity(float m[16]) {
@@ -113,4 +198,16 @@ void mat3_from_mat4(float m3[9], const float m4[16]) {
     m3[6] = (minv[3] * minv[7] - minv[4] * minv[6]) * invdet;
     m3[7] = (minv[1] * minv[6] - minv[0] * minv[7]) * invdet;
     m3[8] = (minv[0] * minv[4] - minv[1] * minv[3]) * invdet;
+}
+
+void mat4_to_fp16_16(int32_t out[16], const float in[16]) {
+    for (int i = 0; i < 16; i++) {
+        out[i] = fp16_16(in[i]);
+    }
+}
+
+void mat3_to_fp16_16(int32_t out[9], const float in[9]) {
+    for (int i = 0; i < 9; i++) {
+        out[i] = fp16_16(in[i]);
+    }
 }

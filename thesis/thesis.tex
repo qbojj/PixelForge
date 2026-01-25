@@ -1005,7 +1005,7 @@ implementowany na~FPGA, z~naciskiem na~algorytmy rasteryzacji i~zarządzania pam
 transformacji geometrycznych ani oświetlenia, koncentrując się~głównie na~etapie rasteryzacji.
 
 Praca magisterska \cite{fpga-gpu-2} opisuje implementację prostego akceleratora graficznego na~platformie FPGA, z~obsługą
-transformacji wierzchołków, obcinania i~rasteryzacji lini. Jednakże nie posiada możliwości prymityw trójkątów ani
+transformacji wierzchołków, obcinania i~rasteryzacji lini. Jednakże nie posiada możliwości wyświetlania trójkątów, ani
 obsługi cienowania fragmentów.
 
 Ta praca wyróżnia się tym, że~implementuje kompletny potok, który może bez udziału procesora wykonać pełną komendę rysowania
@@ -1053,6 +1053,10 @@ Pozwoliło by to na oddzielenie fazy rasteryzacji od magistrali pamięci, co by 
 
 Ostatecznym rozszerzeniem byłoby wprowadzenie programowalnych shaderów (vertex shader, fragment shader), co~przybliżyłoby architekturę do~współczesnych GPU. Wymagałoby to~zaprojektowania
 procesora wektorowego w sprzęcie oraz back-endu kompilującego shadery do~kodów maszynowych.
+
+\subsection{Anty aliasing}
+
+Dodanie technik anty aliasingu (np. MSAA - Multi-Sample Anti-Aliasing) w celu poprawy jakości renderowanych obrazów poprzez redukcję ząbkowania krawędzi.
 
 \section{Wkład edukacyjny}
 

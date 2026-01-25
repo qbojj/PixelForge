@@ -13,6 +13,7 @@
 #include <linux/udmabuf.h>
 
 #include "pixelforge_utils.h"
+#include "graphics_pipeline_csr_access.h"
 #include "udma_alloc.h"
 
 #ifndef PAGE_SIZE
@@ -128,11 +129,11 @@ void pixelforge_close_dev(pixelforge_dev *dev) {
     }
 }
 
-void pixelforge_swap_buffers(pixelforge_dev *dev) {
+static void pixelforge_swap_buffers_impl(pixelforge_dev *dev, bool vsync) {
     if (!dev || !dev->vga_dma_regs) return;
 
     /* Wait for previous swap to complete BEFORE triggering new swap */
-    while (dev->vga_dma_regs->status.bits.swap_busy) {
+    while (vsync && dev->vga_dma_regs->status.bits.swap_busy) {
         usleep(10);
     }
 
@@ -145,6 +146,14 @@ void pixelforge_swap_buffers(pixelforge_dev *dev) {
     dev->render_buffer = old_old_display;
 }
 
+void pixelforge_swap_buffers(pixelforge_dev *dev) {
+    pixelforge_swap_buffers_impl(dev, true);
+}
+
+void pixelforge_swap_buffers_novsync(pixelforge_dev *dev) {
+    pixelforge_swap_buffers_impl(dev, false);
+}
+
 uint8_t* pixelforge_get_back_buffer(pixelforge_dev *dev) {
     if (!dev) return NULL;
     return dev->buffers[dev->render_buffer];
@@ -153,4 +162,23 @@ uint8_t* pixelforge_get_back_buffer(pixelforge_dev *dev) {
 uint8_t* pixelforge_get_front_buffer(pixelforge_dev *dev) {
     if (!dev) return NULL;
     return dev->buffers[dev->current_display_buffer];
+}
+
+bool pixelforge_wait_for_gpu_ready(pixelforge_dev *dev, enum gpu_stage stage, volatile bool *keep_running) {
+    // component is really ready if all prior stages are also ready
+    // TODO: actually make use of interrupts (uio or a real kernel driver)
+
+    uint32_t mask = (1u << (stage + 1)) - 1;
+
+    while (true) {
+        if (keep_running && !*keep_running)
+            return false;
+
+        uint32_t ready_components = pf_csr_get_ready_components(dev->csr_base);
+
+        if ((ready_components & mask) == mask)
+            return true;
+
+        usleep(50);
+    }
 }

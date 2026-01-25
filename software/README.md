@@ -13,6 +13,7 @@ This will build all demos:
 - `pixelforge_demo` - Basic triangle rendering (minimal example)
 - `demo_cube` - Rotating colored cube
 - `demo_depth` - Multiple cubes demonstrating depth buffer operations
+- `demo_alpha` - Alpha-blended translucent quads with glow
 - `demo_obj` - Wavefront OBJ model viewer with optional stencil outline effect
 
 And debugging utilities:
@@ -94,7 +95,27 @@ Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider
 
 ---
 
-### 4. demo_obj - Wavefront OBJ Model Viewer
+### 4. demo_alpha - Translucent "Glass" Fan with Glow
+
+**Features showcased:**
+- Source-alpha blending (SRC_ALPHA / ONE_MINUS_SRC_ALPHA)
+- Additive glow overlay for a neon highlight
+
+**Usage:**
+```bash
+./demo_alpha [--verbose] [--frames N]
+```
+
+**Options:**
+- `--verbose` - Enable debug output
+- `--frames N` - Number of animation frames (default: 240)
+
+**What it does:**
+A rotating fan of translucent quads, each with alpha blending. An additional additive glow layer is rendered on top to create a neon-like highlight effect.
+
+---
+
+### 5. demo_obj - Wavefront OBJ Model Viewer
 
 **Features showcased:**
 - Loading and rendering Wavefront OBJ files (vertices, normals, faces)
@@ -106,22 +127,24 @@ Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider
 
 **Usage:**
 ```bash
-./demo_obj [--verbose] [--frames N] [--stencil-outline] [--obj FILE] <model.obj>
+./demo_obj [--verbose] [--frames N] [--stencil-outline] [--use-depth] [--obj FILE] <model.obj>
 ```
 
 **Options:**
 - `--verbose` - Enable debug output
 - `--frames N` - Number of animation frames (default: 90)
 - `--stencil-outline` - Enable two-pass stencil outline rendering
+- `--use-depth` - Enable depth testing and writing (automatically enabled when using `--stencil-outline`)
 - `--obj FILE` - Alternate way to specify OBJ file
 - `<model.obj>` - Path to Wavefront OBJ file (e.g., `sphere.obj`, `tetrahedron.obj`)
 
 **What it does:**
 Loads a 3D model from a Wavefront OBJ file and renders it rotating under directional lighting. The demo supports models with per-vertex or per-face normals.
+Face culling is enabled to allow for proper rendering of convex models without depth testing.
 
 When `--stencil-outline` is enabled, uses a two-pass rendering technique:
-- **Pass 1:** Draw the object normally with lighting and mark stencil buffer (value=1)
-- **Pass 2:** Draw slightly enlarged object with solid color only where stencil≠1 (creating outline)
+- **Pass 1:** Draw the object normally with lighting and mark stencil buffer (value = 1)
+- **Pass 2:** Draw slightly enlarged object with solid color only where stencil != 1 (creating outline)
 
 This creates a glowing outline effect around the object, commonly used for selection highlights and visual emphasis in games.
 
@@ -129,6 +152,7 @@ This creates a glowing outline effect around the object, commonly used for selec
 - `sphere.obj` - Smooth sphere (482 vertices, 960 faces, per-vertex normals)
 - `sphere_faceted.obj` - Faceted sphere (per-face normals for flat shading)
 - `tetrahedron.obj` - Simple 4-sided polyhedron (4 vertices, 4 faces)
+- `teapot.obj` - Classic Utah teapot model (depth testing should be enabled, as it is not convex)
 
 **Performance note:**
 All provided models achieve 60FPS on PixelForge. As the pipeline is fill-rate limited we don't expect performance to drop significantly with more complex models, but extremely high polygon counts may impact frame time.

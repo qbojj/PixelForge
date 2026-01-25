@@ -2,6 +2,9 @@ CROSS_COMPILE ?=
 CC = $(CROSS_COMPILE)gcc
 AR = $(CROSS_COMPILE)ar
 CFLAGS ?= -O2 -Wall -Wextra -std=c11 -static
+LDFLAGS ?= -static
+LDLIBS ?= -lm
+
 INCLUDE := -Iinclude
 SRC := src/graphics_pipeline_csr_access.c src/pixelforge_utils.c src/demo_utils.c src/udma_alloc.c src/obj_loader.c
 OBJ := $(SRC:.c=.o)
@@ -10,11 +13,12 @@ DEMO := pixelforge_demo
 DEMO_CUBE := demo_cube
 DEMO_DEPTH := demo_depth
 DEMO_OBJ := demo_obj
+DEMO_ALPHA := demo_alpha
 DUMP_VGA := dump_vga_dma
 DUMP_GPU_CSR := dump_gpu_csr
 OBJS := $(shell find . -iname '*.obj')
 
-DEMOS := $(DEMO) $(DEMO_CUBE) $(DEMO_DEPTH) $(DEMO_OBJ)
+DEMOS := $(DEMO) $(DEMO_CUBE) $(DEMO_DEPTH) $(DEMO_OBJ) $(DEMO_ALPHA)
 DUMPS := $(DUMP_GPU_CSR) $(DUMP_VGA)
 
 all: $(LIB) $(DEMOS) $(DUMPS)
@@ -26,22 +30,25 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $< -MMD
 
 $(DEMO): src/pixelforge_demo.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(DEMO_CUBE): src/demo_cube.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(DEMO_DEPTH): src/demo_depth.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(DEMO_OBJ): src/demo_obj.o $(LIB)
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+
+$(DEMO_ALPHA): src/demo_alpha.o $(LIB)
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 $(DUMP_VGA): src/dump_vga_dma.o
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
-$(DUMP_GPU_CSR): src/dump_gpu_csr.o
-	$(CC) $(CFLAGS) -o $@ $^ -L. -lpixelforgecsr -lm
+$(DUMP_GPU_CSR): src/dump_gpu_csr.o $(LIB)
+	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
 
 clean:
 	rm -f $(LIB)

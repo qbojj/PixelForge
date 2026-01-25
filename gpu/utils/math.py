@@ -47,7 +47,7 @@ class FixedPointInvSmallDomain(wiring.Component):
     Result will be in (0.5, 1.0]
     """
 
-    def __init__(self, type: fixed.Shape, steps: int = 4, initial_guess_bits: int = 4):
+    def __init__(self, type: fixed.Shape, steps: int = 4, initial_guess_bits: int = 8):
         super().__init__(
             {
                 "i": In(stream.Signature(type)),

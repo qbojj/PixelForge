@@ -357,11 +357,22 @@ class FragmentGenerator(wiring.Component):
     o: Out(stream.Signature(FragmentLayout))
 
     ctx: In(TriangleContext)
+
+    d_x: In(data.ArrayLayout(FixedPoint_fb, 3))
+    d_y: In(data.ArrayLayout(FixedPoint_fb, 3))
+
+    winding_ccw: In(1)
+    is_top_left: In(3)
+
     o_done: Out(1)
 
     def __init__(self, inv_steps: int = 4):
         super().__init__()
         self._inv_steps = inv_steps
+
+    @staticmethod
+    def max_pipelined_elements() -> int:
+        return 1
 
     def elaborate(self, platform):
         m = Module()
@@ -375,9 +386,7 @@ class FragmentGenerator(wiring.Component):
         px_fp_reg = Signal(s_fb_type)
         py_fp_reg = Signal(s_fb_type)
 
-        w0 = Signal(weight_shape)
-        w1 = Signal(weight_shape)
-        w2 = Signal(weight_shape)
+        w = Signal(data.ArrayLayout(weight_shape, 3))
 
         # Shared multiplier to reduce DSP usage
         mul_a = Signal(s_fb_type)
@@ -386,23 +395,8 @@ class FragmentGenerator(wiring.Component):
         m.d.comb += mul_p.eq(mul_a * mul_b)
 
         # Edge computation intermediates (differences and partial products)
-        d0_ba_x = Signal(s_fb_type)
-        d0_ba_y = Signal(s_fb_type)
-        d0_pa_x = Signal(s_fb_type)
-        d0_pa_y = Signal(s_fb_type)
-        tmp0 = Signal(weight_shape)
-
-        d1_ba_x = Signal(s_fb_type)
-        d1_ba_y = Signal(s_fb_type)
-        d1_pa_x = Signal(s_fb_type)
-        d1_pa_y = Signal(s_fb_type)
-        tmp1 = Signal(weight_shape)
-
-        d2_ba_x = Signal(s_fb_type)
-        d2_ba_y = Signal(s_fb_type)
-        d2_pa_x = Signal(s_fb_type)
-        d2_pa_y = Signal(s_fb_type)
-        tmp2 = Signal(weight_shape)
+        dp_x = Signal(data.ArrayLayout(s_fb_type, 3))
+        dp_y = Signal(data.ArrayLayout(s_fb_type, 3))
 
         weight_linear = Signal(data.ArrayLayout(fixed.UQ(1, 17), 3))
         weight_persp = Signal(data.ArrayLayout(fixed.UQ(1, 17), 3))
@@ -417,7 +411,7 @@ class FragmentGenerator(wiring.Component):
         m.d.comb += weight_mul_p.eq(weight_mul_a * weight_mul_b)
 
         # Perspective-correct bary multipliers
-        persp_mul_a = Signal(FixedPoint)  # linear weight is weight_shape
+        persp_mul_a = Signal(FixedPoint)  # persp_pre is FixedPoint
         persp_mul_b = Signal(FixedPoint)  # 1/w is FixedPoint
         persp_mul_p = Signal.like(persp_mul_a * persp_mul_b)
         m.d.comb += persp_mul_p.eq(persp_mul_a * persp_mul_b)
@@ -441,6 +435,8 @@ class FragmentGenerator(wiring.Component):
 
         persp_pre = Signal(data.ArrayLayout(weight_shape, 2))
 
+        edge_inside = Signal(3)
+
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.i.ready.eq(1)
@@ -451,60 +447,44 @@ class FragmentGenerator(wiring.Component):
                         px_fp_reg.eq(self.i.payload.px + fixed.Const(0.5)),
                         py_fp_reg.eq(self.i.payload.py + fixed.Const(0.5)),
                     ]
-                    # Precompute differences for edge 0: A=V1, B=V2, P=(px,py)
-                    m.d.sync += [
-                        d0_ba_x.eq(self.ctx.screen_x[2] - self.ctx.screen_x[1]),
-                        d0_ba_y.eq(self.ctx.screen_y[2] - self.ctx.screen_y[1]),
-                        d0_pa_x.eq(
-                            (self.i.payload.px + fixed.Const(0.5))
-                            - self.ctx.screen_x[1]
-                        ),
-                        d0_pa_y.eq(
-                            (self.i.payload.py + fixed.Const(0.5))
-                            - self.ctx.screen_y[1]
-                        ),
-                    ]
-                    m.next = "EDGE0_MUL1"
+                    m.next = "CALC_EDGE_OFFS"
+
+            with m.State("CALC_EDGE_OFFS"):
+                m.d.sync += [
+                    dp_x[0].eq(px_fp_reg - self.ctx.screen_x[1]),
+                    dp_y[0].eq(py_fp_reg - self.ctx.screen_y[1]),
+                    dp_x[1].eq(px_fp_reg - self.ctx.screen_x[2]),
+                    dp_y[1].eq(py_fp_reg - self.ctx.screen_y[2]),
+                    dp_x[2].eq(px_fp_reg - self.ctx.screen_x[0]),
+                    dp_y[2].eq(py_fp_reg - self.ctx.screen_y[0]),
+                ]
+                m.next = "EDGE0_MUL1"
 
             with m.State("EDGE0_MUL1"):
-                m.d.comb += [mul_a.eq(d0_ba_x), mul_b.eq(d0_pa_y)]
-                m.d.sync += tmp0.eq(mul_p)
+                m.d.comb += [mul_a.eq(self.d_x[0]), mul_b.eq(dp_y[0])]
+                m.d.sync += w[0].eq(mul_p)
                 m.next = "EDGE0_MUL2"
 
             with m.State("EDGE0_MUL2"):
-                m.d.comb += [mul_a.eq(d0_ba_y), mul_b.eq(d0_pa_x)]
-                m.d.sync += w0.eq(tmp0 - mul_p)
-                # Prepare edge 1: A=V2, B=V0
-                m.d.sync += [
-                    d1_ba_x.eq(self.ctx.screen_x[0] - self.ctx.screen_x[2]),
-                    d1_ba_y.eq(self.ctx.screen_y[0] - self.ctx.screen_y[2]),
-                    d1_pa_x.eq(px_fp_reg - self.ctx.screen_x[2]),
-                    d1_pa_y.eq(py_fp_reg - self.ctx.screen_y[2]),
-                ]
+                m.d.comb += [mul_a.eq(self.d_y[0]), mul_b.eq(dp_x[0])]
+                m.d.sync += w[0].eq(w[0] - mul_p)
                 m.next = "EDGE1_MUL1"
 
             with m.State("EDGE1_MUL1"):
-                m.d.comb += [mul_a.eq(d1_ba_x), mul_b.eq(d1_pa_y)]
-                m.d.sync += tmp1.eq(mul_p)
+                m.d.comb += [mul_a.eq(self.d_x[1]), mul_b.eq(dp_y[1])]
+                m.d.sync += w[1].eq(mul_p)
 
                 m.d.comb += [
-                    weight_mul_a.eq(w0),
+                    weight_mul_a.eq(w[0]),
                     weight_mul_b.eq(self.ctx.area_recip),
                 ]
-                m.d.sync += weight_linear[0].eq(weight_mul_p.clamp(zero, one))
+                m.d.sync += weight_linear[0].eq(weight_mul_p)
 
                 m.next = "EDGE1_MUL2"
 
             with m.State("EDGE1_MUL2"):
-                m.d.comb += [mul_a.eq(d1_ba_y), mul_b.eq(d1_pa_x)]
-                m.d.sync += w1.eq(tmp1 - mul_p)
-                # Prepare edge 2: A=V0, B=V1
-                m.d.sync += [
-                    d2_ba_x.eq(self.ctx.screen_x[1] - self.ctx.screen_x[0]),
-                    d2_ba_y.eq(self.ctx.screen_y[1] - self.ctx.screen_y[0]),
-                    d2_pa_x.eq(px_fp_reg - self.ctx.screen_x[0]),
-                    d2_pa_y.eq(py_fp_reg - self.ctx.screen_y[0]),
-                ]
+                m.d.comb += [mul_a.eq(self.d_y[1]), mul_b.eq(dp_x[1])]
+                m.d.sync += w[1].eq(w[1] - mul_p)
 
                 m.d.comb += [
                     persp_mul_a.eq(weight_linear[0] << 4),  # UQ1.17 to Q13.13
@@ -516,20 +496,20 @@ class FragmentGenerator(wiring.Component):
                 m.next = "EDGE2_MUL1"
 
             with m.State("EDGE2_MUL1"):
-                m.d.comb += [mul_a.eq(d2_ba_x), mul_b.eq(d2_pa_y)]
-                m.d.sync += tmp2.eq(mul_p)
+                m.d.comb += [mul_a.eq(self.d_x[2]), mul_b.eq(dp_y[2])]
+                m.d.sync += w[2].eq(mul_p)
 
                 m.d.comb += [
-                    weight_mul_a.eq(w1),
+                    weight_mul_a.eq(w[1]),
                     weight_mul_b.eq(self.ctx.area_recip),
                 ]
-                m.d.sync += weight_linear[1].eq(weight_mul_p.clamp(zero, one))
+                m.d.sync += weight_linear[1].eq(weight_mul_p)
 
                 m.next = "EDGE2_MUL2"
 
             with m.State("EDGE2_MUL2"):
-                m.d.comb += [mul_a.eq(d2_ba_y), mul_b.eq(d2_pa_x)]
-                m.d.sync += w2.eq(tmp2 - mul_p)
+                m.d.comb += [mul_a.eq(self.d_y[2]), mul_b.eq(dp_x[2])]
+                m.d.sync += w[2].eq(w[2] - mul_p)
 
                 m.d.sync += weight_linear[2].eq(
                     one - weight_linear[0] - weight_linear[1]
@@ -545,11 +525,13 @@ class FragmentGenerator(wiring.Component):
                 m.next = "EDGE_INSIDE"
 
             with m.State("EDGE_INSIDE"):
-                edge_pos = Signal(3)
-                edge_neg = Signal(3)
                 m.d.comb += [
-                    edge_pos.eq(Cat([w0 >= 0, w1 >= 0, w2 >= 0])),
-                    edge_neg.eq(Cat([w0 <= 0, w1 <= 0, w2 <= 0])),
+                    # perform edge tests with top-left rule
+                    edge_inside[i].eq(
+                        Mux(self.winding_ccw, w[i] > 0, w[i] < 0)
+                        | ((w[i] == 0) & self.is_top_left[i])
+                    )
+                    for i in range(3)
                 ]
 
                 m.d.comb += [
@@ -558,7 +540,7 @@ class FragmentGenerator(wiring.Component):
                 ]
                 m.d.comb += inv.i.payload.eq(inv_w_sum + persp_mul_p)
 
-                with m.If(edge_pos.all() | edge_neg.all()):
+                with m.If(edge_inside.all()):
                     m.d.comb += inv.i.valid.eq(1)
                     with m.If(inv.i.ready):
                         m.next = "GET_PRE_PERSP_0"
@@ -605,7 +587,7 @@ class FragmentGenerator(wiring.Component):
                     persp_mul_a.eq(persp_pre[0]),
                     persp_mul_b.eq(inv_w_sum_recip),
                 ]
-                m.d.sync += weight_persp[0].eq(persp_mul_p.clamp(zero, one))
+                m.d.sync += weight_persp[0].eq(persp_mul_p)
 
                 m.next = "PERSPECTIVE_W1"
 
@@ -614,7 +596,7 @@ class FragmentGenerator(wiring.Component):
                     persp_mul_a.eq(persp_pre[1]),
                     persp_mul_b.eq(inv_w_sum_recip),
                 ]
-                m.d.sync += weight_persp[1].eq(persp_mul_p.clamp(zero, one))
+                m.d.sync += weight_persp[1].eq(persp_mul_p)
 
                 m.d.comb += [
                     mul_a_interp.eq(self.ctx.vtx[0].color[0].clamp(zero, one)),
@@ -771,7 +753,7 @@ class TriangleRasterizer(wiring.Component):
     fb_info: In(FramebufferInfoLayout)
     ready: Out(1)
 
-    def __init__(self, inv_steps: int = 4, num_generators: int = 1):
+    def __init__(self, inv_steps: int = 3, num_generators: int = 1):
         super().__init__()
         self._inv_steps = inv_steps
         self._num_generators = num_generators
@@ -781,10 +763,22 @@ class TriangleRasterizer(wiring.Component):
         m = Module()
 
         ctx_buf = Signal(TriangleContext)
-        inflight = Signal(range(8 * self._num_generators + 1))
+        inflight = Signal(
+            range(
+                FragmentGenerator.max_pipelined_elements() * self._num_generators * 2
+                + 1
+            )
+        )
 
         px = Signal(unsigned(FixedPoint_fb.i_bits))
         py = Signal(unsigned(FixedPoint_fb.i_bits))
+
+        d_x = Signal(data.ArrayLayout(FixedPoint_fb, 3))
+        d_y = Signal(data.ArrayLayout(FixedPoint_fb, 3))
+
+        winding_ccw = Signal()
+        is_top = Signal(3)
+        is_left = Signal(3)
 
         task_last_x = Signal()
         task_last_y = Signal()
@@ -811,8 +805,41 @@ class TriangleRasterizer(wiring.Component):
                         ctx_buf.eq(self.i.payload),
                         px.eq(self.i.payload.min_x),
                         py.eq(self.i.payload.min_y),
+                        winding_ccw.eq(self.i.payload.area > 0),
                     ]
-                    m.next = "RASTERIZE"
+                    m.next = "PREP_EDGES"
+
+            with m.State("PREP_EDGES"):
+                m.d.sync += [
+                    d_x[0].eq(ctx_buf.screen_x[2] - ctx_buf.screen_x[1]),
+                    d_y[0].eq(ctx_buf.screen_y[2] - ctx_buf.screen_y[1]),
+                    d_x[1].eq(ctx_buf.screen_x[0] - ctx_buf.screen_x[2]),
+                    d_y[1].eq(ctx_buf.screen_y[0] - ctx_buf.screen_y[2]),
+                    d_x[2].eq(ctx_buf.screen_x[1] - ctx_buf.screen_x[0]),
+                    d_y[2].eq(ctx_buf.screen_y[1] - ctx_buf.screen_y[0]),
+                ]
+                m.next = "CATEGORIZE_EDGES"
+
+            with m.State("CATEGORIZE_EDGES"):
+                for i in range(3):
+                    m.d.sync += [
+                        is_top[i].eq(
+                            (d_y[i] == 0)
+                            & Mux(
+                                winding_ccw,
+                                d_x[i] > 0,
+                                d_x[i] < 0,
+                            )
+                        ),
+                        is_left[i].eq(
+                            Mux(
+                                winding_ccw,
+                                d_y[i] < 0,
+                                d_y[i] > 0,
+                            )
+                        ),
+                    ]
+                m.next = "RASTERIZE"
 
             with m.State("RASTERIZE"):
                 m.d.comb += [
@@ -842,6 +869,10 @@ class TriangleRasterizer(wiring.Component):
 
             wiring.connect(m, distrib.o[idx], fg.i)
             m.d.comb += fg.ctx.eq(ctx_buf)
+            m.d.comb += fg.d_x.eq(d_x)
+            m.d.comb += fg.d_y.eq(d_y)
+            m.d.comb += fg.winding_ccw.eq(winding_ccw)
+            m.d.comb += fg.is_top_left.eq(is_top | is_left)
 
             wiring.connect(m, fg.o, recomb.i[idx])
             m.d.comb += done_vec[idx].eq(fg.o_done)

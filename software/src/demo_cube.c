@@ -50,101 +50,7 @@ static int32_t fp16_16(float v) {
     return (int32_t)(v * 65536.0f);
 }
 
-struct vertex {
-    int32_t pos[4];
-    int32_t norm[3];
-    int32_t col[4];
-};
-
-static int wait_for_gpu_ready(pixelforge_dev *dev) {
-    for (int i = 0; i < 10000000 && keep_running; ++i) {
-        uint32_t ready = pf_csr_get_ready(dev->csr_base);
-        if (ready & 0x1) return 0;
-        usleep(50);
-    }
-    return -1;
-}
-
-/* Create cube with colorful faces */
-static void create_cube(struct vertex *vertices, uint16_t *indices, uint32_t *idx_count) {
-    // Cube vertex positions, normals, and colors
-    float vtx_pos[24][3] = {
-        // Front face (+Z)
-        {-0.5f, -0.5f,  0.5f}, {0.5f, -0.5f,  0.5f}, {0.5f,  0.5f,  0.5f}, {-0.5f,  0.5f,  0.5f},
-        // Back face (-Z)
-        { 0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f, -0.5f}, {-0.5f,  0.5f, -0.5f}, { 0.5f,  0.5f, -0.5f},
-        // Left face (-X)
-        {-0.5f, -0.5f, -0.5f}, {-0.5f, -0.5f,  0.5f}, {-0.5f,  0.5f,  0.5f}, {-0.5f,  0.5f, -0.5f},
-        // Right face (+X)
-        { 0.5f, -0.5f,  0.5f}, { 0.5f, -0.5f, -0.5f}, { 0.5f,  0.5f, -0.5f}, { 0.5f,  0.5f,  0.5f},
-        // Top face (+Y)
-        {-0.5f,  0.5f,  0.5f}, { 0.5f,  0.5f,  0.5f}, { 0.5f,  0.5f, -0.5f}, {-0.5f,  0.5f, -0.5f},
-        // Bottom face (-Y)
-        {-0.5f, -0.5f, -0.5f}, { 0.5f, -0.5f, -0.5f}, { 0.5f, -0.5f,  0.5f}, {-0.5f, -0.5f,  0.5f},
-    };
-
-    float vtx_norm[24][3] = {
-        // Front face (+Z)
-        {0,0,1}, {0,0,1}, {0,0,1}, {0,0,1},
-        // Back face (-Z)
-        {0,0,-1}, {0,0,-1}, {0,0,-1}, {0,0,-1},
-        // Left face (-X)
-        {-1,0,0}, {-1,0,0}, {-1,0,0}, {-1,0,0},
-        // Right face (+X)
-        {1,0,0}, {1,0,0}, {1,0,0}, {1,0,0},
-        // Top face (+Y)
-        {0,1,0}, {0,1,0}, {0,1,0}, {0,1,0},
-        // Bottom face (-Y)
-        {0,-1,0}, {0,-1,0}, {0,-1,0}, {0,-1,0},
-    };
-
-    float vtx_color[24][3] = {
-        // Front face (red)
-        {1,0,0}, {1,0,0}, {1,0,0}, {1,0,0},
-        // Back face (green)
-        {0,1,0}, {0,1,0}, {0,1,0}, {0,1,0},
-        // Left face (blue)
-        {0,0,1}, {0,0,1}, {0,0,1}, {0,0,1},
-        // Right face (yellow)
-        {1,1,0}, {1,1,0}, {1,1,0}, {1,1,0},
-        // Top face (cyan)
-        {0,1,1}, {0,1,1}, {0,1,1}, {0,1,1},
-        // Bottom face (magenta)
-        {1,0,1}, {1,0,1}, {1,0,1}, {1,0,1},
-    };
-
-    // Triangle list indices (2 triangles per face)
-    int idx[36] = {
-        0,1,2, 0,2,3,       // Front
-        4,5,6, 4,6,7,       // Back
-        8,9,10, 8,10,11,    // Left
-        12,13,14, 12,14,15, // Right
-        16,17,18, 16,18,19, // Top
-        20,21,22, 20,22,23  // Bottom
-    };
-
-    // Populate vertex buffer
-    for (int i = 0; i < 24; i++) {
-        vertices[i].pos[0] = fp16_16(vtx_pos[i][0]);
-        vertices[i].pos[1] = fp16_16(vtx_pos[i][1]);
-        vertices[i].pos[2] = fp16_16(vtx_pos[i][2]);
-        vertices[i].pos[3] = fp16_16(1.0f);
-        vertices[i].norm[0] = fp16_16(vtx_norm[i][0]);
-        vertices[i].norm[1] = fp16_16(vtx_norm[i][1]);
-        vertices[i].norm[2] = fp16_16(vtx_norm[i][2]);
-        vertices[i].col[0] = fp16_16(vtx_color[i][0]);
-        vertices[i].col[1] = fp16_16(vtx_color[i][1]);
-        vertices[i].col[2] = fp16_16(vtx_color[i][2]);
-        vertices[i].col[3] = fp16_16(1.0f);
-    }
-
-    // Populate index buffer
-    for (int i = 0; i < 36; i++) {
-        indices[i] = (uint16_t)idx[i];
-    }
-
-    *idx_count = 36;
-}
+typedef struct demo_vertex vertex;
 
 static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_count,
                          uint32_t pos_addr, uint32_t norm_addr, uint32_t col_addr,
@@ -178,18 +84,14 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_c
     pf_csr_set_attr_color(csr, &attr);
 
     /* Set transforms */
-    pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = true;
-    for (int i = 0; i < 16; i++) {
-        xf.position_mv[i] = fp16_16(mv[i]);
-        xf.position_p[i] = fp16_16(p[i]);
-    }
-
     float nm[9];
     mat3_from_mat4(nm, mv);
-    for (int i = 0; i < 9; i++) {
-        xf.normal_mv_inv_t[i] = fp16_16(nm[i]);
-    }
+
+    pixelforge_vtx_xf_config_t xf = {0};
+    xf.enabled.normal_enable = true;
+    mat4_to_fp16_16(xf.position_mv, mv);
+    mat4_to_fp16_16(xf.position_p, p);
+    mat3_to_fp16_16(xf.normal_mv_inv_t, nm);
     pf_csr_set_vtx_xf(csr, &xf);
 
     /* Material: ambient only (no lighting) */
@@ -310,16 +212,16 @@ int main(int argc, char **argv) {
     }
 
     /* Create geometry */
-    struct vertex *vertices = (struct vertex*)vb_block.virt;
-    uint16_t *indices = (uint16_t*)(vb_block.virt + sizeof(struct vertex) * 24);
+    vertex *vertices = (vertex*)vb_block.virt;
+    uint16_t *indices = (uint16_t*)(vb_block.virt + sizeof(vertex) * 24);
     uint32_t idx_count;
-    create_cube(vertices, indices, &idx_count);
+    demo_create_cube(vertices, indices, &idx_count);
 
-    uint32_t idx_addr = vb_block.phys + sizeof(struct vertex) * 24;
-    uint32_t pos_addr = vb_block.phys + offsetof(struct vertex, pos);
-    uint32_t norm_addr = vb_block.phys + offsetof(struct vertex, norm);
-    uint32_t col_addr = vb_block.phys + offsetof(struct vertex, col);
-    uint16_t stride = sizeof(struct vertex);
+    uint32_t idx_addr = vb_block.phys + sizeof(vertex) * 24;
+    uint32_t pos_addr = vb_block.phys + offsetof(vertex, pos);
+    uint32_t norm_addr = vb_block.phys + offsetof(vertex, norm);
+    uint32_t col_addr = vb_block.phys + offsetof(vertex, col);
+    uint16_t stride = sizeof(vertex);
 
     /* Projection matrix */
     float p[16];
@@ -347,8 +249,7 @@ int main(int argc, char **argv) {
 
         pf_csr_start(dev->csr_base);
 
-        usleep(100);
-        if (wait_for_gpu_ready(dev) != 0) {
+        if (!pixelforge_wait_for_gpu_ready(dev, GPU_STAGE_PER_PIXEL, &keep_running)) {
             fprintf(stderr, "Frame %d: GPU timeout\n", frame);
             break;
         }

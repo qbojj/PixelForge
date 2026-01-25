@@ -20,6 +20,7 @@
 #include "graphics_pipeline_csr_access.h"
 #include "vram_alloc.h"
 #include "pixelforge_utils.h"
+#include "demo_utils.h"
 
 /*
  * PixelForge demo inspired by Altera's video DMA controller API.
@@ -47,38 +48,6 @@ static void handle_sigint(int sig) {
     keep_running = false;
 }
 
-/* Report GPU readiness status (components + vector) */
-static void report_ready_status(volatile uint8_t *csr) {
-    uint32_t ready = pf_csr_get_ready(csr);
-    uint32_t comps = pf_csr_get_ready_components(csr);
-    uint32_t vec = pf_csr_get_ready_vec(csr);
-
-    printf("[GPU READY] ready=%u  ia=%s vt=%s rast=%s pix=%s  vec=0x%08x\n",
-           (ready & 1u),
-           (comps & 0x1) ? "ready" : "busy",
-           (comps & 0x2) ? "ready" : "busy",
-           (comps & 0x4) ? "ready" : "busy",
-           (comps & 0x8) ? "ready" : "busy",
-           vec);
-}
-
-/*
- * Helper to wait for GPU ready (polling)
- */
-static int wait_for_gpu_ready(pixelforge_dev *dev) {
-    /* Poll ready bit */
-    for (int i = 0; i < 10000000 && keep_running; ++i) {
-        uint32_t ready = pf_csr_get_ready(dev->csr_base);
-        if (ready & 0x1) {
-            DBG("GPU ready after %d polls", i);
-            return 0;
-        }
-        usleep(50);
-    }
-    fprintf(stderr, "timeout waiting for GPU ready\n");
-    return -1;
-}
-
 /*
  * Fixed-point 16.16 conversion
  */
@@ -98,7 +67,7 @@ struct vertex {
 /*
  * Setup a simple triangle in vertex buffer
  */
-static void setup_triangle_geometry(pixelforge_dev *dev, uint32_t vb_phys, uint8_t *vb_virt,
+static void setup_triangle_geometry(uint32_t vb_phys, uint8_t *vb_virt,
                                     uint32_t *idx_addr, uint32_t *idx_count,
                                     uint32_t *pos_addr, uint32_t *norm_addr,
                                     uint32_t *col_addr, uint16_t *stride) {
@@ -147,7 +116,7 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
                                    uint32_t idx_addr, uint32_t idx_count,
                                    uint32_t pos_addr, uint32_t norm_addr,
                                    uint32_t col_addr, uint16_t stride,
-                                   uint32_t color_addr, uint32_t depthstencil_addr) {
+                                   uint32_t color_addr) {
     volatile uint8_t *csr = dev->csr_base;
 
     /* Index buffer */
@@ -198,15 +167,13 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
         test_attr.info.per_vertex.address, test_attr.info.per_vertex.stride);
 
     /* Identity transforms */
+    float id[16];
+    mat4_identity(id);
+
     pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = true;
-    for (int i = 0; i < 16; ++i) {
-        xf.position_mv[i] = (i % 5 == 0) ? fp16_16(1.0f) : fp16_16(0.0f);
-        xf.position_p[i] = xf.position_mv[i];
-    }
-    for (int i = 0; i < 9; ++i) {
-        xf.normal_mv_inv_t[i] = (i % 4 == 0) ? fp16_16(1.0f) : fp16_16(0.0f);
-    }
+    xf.enabled.normal_enable = false;
+    mat4_to_fp16_16(xf.position_mv, id);
+    mat4_to_fp16_16(xf.position_p, id);
     pf_csr_set_vtx_xf(csr, &xf);
     DBG("Vertex transforms set to identity");
 
@@ -362,7 +329,12 @@ int main(int argc, char **argv) {
     if (clear_test || xor_test) {
         printf("Clear/XOR test: filling screen with XOR pattern...\n");
         /* Get back buffer to work with */
-        uint32_t *pixels = (uint32_t*)pixelforge_get_back_buffer(dev);
+        uint32_t *pixels;
+        if (front) {
+            pixels = (uint32_t*)pixelforge_get_front_buffer(dev);
+        } else {
+            pixels = (uint32_t*)pixelforge_get_back_buffer(dev);
+        }
 
         if (xor_test) {
             for (uint32_t y = 0; y < dev->y_resolution; ++y) {
@@ -379,7 +351,7 @@ int main(int argc, char **argv) {
         }
 
         /* Submit buffer for display */
-        pixelforge_swap_buffers(dev);
+        if (!front) pixelforge_swap_buffers(dev);
         printf("Pattern written and buffer submitted\n");
         pixelforge_close_dev(dev);
         return 0;
@@ -399,18 +371,9 @@ int main(int argc, char **argv) {
         /* Setup geometry */
         uint32_t idx_addr, idx_count, pos_addr, norm_addr, col_addr;
         uint16_t stride;
-        setup_triangle_geometry(dev, vb_block.phys, vb_virt,
+        setup_triangle_geometry(vb_block.phys, vb_virt,
                                &idx_addr, &idx_count,
                                &pos_addr, &norm_addr, &col_addr, &stride);
-
-        /* Allocate combined depth+stencil buffer (D16_X8_S8) */
-        size_t ds_size = dev->x_resolution * dev->y_resolution * 4;
-        struct vram_block ds_block;
-        if (vram_alloc(&dev->vram, ds_size, PAGE_SIZE, &ds_block)) {
-            fprintf(stderr, "Failed to allocate depth/stencil buffer from VRAM\n");
-            pixelforge_close_dev(dev);
-            return 1;
-        }
 
         printf("Rendering %d frame(s)...\n", frames);
 
@@ -426,8 +389,7 @@ int main(int argc, char **argv) {
             /* Configure pipeline */
             configure_gpu_pipeline(dev, idx_addr, idx_count,
                                  pos_addr, norm_addr, col_addr, stride,
-                                 buffer_phys,
-                                 ds_block.phys);
+                                 buffer_phys);
             DBG("Frame %d: GPU pipeline configured", frame);
             DBG("Drawing to buffer at 0x%08x", buffer_phys);
 
@@ -437,7 +399,7 @@ int main(int argc, char **argv) {
             DBG("Frame %d: GPU started", frame);
 
             /* Wait for completion */
-            if (wait_for_gpu_ready(dev) != 0) {
+            if (!pixelforge_wait_for_gpu_ready(dev, GPU_STAGE_PER_PIXEL, &keep_running)) {
                 fprintf(stderr, "Frame %d: GPU timeout\n", frame);
                 break;
             }

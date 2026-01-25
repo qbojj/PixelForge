@@ -173,7 +173,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
   title = {Fixed-Pipeline Graphics Accelerator Based on FPGA},
   school = {University of Wrocław, Institute of Computer Science},
   year = {2026},
-  type = {Engineering thesis},
+  type = {Engineering Thesis},
   supervisor = {dr Marek Materzok}
 }
 ```

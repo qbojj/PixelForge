@@ -11,12 +11,9 @@
 #include <dirent.h>
 #include <inttypes.h>
 #include <linux/udmabuf.h>
+#include <stdbool.h>
 
 #include "udma_alloc.h"
-
-#ifndef MFD_ALLOW_SEALING
-#define MFD_ALLOW_SEALING 0x0002U
-#endif
 
 static void close_fd(int *fd) {
     if (*fd >= 0) {
@@ -30,15 +27,15 @@ static size_t page_align_up(size_t size) {
     return (size + page - 1u) & ~(page - 1u);
 }
 
+static bool used = false;
+
 int udma_alloc(size_t size, struct udma_buffer *buf) {
     if (!buf || size == 0) return -1;
     size = page_align_up(size);
     memset(buf, 0, sizeof(*buf));
     buf->dmafd = buf->memfd = buf->ctrl_fd = -1;
 
-    /* Mock physical address and map via /dev/mem instead of udmabuf dmafd */
     buf->phys = 0x3C000000;
-    fprintf(stderr, "udmabuf: using mock phys_addr 0x%08x\n", buf->phys);
 
     int devmem_fd = open("/dev/mem", O_RDWR | O_SYNC);
     if (devmem_fd < 0) {
@@ -54,6 +51,12 @@ int udma_alloc(size_t size, struct udma_buffer *buf) {
         perror("mmap /dev/mem");
         goto error;
     }
+
+    if (used) {
+        fprintf(stderr, "udma_alloc: warning: for now only a single allocation is supported "
+                        "-> returing aliasing allocation\n");
+    }
+    used = true;
 
     buf->size = size;
     return 0;

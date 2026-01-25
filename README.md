@@ -109,9 +109,11 @@ See [software/DEMOS.md](software/DEMOS.md) for detailed instructions on running 
 
 | Resource | Used | Available | Utilization |
 |----------|------|-----------|-------------|
-| ALMs | 28,702 | 32,070 | 89% |
-| DSP Blocks | 67 | 87 | 77% |
-| Memory Bits | 552,407 | 4,065,280 | 14% |
+| ALMs | 31,372 | 32,070 | 98% |
+| DSP Blocks | 75 | 87 | 86% |
+| Memory Bits | 634,097 | 4,065,280 | 16% |
+| PLLs | 3 | 6 | 50% |
+| DLLs | 1 | 4 | 25% |
 
 ## 📖 Project Structure
 

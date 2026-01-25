@@ -228,7 +228,9 @@ A(x,y) = \frac{\sum_{i=0}^{2} \lambda_i \cdot A_i / w_i}{\sum_{i=0}^{2} \lambda_
 
 \subsection{Test głębokości (Z-buffer)}
 
-Test głębokości (depth test) służy do~rozwiązywania problemu widoczności --- określania, które fragmenty znajdują się~najbliżej obserwatora i~powinny być~widoczne. Dla każdego fragmentu o~współrzędnej głębokości $z$ porównywana jest~wartość z~aktualną wartością w~buforze głębokości $z_{buffer}$. Fragment przechodzi test, jeśli:
+Test głębokości (depth test) służy do~rozwiązywania problemu widoczności,
+czyli określania, które fragmenty znajdują się~najbliżej obserwatora i~powinny być~widoczne.
+Dla każdego fragmentu o~współrzędnej głębokości $z$ porównywana jest~wartość z~aktualną wartością w~buforze głębokości $z_{buffer}$. Fragment przechodzi test, jeśli:
 \[
 z \;  \text{op} \; z_{buffer}
 \]
@@ -535,12 +537,12 @@ Dla każdego trójkąta algorytm iteracyjnie przycina go~względem kolejnych pł
   \item wiele trójkątów (częściowe przecięcie --- powstają nowe wierzchołki w~miejscach przecięć z~płaszczyznami).
 \end{itemize}
 
-Ten modół, ze względu na iteracyjną naturę algorytmu oraz próbę minimalizacji zużycia zasobów, jest potencjalnie wązkim gardłem potoku,
+Ten moduł, ze względu na iteracyjną naturę algorytmu oraz próbę minimalizacji zużycia zasobów, jest potencjalnie wąskim gardłem potoku,
 ale trójkąty wychodzące poza frustum są stosunkowo rzadkie, więc ogólna wydajność jest ograniczana tylko w patologicznych przypadkach.
 
 \subsection{Perspective Divide}
 
-Moduł \code{PerspectiveDivide} wykonuje dzielenie perspektywiczne --- przekształcenie współrzędnych jednorodnych z~przestrzeni obcinania do~znormalizowanych współrzędnych urządzenia (NDC):
+Moduł \code{PerspectiveDivide} wykonuje dzielenie perspektywiczne, czyli przekształcenie współrzędnych jednorodnych z~przestrzeni obcinania do~znormalizowanych współrzędnych urządzenia (NDC):
 \[
 x_{ndc} = \frac{x_{clip}}{w}, \quad y_{ndc} = \frac{y_{clip}}{w}, \quad z_{ndc} = \frac{z_{clip}}{w}
 \]
@@ -549,11 +551,11 @@ Dodatkowo obliczana jest~wartość $1/w$, która będzie potrzebna do~perspektyw
 
 Dzielenie realizowane jest~poprzez~obliczenie odwrotności $w$, a~następnie mnożenie współrzędnych przez~tę odwrotność.
 
-Modół obliczający odwrotność (\code{FixedPointInv}) zamienia dzielnik do dziedziny [1, 2) poprzez odpowiednie przesunięcie bitowe,
+Moduł obliczający odwrotność (\code{FixedPointInv}) zamienia dzielnik do dziedziny [1, 2) poprzez odpowiednie przesunięcie bitowe,
 bierze początkowe przybliżenie z~tablicy LUT, a~następnie poprawia wynik za~pomocą jednej iteracji metody Newtona-Raphsona.
 Całość używa jedynie jeden blok DSP o szerokości takiej, jak wejście.
 
-Po~tej~operacji współrzędne są w zakresie $[-1, 1]$, zamieniamy je do zakresu $[0, 1]$ dla ułatwienia dalszych obliczeń:
+Po~tej~operacji współrzędne są~w~zakresie $[-1, 1]$, zamieniamy je~do~zakresu $[0, 1]$ dla~ułatwienia dalszych obliczeń:
 \[
 x'_{ndc} = \frac{x_{ndc} + 1}{2}, \quad y'_{ndc} = \frac{y_{ndc} + 1}{2}, \quad z'_{ndc} = \frac{z_{ndc} + 1}{2}
 \]
@@ -593,7 +595,7 @@ Wynikiem jest~struktura \code{TriangleContext}, która zawiera wszystkie dane po
 
 \subsection{Triangle Rasterizer}
 
-Moduł \code{TriangleRasterizer} jest~najbardziej złożonym elementem potoku. Realizuje rasteryzację trójkąta --- określenie, które piksele są~pokryte przez~trójkąt, oraz~obliczenie interpolowanych atrybutów dla~każdego fragmentu.
+Moduł \code{TriangleRasterizer} jest~najbardziej złożonym elementem potoku. Realizuje rasteryzację trójkąta, czyli określenie, które piksele są~pokryte przez~trójkąt, oraz~obliczenie interpolowanych atrybutów dla~każdego fragmentu.
 
 Architektura modułu:
 \begin{itemize}
@@ -621,7 +623,7 @@ Zastosowanie wielu równoległych procesorów fragmentów pozwala na~ukrycie lat
 
 Moduł \code{DepthStencilTest} dla~każdego fragmentu:
 \begin{enumerate}
-  \item Odczytuje aktualną wartość głębokości i~szablonu z~pamięci (bufor depth/stencil w~formacie D16\_X8\_S8 --- 16~bitów głębokości, 8~bitów szablonu).
+  \item Odczytuje aktualną wartość głębokości i~szablonu z~pamięci (bufor depth/stencil w~formacie D16\_X8\_S8, 16~bitów głębokości, 8~bitów szablonu).
 
   \item Wykonuje test szablonu zgodnie z~konfiguracją (operator porównania, wartość referencyjna, maska).
 
@@ -713,7 +715,7 @@ Projekt zorganizowany jest~w~strukturę modułową, wykorzystującą możliwośc
 
   \item \code{tests/} --- testy jednostkowe i~integracyjne w~pytest,
 
-  \item \code{quartus/} --- projekt Intel Quartus (Qsys, syntetyka, konfiguracja pinów),
+  \item \code{quartus/} --- projekt Intel Quartus (Qsys i projekt na DE1-SoC),
 
   \item \code{software/} --- aplikacje demonstracyjne i~narzędzia diagnostyczne w~C dla~ARM Linux:
   \begin{itemize}
@@ -778,9 +780,9 @@ W~implementacji wykorzystano te~bloki do~realizacji operacji arytmetyki stałopr
 
 \subsection{Równoległe procesory fragmentów}
 
-Rasteryzacja jest~najbardziej czasochłonnym etapem potoku (fill-rate limited). Aby zwiększyć przepustowość, zaimplementowano wiele równoległych procesorów fragmentów. Każdy procesor może niezależnie sprawdzać, czy~piksel należy do~trójkąta, i~obliczać interpolowane atrybuty.
+Rasteryzacja jest~najbardziej czasochłonnym etapem potoku. Aby zwiększyć przepustowość, zaimplementowano wiele równoległych procesorów fragmentów. Każdy procesor może niezależnie sprawdzać, czy~piksel należy do~trójkąta, i~obliczać interpolowane atrybuty.
 
-Liczba procesorów jest~parametrem konfigurowalnym. W~przykładzie użyto 5~procesorów, co~pozwala na~osiągnięcie zadowalającej wydajności przy~rozsądnym zużyciu zasobów FPGA.
+Liczba procesorów jest~parametrem konfigurowalnym. W~przykładzie użyto 8~procesorów, co~pozwala na~osiągnięcie zadowalającej wydajności przy~rozsądnym zużyciu zasobów FPGA.
 
 \subsection{Bufory FIFO}
 
@@ -811,7 +813,7 @@ System uruchomieniowy na~płycie DE1-SoC oparty jest~na~Linuksie dla~ARM. Obraz 
 \begin{itemize}
   \item bootloader U-Boot,
   \item jądro Linux skonfigurowane dla~DE1-SoC,
-  \item filesystem z~minimalnym środowiskiem użytkownika (BusyBox),
+  \item system plików z~minimalnym środowiskiem użytkownika (BusyBox),
   \item plik \code{.rbf} z~konfiguracją FPGA, ładowany automatycznie przy~starcie.
   \item testowe aplikacje demonstracyjne i~biblioteka PixelForge.
 \end{itemize}
@@ -838,7 +840,9 @@ Projekt zawiera kilka aplikacji demonstracyjnych:
 
   \item \textbf{demo\_cube} --- rysowanie obracającego się~kolorowego sześcianu, demonstrująca transformacje geometryczne i~interpolację kolorów.
 
-  \item \textbf{demo\_depth} --- cztery sześciany obracające się w przestrzeni 3D, które czasami się przysłaniają, demonstrująca test głębokości.
+  \item \textbf{demo\_depth} --- cztery sześciany obracające się w~przestrzeni 3D, które czasami się~przysłaniają, demonstrująca test głębokości.
+
+  \item \textbf{demo\_alpha} --- obracający się~wachlarz przezroczystych kwadrantów z~alfa-blendingiem (SRC\_ALPHA / ONE\_MINUS\_SRC\_ALPHA) oraz jeden oświetlający (additive-blending - SRC\_ALPHA / ONE), demonstrując operacje blendingu kolorów.
 
   \item \textbf{demo\_obj} --- wczytywanie i~renderowanie modeli w~formacie Wavefront OBJ (np. kule, wielościany) z~oświetleniem diffuse oraz~opcjonalnym efektem konturu za~pomocą bufora szablonu.
 
@@ -848,6 +852,78 @@ Projekt zawiera kilka aplikacji demonstracyjnych:
 \end{itemize}
 
 Aplikacje budowane są~przy~użyciu cross-compilera ARM (np. \code{arm-linux-gnueabihf-gcc}) i~uruchamiane bezpośrednio na~płycie DE1-SoC.
+
+\subsection{Instalacja i~uruchomienie}
+
+\subsubsection{Wymagania}
+
+Do~budowania i~testowania projektu wymagane są:
+\begin{itemize}
+  \item Python 3.10+,
+  \item Amaranth HDL,
+  \item pytest,
+  \item Intel Quartus Prime (dla~syntezy FPGA),
+  \item ARM cross-compiler (\code{arm-linux-gnueabihf} lub kompatybilny) dla~budowania aplikacji oprogramowania.
+\end{itemize}
+
+\subsubsection{Instalacja}
+
+Projekt instaluje się~poprzez:
+\begin{lstlisting}[language=bash]
+git clone https://github.com/qbojj/PixelForge.git
+cd PixelForge
+pip install -e ".[dev]"
+\end{lstlisting}
+
+\subsubsection{Wykonywanie testów}
+
+Testy jednostkowe i~integracyjne uruchamiane są~za~pomocą pytest:
+\begin{lstlisting}[language=bash]
+# wszystkie testy automatyczne (bez inspekcji wizualnej)
+pytest
+
+# wszystkie testy
+pytest --run-slow
+\end{lstlisting}
+
+Wszystkie testy przechodzą pomyślnie (91 testów jednostkowych).
+
+\subsubsection{Budowanie dla~FPGA}
+
+Proces budowania dla~FPGA obejmuje:
+
+\begin{enumerate}
+  \item Elaboracja projektu Amaranth HDL:\\\code{python -m gpu.pipeline}
+  \item Regeneracja mapowania rejestrów CSR i~nagłówków C:
+  \begin{lstlisting}[language=bash]
+    python tools/generate_csr_headers.py \\
+        --input graphics_pipeline_csr_map.json \\
+        --output software/include/pixelforge_csr.h
+  \end{lstlisting}
+  \item Otwarcie projektu Quartus (\code{quartus/soc\_system.qpf}),
+  \item Regeneracja systemu w~Platform Designer (\code{quartus/soc\_system.qsys}),
+  \item Kompilacja projektu (synteza, umieszczenie, routing),
+  \item Konwersja pliku \code{.sof} na~\code{.rbf} do~zaprogramowania FPGA:
+  \begin{lstlisting}[language=bash]
+    quartus_cpf -c soc_system.sof soc_system.rbf
+  \end{lstlisting}
+  \item Wgranie pliku \code{.rbf} na~pierwszą partycję karty SD.
+\end{enumerate}
+
+\subsubsection{Budowanie aplikacji demonstracyjnych}
+
+Aplikacje demonstracyjne buduje się~w~katalogu \code{software/}:
+\begin{lstlisting}[language=bash]
+cd software
+export CROSS_COMPILE=arm-linux-gnueabihf-
+make
+\end{lstlisting}
+
+Pliki wykonywalne można skopiować na~kartę SD i~uruchamiać na~płycie DE1-SoC.
+Dostarczony jest do~tego skrypt automatyzujący kopiowanie aplikacji i~dostarczonych plików \code{.obj}.
+\begin{lstlisting}[language=bash]
+sudo make DESTDIR=<katalog_docelowy> install
+\end{lstlisting}
 
 
 \chapter{Testowanie i~weryfikacja}
@@ -926,8 +1002,8 @@ Aplikacja \code{demo\_obj} wczytuje model 3D (kula) i~renderuje go~z~oświetleni
 Zaimplementowany akcelerator osiąga następujące parametry wydajnościowe na~płycie DE1-SoC:
 
 \begin{itemize}
-    \item Dla testów \code{pixelforge\_demo} i~\code{demo\_cube}, akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640x480.
-    \item Dla testu \code{demo\_obj} z dostarczonymi modelami (około 500-1000 trójkątów), akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640x480.
+    \item Dla testów \code{pixelforge\_demo} i~\code{demo\_cube}, akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480.
+    \item Dla testu \code{demo\_obj} z~dostarczonymi modelami (około 500--1000 trójkątów), akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480.
     \item Dla testu \code{demo\_depth} akcelerator widocznie traci na wydajności, gdy kostki zbliżają się do kamery, przez to zajmują dużą część pikseli ekranu.
 \end{itemize}
 
@@ -944,9 +1020,9 @@ Po~syntezie projektu w~Intel Quartus Prime dla~układu Cyclone~V~5CSEMA5F31C6, z
 \toprule
 \textbf{Zasób} & \textbf{Użyte} & \textbf{Dostępne} \\
 \midrule
-Elementy logiczne (ALM) & 27,702 & 32,070 \\
-Pamięć wbudowana (bit) & 552,407 & 4,065,280 \\
-Bloki DSP & 62 & 87 \\
+Elementy logiczne (ALM) & 31,372 & 32,070 \\
+Pamięć wbudowana (bit) & 634,097 & 4,065,280 \\
+Bloki DSP & 75 & 87 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1000,15 +1076,15 @@ Akcelerator jest~fill-rate limited --- wydajność zależy głównie od~liczby r
 
 Zagadnienie implementacji potoku graficznego na~platformach FPGA było już~wcześniej podejmowane w~literaturze.
 
-Przykładowo, praca \cite{fpga-gpu} przedstawia akcelerator 3D o~architekturze zbliżonej do~fixed-pipeline,
+Przykładowo, praca~\cite{fpga-gpu} przedstawia akcelerator 3D o~architekturze zbliżonej do~fixed-pipeline,
 implementowany na~FPGA, z~naciskiem na~algorytmy rasteryzacji i~zarządzania pamięcią. Praca ta nie obejmuje
 transformacji geometrycznych ani oświetlenia, koncentrując się~głównie na~etapie rasteryzacji.
 
-Praca magisterska \cite{fpga-gpu-2} opisuje implementację prostego akceleratora graficznego na~platformie FPGA, z~obsługą
+Praca magisterska~\cite{fpga-gpu-2} opisuje implementację prostego akceleratora graficznego na~platformie FPGA, z~obsługą
 transformacji wierzchołków, obcinania i~rasteryzacji lini. Jednakże nie posiada możliwości wyświetlania trójkątów, ani
 obsługi cienowania fragmentów.
 
-Ta praca wyróżnia się tym, że~implementuje kompletny potok, który może bez udziału procesora wykonać pełną komendę rysowania
+Ta praca wyróżnia się~tym, że~implementuje kompletny potok, który może bez~udziału procesora wykonać pełną komendę rysowania
 dla trójkątów, od pobrania danych z~pamięci, przez~transformacje, rasteryzację, aż~po~zapis do~bufora ramki.
 
 \section{Możliwe rozszerzenia}

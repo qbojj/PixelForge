@@ -997,14 +997,22 @@ Aplikacja \code{demo\_obj} wczytuje model 3D (kula) i~renderuje go~z~oświetleni
   \item wizualną jakość efektu konturu.
 \end{itemize}
 
+\subsection{Test mieszania kolorów}
+
+Aplikacja \code{demo\_alpha} renderuje obracający się~wachlarz przezroczystych kwadratów z~alfa-blendingiem (SRC\_ALPHA / ONE\_MINUS\_SRC\_ALPHA) oraz jeden oświetlający (additive-blending - SRC\_ALPHA / ONE), demonstrując operacje blendingu kolorów. Test weryfikuje:
+\begin{itemize}
+  \item poprawność mieszania kolorów,
+  \item poprawność braku hazardów (nowe trójkąty widzą zmodyfikowane wartości bufora ramki).
+\end{itemize}
+
 \section{Metryki wydajności}
 
 Zaimplementowany akcelerator osiąga następujące parametry wydajnościowe na~płycie DE1-SoC:
 
 \begin{itemize}
-    \item Dla testów \code{pixelforge\_demo} i~\code{demo\_cube}, akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480.
-    \item Dla testu \code{demo\_obj} z~dostarczonymi modelami (około 500--1000 trójkątów), akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480.
-    \item Dla testu \code{demo\_depth} akcelerator widocznie traci na wydajności, gdy kostki zbliżają się do kamery, przez to zajmują dużą część pikseli ekranu.
+    \item Dla testów \code{pixelforge\_demo} i~\code{demo\_cube}, akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480,
+    \item Dla testu \code{demo\_obj} z~dostarczonymi modelami (około 500--1000 trójkątów), akcelerator osiąga stabilne 60~FPS przy~rozdzielczości 640×480,
+    \item Dla testu \code{demo\_depth} akcelerator widocznie traci na wydajności, gdy kostki zajmują dużą część ekranu przez zbliżanie się do kamery.
 \end{itemize}
 
 Dla modelu kuli (960~trójkątów) w~\code{demo\_obj}, akcelerator osiąga stabilne 60~FPS, co~potwierdza, że~implementacja jest~fill-rate limited (wydajność zależy od~liczby rysowanych pikseli, a~nie liczby trójkątów).
@@ -1130,9 +1138,9 @@ Pozwoliło by to na oddzielenie fazy rasteryzacji od magistrali pamięci, co by 
 Ostatecznym rozszerzeniem byłoby wprowadzenie programowalnych shaderów (vertex shader, fragment shader), co~przybliżyłoby architekturę do~współczesnych GPU. Wymagałoby to~zaprojektowania
 procesora wektorowego w sprzęcie oraz back-endu kompilującego shadery do~kodów maszynowych.
 
-\subsection{Anty aliasing}
+\subsection{Antyaliasing}
 
-Dodanie technik anty aliasingu (np. MSAA - Multi-Sample Anti-Aliasing) w celu poprawy jakości renderowanych obrazów poprzez redukcję ząbkowania krawędzi.
+Dodanie technik antyaliasingu (np. MSAA - Multi-Sample Anti-Aliasing) w celu poprawy jakości renderowanych obrazów poprzez redukcję ząbkowania krawędzi.
 
 \section{Wkład edukacyjny}
 

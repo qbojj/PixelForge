@@ -22,12 +22,6 @@ dev = [
     "numpy >= 2.0.0"
 ]
 
-build = [
-  "litedram @ git+https://github.com/enjoy-digital/litedram.git@f8e4838aa343cf48356322435b8e2ec45a338d07",
-  "litex @ git+https://github.com/enjoy-digital/litex.git@735b1efa5fb4fb634d69a2c837ac7f33a0646d4f",
-  "litex-boards @ git+https://github.com/litex-hub/litex-boards.git@1cfca3b994cab9ba69ddedec26f22a5a5d82b013",
-]
-
 [tool.setuptools]
 py-modules= ["gpu"]
 

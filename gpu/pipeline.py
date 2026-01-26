@@ -21,9 +21,13 @@ from .pixel_shading.cores import (
     SwapchainOutput,
     Texturing,
 )
-from .rasterizer.cores import PrimitiveClipper
+from .rasterizer.cores import (
+    PerspectiveDivide,
+    PrimitiveClipper,
+    TrianglePrep,
+    TriangleRasterizer,
+)
 from .rasterizer.layouts import PrimitiveAssemblyConfigLayout
-from .rasterizer.rasterizer import PerspectiveDivide, TrianglePrep, TriangleRasterizer
 from .utils import avalon as avl
 from .utils.layouts import (
     FramebufferInfoLayout,

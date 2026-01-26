@@ -11,9 +11,9 @@ from gpu.input_assembly.cores import (
     InputTopologyProcessor,
 )
 from gpu.input_assembly.layouts import InputData, InputMode
-from gpu.rasterizer.cores import PrimitiveClipper
-from gpu.rasterizer.rasterizer import (
+from gpu.rasterizer.cores import (
     PerspectiveDivide,
+    PrimitiveClipper,
     TrianglePrep,
     TriangleRasterizer,
 )

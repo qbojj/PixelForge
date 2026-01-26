@@ -201,7 +201,7 @@ Piksel $(x, y)$ należy do~wnętrza trójkąta, jeśli wszystkie trzy funkcje kr
 
 \subsection{Współrzędne barycentryczne}
 
-Współrzędne barycentryczne $(\lambda_0, \lambda_1, \lambda_2)$ określają, jak~piksel jest~kombinacją trzech wierzchołków trójkąta. Dla punktu $(x, y)$:
+Współrzędne barycentryczne $(\lambda_0, \lambda_1, \lambda_2)$ określają, w jakim stopniu dane wierzchołki wpływają na ostateczną wartość atrybutów. Dla punktu $(x, y)$:
 \[
 \lambda_i = \frac{E_i(x, y)}{E_i(x_k, y_k)}
 \]
@@ -406,7 +406,7 @@ W~projekcie zastosowano następujące formaty:
 
 \subsection{Operacje arytmetyczne}
 
-Amaranth HDL automatycznie zarządza szerokością sygnałów w~operacjach arytmetycznych. W~projekcie zdefiniowano własne typy stałoprzecinkowe (klasa \code{`gpu.utils.fixed.Shape'}), które integrują się z~systemem typów Amaranth i~zapewniają automatyczną obsługę:
+Amaranth HDL automatycznie zarządza szerokością sygnałów w~operacjach arytmetycznych. W~projekcie zdefiniowano własne typy stałoprzecinkowe, które integrują się z~systemem typów Amaranth i~zapewniają automatyczną obsługę:
 \begin{itemize}
   \item dodawania i~odejmowania (z~poszerzeniem wyniku),
   \item mnożenia (wykorzystanie bloków DSP FPGA),
@@ -795,7 +795,7 @@ Między~każdym etapem potoku umieszczono bufory FIFO o~głębokości 256~elemen
 
 \subsection{Dostęp do~pamięci}
 
-Akcelerator posiada trzy niezależne interfejsy Wishbone Master do~dostępu do~pamięci:
+Akcelerator posiada cztery niezależne interfejsy Wishbone Master do~dostępu do~pamięci:
 \begin{itemize}
   \item \code{index\_bus} --- odczyt bufora indeksów (Index Generator),
   \item \code{vertex\_bus} --- odczyt buforów wierzchołków i~indeksów (Input Assembly),

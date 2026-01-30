@@ -838,13 +838,80 @@ Projekt zawiera kilka aplikacji demonstracyjnych:
 \begin{itemize}
   \item \textbf{pixelforge\_demo} --- minimalna aplikacja rysująca dwa trójkąty (nałożone na siebie), demonstrująca podstawowy przepływ danych.
 
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{assets/pixelforge_demo.png}
+    \caption{Aplikacja pixelforge\_demo --- dwa obracające się trójkąty z~oświetleniem diffuse}
+    \label{fig:pixelforge_demo}
+  \end{figure}
+
   \item \textbf{demo\_cube} --- rysowanie obracającego się~kolorowego sześcianu, demonstrująca transformacje geometryczne i~interpolację kolorów.
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{assets/cube.png}
+    \caption{Aplikacja demo\_cube --- obracający się kolorowy sześcian}
+    \label{fig:demo_cube}
+  \end{figure}
 
   \item \textbf{demo\_depth} --- cztery sześciany obracające się w~przestrzeni 3D, które czasami się~przysłaniają, demonstrująca test głębokości.
 
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{assets/depth.png}
+    \caption{Aplikacja demo\_depth --- cztery sześciany z~testem głębokości}
+    \label{fig:demo_depth}
+  \end{figure}
+
   \item \textbf{demo\_alpha} --- obracający się~wachlarz przezroczystych kwadratów z~alfa-blendingiem (SRC\_ALPHA / ONE\_MINUS\_SRC\_ALPHA) oraz jeden oświetlający (additive-blending - SRC\_ALPHA / ONE), demonstrując operacje blendingu kolorów.
 
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{assets/alpha.png}
+    \caption{Aplikacja demo\_alpha --- przezroczyste kwadraty z~alfa-blendingiem}
+    \label{fig:demo_alpha}
+  \end{figure}
+
   \item \textbf{demo\_obj} --- wczytywanie i~renderowanie modeli w~formacie Wavefront OBJ (np. kule, wielościany) z~oświetleniem diffuse oraz~opcjonalnym efektem konturu za~pomocą bufora szablonu.
+
+  \begin{figure}[H]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{assets/sphere.png}
+      \caption{Gładka kula z~oświetleniem}
+      \label{fig:sphere}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{assets/sphere_faceted.png}
+      \caption{Kula z~widocznymi ścianami}
+      \label{fig:sphere_faceted}
+    \end{minipage}
+  \end{figure}
+
+  \begin{figure}[H]
+    \centering
+    \begin{minipage}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{assets/teapot.png}
+      \caption{Model czajnika (Utah Teapot)}
+      \label{fig:teapot}
+    \end{minipage}\hfill
+    \begin{minipage}{0.45\textwidth}
+      \centering
+      \includegraphics[width=\textwidth]{assets/tetrahedron.png}
+      \caption{Czworościan z~oświetleniem}
+      \label{fig:tetrahedron}
+    \end{minipage}
+  \end{figure}
+
+  \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{assets/tetrahedron_stencil.png}
+    \caption{Czworościan z~efektem konturu za~pomocą bufora szablonu}
+    \label{fig:tetrahedron_stencil}
+  \end{figure}
 
   \item \textbf{dump\_gpu\_csr} --- narzędzie diagnostyczne wyświetlające zawartość wszystkich rejestrów CSR akceleratora.
 

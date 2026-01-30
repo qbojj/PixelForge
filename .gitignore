@@ -15,10 +15,6 @@ test.gtkw
 *.vcd
 
 *.ppm
-*.png
-*.jpg
-*.jpeg
-*.bmp
 
 # ignore Quartus II generated files
 *_generation_script*
@@ -65,10 +61,13 @@ quartus/dse/
 quartus/soc_system
 
 # include only .pdf, .tex and .cls from thesis
-thesis/
-!thesis/*.tex
-!thesis/*.cls
-!thesis/*.pdf
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
 
 # do not include software artefacts
 *.d
@@ -77,5 +76,3 @@ thesis/
 software/demo_*
 software/*_demo
 software/dump_*
-
-!images/pixelforge_demo.png

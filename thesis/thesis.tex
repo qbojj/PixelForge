@@ -107,10 +107,10 @@ Praca składa się z~następujących rozdziałów:
 
 Rendering grafiki trójwymiarowej w~czasie rzeczywistym opiera się na~złożonym procesie przekształcania reprezentacji trójwymiarowej sceny w~obraz dwuwymiarowy wyświetlany na~ekranie. Proces ten realizowany jest przez \emph{potok graficzny} (graphics pipeline) --- sekwencję operacji przekształcających dane wierzchołków i~prymitywów geometrycznych w~piksele obrazu.
 
-Klasyczny potok graficzny fixed-pipeline, na~którym opiera się specyfikacja OpenGL~ES~1.1, składa się z~następujących głównych etapów:
+Klasyczny potok graficzny fixed-pipeline, na~którym opiera się specyfikacja OpenGL~ES~1.1~\cite{opengl-es}, składa się z~następujących głównych etapów:
 
 \begin{enumerate}
-  \item \textbf{Przetwarzanie wierzchołków} (Vertex Processing) --- transformacja współrzędnych wierzchołków z~przestrzeni modelu przez kolejne przestrzenie: świata, widoku, obcinania (clip space) aż do~współrzędnych znormalizowanych urządzenia (Normalized Device Coordinates, NDC).
+  \item \textbf{Przetwarzanie wierzchołków} (Vertex Processing) --- transformacja współrzędnych wierzchołków z~przestrzeni modelu przez przestrzenie: świata, widoku, obcinania (clip space) do~znormalizowanych współrzędnych urządzenia (Normalized Device Coordinates, NDC).
 
   \item \textbf{Cieniowanie wierzchołków} (Vertex Shading) --- obliczanie koloru wierzchołków na~podstawie modelu oświetlenia, właściwości materiału i~parametrów źródeł światła.
 
@@ -141,30 +141,30 @@ W~grafice komputerowej wierzchołki przechodzą przez~szereg transformacji międ
 Transformacje między przestrzeniami realizowane są przy~użyciu mnożenia przez~macierze $4 \times 4$. Kluczowe macierze to:
 
 \begin{itemize}
-  \item \textbf{Macierz model-widok} ($M_{mv}$) --- przekształca wierzchołki z~przestrzeni modelu do~przestrzeni widoku.
-  \item \textbf{Macierz projekcji} ($M_p$) --- przekształca współrzędne z~przestrzeni widoku do~przestrzeni obcinania, realizując projekcję perspektywiczną lub ortogonalną.
-  \item \textbf{Macierz model-widok-projekcja} ($M_{mvp} = M_p \cdot M_{mv}$) --- pełna transformacja wierzchołka.
+  \item \textbf{Macierz model-widok} ($M_{\textit{mv}}$) --- przekształca wierzchołki z~przestrzeni modelu do~przestrzeni widoku.
+  \item \textbf{Macierz projekcji} ($M_{\textit{p}}$) --- przekształca współrzędne z~przestrzeni widoku do~przestrzeni obcinania, realizując projekcję perspektywiczną lub ortogonalną.
+  \item \textbf{Macierz model-widok-projekcja} ($M_{\textit{mvp}} = M_{\textit{p}} \cdot M_{\textit{mv}}$) --- pełna transformacja wierzchołka.
 \end{itemize}
 
 Dla wektora jednorodnego wierzchołka $\mathbf{v} = [x, y, z, 1]^T$ transformacja ma~postać:
 \[
-\mathbf{v}_{clip} = M_{mvp} \cdot \mathbf{v}
+\mathbf{v}_{\textit{clip}} = M_{\textit{mvp}} \cdot \mathbf{v}
 \]
 
 Transformacje wektorów normalnych wymagają użycia odwrotności transpozycji macierzy model-widok:
 \[
-\mathbf{n}_{view} = (M_{mv}^{-1})^T \cdot \mathbf{n}
+\mathbf{n}_{\textit{view}} = (M_{\textit{mv}}^{-1})^T \cdot \mathbf{n}
 \]
 
 \section{Model oświetlenia Phonga}
 
-Model oświetlenia Phonga to empiryczny model oświetlenia lokalnego, który aproksymuje oddziaływanie światła z~powierzchnią obiektu. Składa się z~trzech składowych:
+Model oświetlenia Phonga~\cite{phong} to empiryczny model oświetlenia lokalnego, który aproksymuje oddziaływanie światła z~powierzchnią obiektu. Składa się z~trzech składowych:
 
 \subsection{Oświetlenie ambient}
 
 Symuluje rozproszone światło otoczenia, niezależne od~kierunku i~położenia źródła światła:
 \[
-I_{ambient} = k_a \cdot I_a
+I_{\textit{ambient}} = k_a \cdot I_a
 \]
 gdzie $k_a$ to współczynnik odblaskowości materiału, a~$I_a$ to intensywność światła otoczenia.
 
@@ -172,7 +172,7 @@ gdzie $k_a$ to współczynnik odblaskowości materiału, a~$I_a$ to intensywnoś
 
 Symuluje rozpraszanie światła na~matowej powierzchni zgodnie z~prawem Lamberta:
 \[
-I_{diffuse} = k_d \cdot I_l \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)
+I_{\textit{diffuse}} = k_d \cdot I_l \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)
 \]
 gdzie $k_d$ to współczynnik rozpraszania, $I_l$ to intensywność światła, $\mathbf{n}$ to wektor normalny powierzchni, a~$\mathbf{l}$ to wektor kierunku do~źródła światła.
 
@@ -180,7 +180,7 @@ gdzie $k_d$ to współczynnik rozpraszania, $I_l$ to intensywność światła, $
 
 Symuluje odbicia zwierciadlane (w~niniejszym projekcie niezaimplementowane):
 \[
-I_{specular} = k_s \cdot I_l \cdot \max(\mathbf{r} \cdot \mathbf{v}, 0)^{\alpha}
+I_{\textit{specular}} = k_s \cdot I_l \cdot \max(\mathbf{r} \cdot \mathbf{v}, 0)^{\alpha}
 \]
 gdzie $k_s$ to współczynnik odbicia, $\mathbf{r}$ to wektor odbity, $\mathbf{v}$ to wektor kierunku do~obserwatora, a~$\alpha$ to wykładnik połysku.
 
@@ -188,7 +188,7 @@ W~zaimplementowanym akceleratorze wykorzystano składowe ambient i~diffuse, obli
 
 \section{Rasteryzacja trójkątów}
 
-Rasteryzacja to proces określania, które piksele ekranu są~pokryte przez~prymityw geometryczny. Dla trójkątów wykorzystuje się następujące metody:
+Rasteryzacja to proces określania, które piksele ekranu są~pokryte przez~prymityw geometryczny~\cite{opengl-es}. Dla trójkątów wykorzystuje się następujące metody:
 
 \subsection{Funkcje krawędziowe}
 
@@ -230,9 +230,9 @@ A(x,y) = \frac{\sum_{i=0}^{2} \lambda_i \cdot A_i / w_i}{\sum_{i=0}^{2} \lambda_
 
 Test głębokości (depth test) służy do~rozwiązywania problemu widoczności,
 czyli określania, które fragmenty znajdują się~najbliżej obserwatora i~powinny być~widoczne.
-Dla każdego fragmentu o~współrzędnej głębokości $z$ porównywana jest~wartość z~aktualną wartością w~buforze głębokości $z_{buffer}$. Fragment przechodzi test, jeśli:
+Dla każdego fragmentu o~współrzędnej głębokości $z$ porównywana jest~wartość z~aktualną wartością w~buforze głębokości $z_{\textit{buffer}}$. Fragment przechodzi test, jeśli:
 \[
-z \;  \text{op} \; z_{buffer}
+z \;  \text{op} \; z_{\textit{buffer}}
 \]
 gdzie $\text{op}$ to operator porównania (np. LESS, LEQUAL, GREATER).
 
@@ -240,28 +240,28 @@ Jeśli fragment przejdzie test, jego wartość $z$ zastępuje wartość w~buforz
 
 \subsection{Test szablonu (Stencil buffer)}
 
-Bufor szablonu (stencil buffer) służy do~selektywnego maskowania pikseli i~realizacji złożonych efektów renderowania (np. cienie, odbicia, kontury). Test szablonu porównuje wartość referencyjną $s_{ref}$ z~wartością w~buforze szablonu $s_{buffer}$ przy~użyciu operatora porównania i~maski:
+Bufor szablonu (stencil buffer) służy do~selektywnego maskowania pikseli i~realizacji złożonych efektów renderowania (np. cienie, odbicia, kontury). Test szablonu porównuje wartość referencyjną $s_{\textit{ref}}$ z~wartością w~buforze szablonu $s_{\textit{buffer}}$ przy~użyciu operatora porównania i~maski:
 \[
-(s_{ref} \; \& \; \text{mask}) \; \text{op} \; (s_{buffer} \; \& \; \text{mask})
+(s_{\textit{ref}} \; \& \; \text{mask}) \; \text{op} \; (s_{\textit{buffer}} \; \& \; \text{mask})
 \]
 
 W~zależności od~wyniku testu szablonu i~testu głębokości, wartość w~buforze szablonu może być~modyfikowana według~określonych operacji (KEEP, ZERO, REPLACE, INCR, DECR, INVERT).
 
 \section{Mieszanie kolorów (Alpha blending)}
 
-Alpha blending umożliwia renderowanie obiektów przezroczystych lub półprzezroczystych poprzez~mieszanie koloru fragmentu ($C_{src}$) z~kolorem już~znajdującym się w~buforze ramki ($C_{dst}$). Operacja ta~opisywana jest~wzorem:
+Alpha blending umożliwia renderowanie obiektów przezroczystych lub półprzezroczystych poprzez~mieszanie koloru fragmentu ($C_{\textit{src}}$) z~kolorem już~znajdującym się w~buforze ramki ($C_{\textit{dst}}$). Operacja ta~opisywana jest~wzorem:
 \[
-C_{final} = C_{src} \cdot f_{src} \; \text{op} \; C_{dst} \cdot f_{dst}
+C_{final} = C_{\textit{src}} \cdot f_{\textit{src}} \; \text{op} \; C_{\textit{dst}} \cdot f_{\textit{dst}}
 \]
 gdzie:
 \begin{itemize}
-  \item $f_{src}$, $f_{dst}$ --- współczynniki blendingu (np. $\alpha_{src}$, $1 - \alpha_{src}$),
+  \item $f_{\textit{src}}$, $f_{\textit{dst}}$ --- współczynniki blendingu (np. $\alpha_{\textit{src}}$, $1 - \alpha_{\textit{src}}$),
   \item $\text{op}$ --- operator blendingu (np. ADD, SUBTRACT, REVERSE\_SUBTRACT).
 \end{itemize}
 
 Typowe ustawienie dla przezroczystości to:
 \[
-C_{final} = C_{src} \cdot \alpha_{src} + C_{dst} \cdot (1 - \alpha_{src})
+C_{final} = C_{\textit{src}} \cdot \alpha_{\textit{src}} + C_{\textit{dst}} \cdot (1 - \alpha_{\textit{src}})
 \]
 
 
@@ -269,7 +269,7 @@ C_{final} = C_{src} \cdot \alpha_{src} + C_{dst} \cdot (1 - \alpha_{src})
 
 \section{OpenGL ES 1.1 Common-Lite}
 
-OpenGL~ES (OpenGL for Embedded Systems) to specyfikacja API grafiki 3D przeznaczona dla systemów wbudowanych. Wersja 1.1 definiuje fixed-pipeline, czyli potok graficzny o~ustalonej strukturze, w~przeciwieństwie do~nowszych wersji obsługujących programowalne shadery.
+OpenGL~ES~\cite{opengl-es} to specyfikacja API grafiki 3D przeznaczona dla systemów wbudowanych. Wersja 1.1 definiuje fixed-pipeline, czyli potok graficzny o~ustalonej strukturze, w~przeciwieństwie do~nowszych wersji obsługujących programowalne shadery.
 
 Profil \emph{Common-Lite} stanowi uproszczoną wersję profilu Common, przeznaczoną dla platform o~ograniczonej mocy obliczeniowej, które nie~posiadają sprzętowej obsługi arytmetyki zmiennoprzecinkowej. W~profilu tym operacje matematyczne wykonywane są~w~arytmetyce stałoprzecinkowej (fixed-point).
 
@@ -297,7 +297,7 @@ Amaranth HDL (wcześniej znany jako~nMigen) to nowoczesny język opisu sprzętu 
 
   \item \textbf{Modularność} --- system komponentów i~sygnatur (\code{wiring.Component}, \code{wiring.Signature}) ułatwia budowę hierarchicznych projektów.
 
-  \item \textbf{Biblioteka standardowa} --- gotowe komponenty takie jak~FIFO (\code{fifo.SyncFIFO}, \code{fifo.AsyncFIFO}), strumienie (\code{stream}), oraz~narzędzia do~synchronizacji sygnałów między~domenami zegarowymi.
+  \item \textbf{Biblioteka standardowa} --- gotowe komponenty takie jak FIFO (\code{SyncFIFO}, \code{AsyncFIFO}), strumienie (\code{stream}), narzędzia synchronizacji między domenami zegarowymi.
 
   \item \textbf{Symulacja} --- zintegrowane środowisko symulacyjne umożliwia testowanie projektów bez~konieczności syntezy sprzętowej.
 
@@ -391,7 +391,7 @@ Moduł \code{GraphicsPipelineAvalonCSR} definiuje mapę rejestrów sterujących 
 
 \section{Arytmetyka stałoprzecinkowa}
 
-Ze względu na~charakter platformy FPGA oraz~zgodność ze~specyfikacją OpenGL~ES~1.1 Common-Lite, projekt wykorzystuje arytmetykę stałoprzecinkową zamiast zmiennoprzecinkowej.
+Ze względu na~charakter platformy FPGA oraz~zgodność ze~specyfikacją OpenGL~ES~1.1 Common-Lite, projekt wykorzystuje arytmetykę stałoprzecinkową~\cite{fixed-point} zamiast zmiennoprzecinkowej.
 
 \subsection{Formaty reprezentacji}
 
@@ -500,9 +500,9 @@ Obecnie moduł obsługuje jedynie format Q16.16 dla~atrybutów w~pamięci (dane 
 Moduł \code{VertexTransform} wykonuje transformacje geometryczne wierzchołków przy~użyciu macierzy $4 \times 4$ (dla~pozycji i~współrzędnych tekstury) oraz~$3 \times 3$ (dla~normalnych). Transformacje obejmują:
 
 \begin{itemize}
-  \item transformację pozycji do~przestrzeni widoku: $\mathbf{p}_{view} = M_{mv} \cdot \mathbf{p}_{model}$,
-  \item transformację pozycji do~przestrzeni obcinania: $\mathbf{p}_{clip} = M_p \cdot \mathbf{p}_{view}$,
-  \item transformację normalnej do~przestrzeni widoku: $\mathbf{n}_{view} = M_{norm} \cdot \mathbf{n}_{model}$, gdzie $M_{norm} = (M_{mv}^{-1})^T$.
+  \item transformację pozycji do~przestrzeni widoku: $\mathbf{p}_{\textit{view}} = M_{mv} \cdot \mathbf{p}_{\textit{model}}$,
+  \item transformację pozycji do~przestrzeni obcinania: $\mathbf{p}_{\textit{clip}} = M_p \cdot \mathbf{p}_{\textit{view}}$,
+  \item transformację normalnej do~przestrzeni widoku: $\mathbf{n}_{\textit{view}} = M_{norm} \cdot \mathbf{n}_{\textit{model}}$, gdzie $M_{norm} = (M_{mv}^{-1})^T$.
 \end{itemize}
 
 Cały układ wykorzystuje tylko jeden układ mnożący, co pozwala na~oszczędność zasobów sprzętowych kosztem wydłużenia latencji przetwarzania wierzchołka.
@@ -512,13 +512,13 @@ Nie jest to jednak problemem, gdyż istnieją inne etapy potoku o~znacznie wyżs
 
 Moduł \code{VertexShading} oblicza kolor wierzchołka na~podstawie modelu oświetlenia Phonga. Implementuje składowe:
 \begin{itemize}
-  \item \textbf{Ambient} --- $C_{ambient} = k_{ambient} \cdot I_{ambient}$,
-  \item \textbf{Diffuse} --- $C_{diffuse} = k_{diffuse} \cdot I_{light} \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)$.
+  \item \textbf{Ambient} --- $C_{\textit{ambient}} = k_{\textit{ambient}} \cdot I_{\textit{ambient}}$,
+  \item \textbf{Diffuse} --- $C_{\textit{diffuse}} = k_{\textit{diffuse}} \cdot I_{\textit{light}} \cdot \max(\mathbf{n} \cdot \mathbf{l}, 0)$.
 \end{itemize}
 
 Moduł obsługuje konfigurowalną liczbę kierunkowych źródeł światła.
 Obliczenia wykonywane są~w~przestrzeni widoku, zgodnie ze specyfikacją OpenGL~ES~1.1.
-Kolor wierzchołka obliczony tutaj będzie iterpolowany (z~użyciem perspektywicznej interpolacji) podczas rasteryzacji.
+Kolor wierzchołka obliczony tutaj będzie interpolowany (z~użyciem perspektywicznej interpolacji) podczas rasteryzacji.
 
 \section{Moduły przetwarzania prymitywów}
 
@@ -544,7 +544,7 @@ ale trójkąty wychodzące poza frustum są stosunkowo rzadkie, więc ogólna wy
 
 Moduł \code{PerspectiveDivide} wykonuje dzielenie perspektywiczne, czyli przekształcenie współrzędnych jednorodnych z~przestrzeni obcinania do~znormalizowanych współrzędnych urządzenia (NDC):
 \[
-x_{ndc} = \frac{x_{clip}}{w}, \quad y_{ndc} = \frac{y_{clip}}{w}, \quad z_{ndc} = \frac{z_{clip}}{w}
+x_{\textit{ndc}} = \frac{x_{\textit{clip}}}{w}, \quad y_{\textit{ndc}} = \frac{y_{\textit{clip}}}{w}, \quad z_{\textit{ndc}} = \frac{z_{\textit{clip}}}{w}
 \]
 
 Dodatkowo obliczana jest~wartość $1/w$, która będzie potrzebna do~perspektywicznej interpolacji atrybutów podczas rasteryzacji.
@@ -557,7 +557,7 @@ Całość używa jedynie jeden blok DSP o szerokości takiej, jak wejście.
 
 Po~tej~operacji współrzędne są~w~zakresie $[-1, 1]$, zamieniamy je~do~zakresu $[0, 1]$ dla~ułatwienia dalszych obliczeń:
 \[
-x'_{ndc} = \frac{x_{ndc} + 1}{2}, \quad y'_{ndc} = \frac{y_{ndc} + 1}{2}, \quad z'_{ndc} = \frac{z_{ndc} + 1}{2}
+x'_{\textit{ndc}} = \frac{x_{\textit{ndc}} + 1}{2}, \quad y'_{\textit{ndc}} = \frac{y_{\textit{ndc}} + 1}{2}, \quad z'_{\textit{ndc}} = \frac{z_{\textit{ndc}} + 1}{2}
 \]
 Dzięki temu możemy użyć formatu UQ1.17 do reprezentacji współrzędnych NDC, co pozwoli na efektywniejsze wykorzystanie zasobów sprzętowych w dalszych etapach potoku.
 
@@ -574,7 +574,7 @@ Moduł \code{TrianglePrep} zbiera trzy wierzchołki trójkąta (w~przestrzeni ND
   y_{screen} = y'_{ndc} \cdot \text{height} + y_{offset}
   \]
 
-  Każdy wierzchołek otrzymuje swój zestaw współrzędnych ekranowych $(x_{screen}, y_{screen})$.
+  Każdy wierzchołek otrzymuje swój zestaw współrzędnych ekranowych $(x_{\textit{screen}}, y_{\textit{screen}})$.
   Niech $ (x_0, y_0), (x_1, y_1), (x_2, y_2) $ będą współrzędnymi ekranowymi trzech wierzchołków trójkąta.
 
   \item \textbf{Obliczenie pola powierzchni} trójkąta (dwukrotność pola):
@@ -646,9 +646,9 @@ Moduł \code{SwapchainOutput} wykonuje ostatni etap potoku:
 
   \item Wykonuje operację blendingu (mieszania kolorów) zgodnie z~konfiguracją:
   \[
-  C_{out} = C_{src} \cdot f_{src} \; \text{op} \; C_{dst} \cdot f_{dst}
+  C_{\textit{out}} = C_{\textit{src}} \cdot f_{\textit{src}} \; \text{op} \; C_{\textit{dst}} \cdot f_{\textit{dst}}
   \]
-  gdzie $C_{src}$ to kolor fragmentu, $C_{dst}$ to kolor w~buforze, $f_{src}$, $f_{dst}$ to współczynniki, a~$\text{op}$ to operator (ADD, SUBTRACT, REVERSE\_SUBTRACT).
+  gdzie $C_{\textit{src}}$ to kolor fragmentu, $C_{\textit{dst}}$ to kolor w~buforze, $f_{\textit{src}}$, $f_{\textit{dst}}$ to współczynniki, a~$\text{op}$ to operator (ADD, SUBTRACT, REVERSE\_SUBTRACT).
 
   \item Zapisuje wynikowy kolor do~bufora ramki.
 \end{enumerate}
@@ -851,7 +851,7 @@ Projekt zawiera kilka aplikacji demonstracyjnych:
   \item \textbf{dump\_vga\_dma} --- narzędzie diagnostyczne wyświetlające rejestry kontrolera VGA DMA.
 \end{itemize}
 
-Aplikacje budowane są~przy~użyciu cross-compilera ARM (np. \code{arm-linux-gnueabihf-gcc}) i~uruchamiane bezpośrednio na~płycie DE1-SoC.
+Aplikacje budowane są~przy~użyciu cross-compilera ARM (np. \code{arm-linux-gnueabihf-gcc}) i~uruchamiane na~płycie DE1-SoC.
 
 \subsection{Instalacja i~uruchomienie}
 

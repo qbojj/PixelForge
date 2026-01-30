@@ -21,6 +21,7 @@
 #include "vram_alloc.h"
 #include "pixelforge_utils.h"
 #include "demo_utils.h"
+#include "frame_capture.h"
 
 /*
  * PixelForge demo inspired by Altera's video DMA controller API.
@@ -285,6 +286,7 @@ int main(int argc, char **argv) {
     bool xor_test = false;
     bool render_triangle = false;
     bool front = false;
+    bool capture_frames = false;
     int frames = 1;
 
     for (int i = 1; i < argc; ++i) {
@@ -292,6 +294,8 @@ int main(int argc, char **argv) {
             clear_test = 1;
         } else if (!strcmp(argv[i], "--xor-test")) {
             xor_test = 1;
+        } else if (!strcmp(argv[i], "--capture-frames")) {
+            capture_frames = true;
         } else if (!strcmp(argv[i], "--render-triangle")) {
             render_triangle = 1;
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
@@ -406,6 +410,16 @@ int main(int argc, char **argv) {
 
             /* Submit buffer for display */
             pixelforge_swap_buffers(dev);
+
+            if (capture_frames) {
+                char filename[256];
+                if (frame_capture_gen_filename(filename, sizeof(filename), "pixelforge_demo", frame, ".png") == 0) {
+                    uint8_t *display_buffer = pixelforge_get_front_buffer(dev);
+                    frame_capture_rgba(filename, display_buffer, dev->x_resolution,
+                                     dev->y_resolution, dev->buffer_stride);
+                }
+            }
+
             printf("Frame %d rendered\n", frame);
         }
 

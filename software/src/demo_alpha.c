@@ -23,6 +23,7 @@
 #include "vram_alloc.h"
 #include "pixelforge_utils.h"
 #include "demo_utils.h"
+#include "frame_capture.h"
 
 #define PAGE_SIZE 4096u
 #define QUAD_VERTS 6u
@@ -220,9 +221,11 @@ struct layer {
 
 int main(int argc, char **argv) {
     int frames = 240;
+    bool capture_frames = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) g_verbose = true;
+        else if (!strcmp(argv[i], "--capture-frames")) capture_frames = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
     }
 
@@ -345,6 +348,16 @@ int main(int argc, char **argv) {
         }
 
         pixelforge_swap_buffers(dev);
+
+        if (capture_frames) {
+            char filename[256];
+            if (frame_capture_gen_filename(filename, sizeof(filename), "alpha", frame, ".png") == 0) {
+                uint8_t *display_buffer = pixelforge_get_front_buffer(dev);
+                frame_capture_rgba(filename, display_buffer, dev->x_resolution,
+                                 dev->y_resolution, dev->buffer_stride);
+            }
+        }
+
         printf("Frame %d/%d rendered (alpha blend)\n", frame + 1, frames);
     }
 

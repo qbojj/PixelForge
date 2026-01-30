@@ -29,6 +29,7 @@
 #include "pixelforge_utils.h"
 #include "demo_utils.h"
 #include "obj_loader.h"
+#include "frame_capture.h"
 
 #define PAGE_SIZE       4096u
 
@@ -328,9 +329,11 @@ int main(int argc, char **argv) {
     const char *obj_file = NULL;
     bool stencil_outline = false;
     bool use_depth = false;
+    bool capture_frames = false;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) g_verbose = true;
+        else if (!strcmp(argv[i], "--capture-frames")) capture_frames = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--stencil-outline")) stencil_outline = true;
         else if (!strcmp(argv[i], "--use-depth")) use_depth = true;
@@ -468,6 +471,16 @@ int main(int argc, char **argv) {
             break;
         }
         pixelforge_swap_buffers(dev);
+
+        if (capture_frames) {
+            char filename[256];
+            if (frame_capture_gen_filename(filename, sizeof(filename), "obj", frame, ".png") == 0) {
+                uint8_t *display_buffer = pixelforge_get_front_buffer(dev);
+                frame_capture_rgba(filename, display_buffer, dev->x_resolution,
+                                 dev->y_resolution, dev->buffer_stride);
+            }
+        }
+
         if (stencil_outline) printf("Frame %d/%d rendered (stencil-outline)\n", frame + 1, frames);
         else printf("Frame %d/%d rendered\n", frame + 1, frames);
     }

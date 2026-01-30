@@ -19,6 +19,7 @@
 \usepackage{multirow}
 \usepackage{booktabs}
 \usepackage{enumitem}
+\usepackage{microtype}
 
 %%%%% DANE DO STRONY TYTUŁOWEJ
 \polishtitle    {Akcelerator graficzny fixed-pipeline\fmlinebreak oparty na FPGA}
@@ -71,7 +72,7 @@ Projekty oparte na FPGA znajdują szczególne zastosowanie w~systemach wbudowany
 
 \section{Cel pracy}
 
-Głównym celem niniejszej pracy było zaprojektowanie i~zaimplementowanie akceleratora graficznego o~architekturze fixed-pipeline, realizującego wybrany podzbiór funkcjonalności specyfikacji OpenGL~ES~1.1 Common-Lite. Fixed-pipeline oznacza architekturę, w~której kolejność i~rodzaj operacji graficznych są ustalone i~nie mogą być modyfikowane przez programy użytkownika (shadery), w~przeciwieństwie do współczesnych GPU o~programowalnym potoku graficznym.
+Głównym celem niniejszej pracy było zaprojektowanie i~zaimplementowanie akceleratora graficznego o~architekturze fixed-pipeline, realizującego wybrany podzbiór funkcjonalności specyfikacji OpenGL~ES~1.1~\cite{opengl-es} Common-Lite. Fixed-pipeline oznacza architekturę, w~której kolejność i~rodzaj operacji graficznych są ustalone i~nie mogą być modyfikowane przez programy użytkownika (shadery), w~przeciwieństwie do współczesnych GPU o~programowalnym potoku graficznym.
 
 W~ramach pracy zaimplementowano następujące elementy potoku graficznego:
 \begin{itemize}
@@ -251,7 +252,7 @@ W~zależności od~wyniku testu szablonu i~testu głębokości, wartość w~bufor
 
 Alpha blending umożliwia renderowanie obiektów przezroczystych lub półprzezroczystych poprzez~mieszanie koloru fragmentu ($C_{\textit{src}}$) z~kolorem już~znajdującym się w~buforze ramki ($C_{\textit{dst}}$). Operacja ta~opisywana jest~wzorem:
 \[
-C_{final} = C_{\textit{src}} \cdot f_{\textit{src}} \; \text{op} \; C_{\textit{dst}} \cdot f_{\textit{dst}}
+C_{\textit{final}} = C_{\textit{src}} \cdot f_{\textit{src}} \; \text{op} \; C_{\textit{dst}} \cdot f_{\textit{dst}}
 \]
 gdzie:
 \begin{itemize}
@@ -261,7 +262,7 @@ gdzie:
 
 Typowe ustawienie dla przezroczystości to:
 \[
-C_{final} = C_{\textit{src}} \cdot \alpha_{\textit{src}} + C_{\textit{dst}} \cdot (1 - \alpha_{\textit{src}})
+C_{\textit{final}} = C_{\textit{src}} \cdot \alpha_{\textit{src}} + C_{\textit{dst}} \cdot (1 - \alpha_{\textit{src}})
 \]
 
 
@@ -295,7 +296,7 @@ Amaranth HDL (wcześniej znany jako~nMigen) to nowoczesny język opisu sprzętu 
 \begin{itemize}
   \item \textbf{Generatywność} --- możliwość programowego tworzenia złożonych struktur sprzętowych przy~użyciu pętli, funkcji i~klas Pythona.
 
-  \item \textbf{Modularność} --- system komponentów i~sygnatur (\code{wiring.Component}, \code{wiring.Signature}) ułatwia budowę hierarchicznych projektów.
+  \item \textbf{Modularność} --- system komponentów i~sygnatur ułatwia budowę hierarchicznych projektów (\code{wiring.Component}, \code{wiring.Signature}).
 
   \item \textbf{Biblioteka standardowa} --- gotowe komponenty takie jak FIFO (\code{SyncFIFO}, \code{AsyncFIFO}), strumienie (\code{stream}), narzędzia synchronizacji między domenami zegarowymi.
 
@@ -309,7 +310,7 @@ Amaranth HDL (wcześniej znany jako~nMigen) to nowoczesny język opisu sprzętu 
 Podstawową jednostką w~Amaranth jest~\code{Module}, który grupuje logikę kombinacyjną (\code{m.d.comb}) i~synchroniczną (\code{m.d.sync}). Moduły mogą być~zagnieżdżane i~łączone za~pomocą systemu portów i~sygnałów.
 
 Przykładowy moduł w~Amaranth:
-\begin{lstlisting}[language=Python,caption={Przykład modułu Amaranth}]
+\begin{lstlisting}[language=Python]
 from amaranth import *
 from amaranth.lib import wiring
 from amaranth.lib.wiring import Component, In, Out
@@ -342,7 +343,7 @@ Intel Cyclone~V~SoC to hybryda łącząca:
 
 Płyta DE1-SoC oferuje:
 \begin{itemize}
-  \item wyjście VGA (DAC 4-bit na~kanał RGB),
+  \item wyjście VGA (DAC 10-bit na~kanał RGB),
   \item 64~MB pamięci SDRAM podłączonej do~FPGA,
   \item 1~GB pamięci DDR3 współdzielonej z~HPS,
   \item interfejsy GPIO, Ethernet, USB,
@@ -391,7 +392,7 @@ Moduł \code{GraphicsPipelineAvalonCSR} definiuje mapę rejestrów sterujących 
 
 \section{Arytmetyka stałoprzecinkowa}
 
-Ze względu na~charakter platformy FPGA oraz~zgodność ze~specyfikacją OpenGL~ES~1.1 Common-Lite, projekt wykorzystuje arytmetykę stałoprzecinkową~\cite{fixed-point} zamiast zmiennoprzecinkowej.
+Ze względu na~charakter platformy FPGA, projekt wykorzystuje arytmetykę stałoprzecinkową zamiast zmiennoprzecinkowej.
 
 \subsection{Formaty reprezentacji}
 
@@ -420,7 +421,7 @@ Wybrane szerokości sygnałów zostały dostosowane do~optymalnego wykorzystania
 
 \section{Ogólny przegląd architektury}
 
-Zaprojektowany akcelerator graficzny PixelForge realizuje kompletny potok renderowania fixed-pipeline zgodny z~podzbiorem specyfikacji OpenGL~ES~1.1 Common-Lite. Architektura jest~w~pełni potokowa, co~oznacza, że~różne etapy przetwarzania mogą działać równolegle nad~różnymi danymi, maksymalizując przepustowość systemu.
+Zaprojektowany akcelerator graficzny PixelForge realizuje kompletny potok renderowania fixed-pipeline zgodny z~podzbiorem specyfikacji OpenGL~ES~1.1~\cite{opengl-es} Common-Lite. Architektura jest~w~pełni potokowa, co~oznacza, że~różne etapy przetwarzania mogą działać równolegle nad~różnymi danymi, maksymalizując przepustowość systemu.
 
 Potok składa się~z~następujących głównych modułów (w~kolejności przetwarzania):
 
@@ -500,9 +501,9 @@ Obecnie moduł obsługuje jedynie format Q16.16 dla~atrybutów w~pamięci (dane 
 Moduł \code{VertexTransform} wykonuje transformacje geometryczne wierzchołków przy~użyciu macierzy $4 \times 4$ (dla~pozycji i~współrzędnych tekstury) oraz~$3 \times 3$ (dla~normalnych). Transformacje obejmują:
 
 \begin{itemize}
-  \item transformację pozycji do~przestrzeni widoku: $\mathbf{p}_{\textit{view}} = M_{mv} \cdot \mathbf{p}_{\textit{model}}$,
+  \item transformację pozycji do~przestrzeni widoku: $\mathbf{p}_{\textit{view}} = M_{\textit{mv}} \cdot \mathbf{p}_{\textit{model}}$,
   \item transformację pozycji do~przestrzeni obcinania: $\mathbf{p}_{\textit{clip}} = M_p \cdot \mathbf{p}_{\textit{view}}$,
-  \item transformację normalnej do~przestrzeni widoku: $\mathbf{n}_{\textit{view}} = M_{norm} \cdot \mathbf{n}_{\textit{model}}$, gdzie $M_{norm} = (M_{mv}^{-1})^T$.
+  \item transformację normalnej do~przestrzeni widoku: $\mathbf{n}_{\textit{view}} = M_{\textit{norm}} \cdot \mathbf{n}_{\textit{model}}$, gdzie $M_{\textit{norm}} = (M_{\textit{mv}}^{-1})^T$.
 \end{itemize}
 
 Cały układ wykorzystuje tylko jeden układ mnożący, co pozwala na~oszczędność zasobów sprzętowych kosztem wydłużenia latencji przetwarzania wierzchołka.
@@ -566,15 +567,14 @@ Dzięki temu możemy użyć formatu UQ1.17 do reprezentacji współrzędnych NDC
 Moduł \code{TrianglePrep} zbiera trzy wierzchołki trójkąta (w~przestrzeni NDC) i~przygotowuje dane do~rasteryzacji:
 
 \begin{enumerate}
-  \item \textbf{Transformacja viewport} --- przekształcenie współrzędnych NDC $[0, 1]$ do~współrzędnych ekranu w~pikselach:
+  \item \textbf{Transformacja viewport} --- przekształcenie współrzędnych NDC do~współrzędnych ekranu w~pikselach:
   \[
-  x_{screen} = x'_{ndc} \cdot \text{width} + x_{offset}
+  x_{\textit{screen}} = x'_{\textit{ndc}} \cdot \text{width} + x_{\textit{offset}}
   \]
   \[
-  y_{screen} = y'_{ndc} \cdot \text{height} + y_{offset}
+  y_{\textit{screen}} = y'_{\textit{ndc}} \cdot \text{height} + y_{\textit{offset}}
   \]
-
-  Każdy wierzchołek otrzymuje swój zestaw współrzędnych ekranowych $(x_{\textit{screen}}, y_{\textit{screen}})$.
+  Dla każdego wierzchołka obliczamy $(x_{\textit{screen}}, y_{\textit{screen}})$ z 4 bitami ułamkowymi.
   Niech $ (x_0, y_0), (x_1, y_1), (x_2, y_2) $ będą współrzędnymi ekranowymi trzech wierzchołków trójkąta.
 
   \item \textbf{Obliczenie pola powierzchni} trójkąta (dwukrotność pola):
@@ -657,7 +657,7 @@ Moduł wykorzystuje format koloru UQ0.9 (9-bitowy bez~znaku) dla~każdego kanał
 
 \section{Interfejs sterowania --- CSR}
 
-Moduł \code{GraphicsPipelineCSR} oraz~jego~wariant z~interfejsem Avalon (\code{GraphicsPipelineAvalonCSR}) zapewniają dostęp do~rejestrów sterujących akceleratorem z~poziomu procesora ARM.
+Moduł \code{GraphicsPipelineCSR} zapewnia dostęp do~rejestrów sterujących akceleratorem z~poziomu procesora ARM.
 
 Rejestry podzielone są~na~grupy funkcjonalne:
 \begin{itemize}
@@ -750,10 +750,10 @@ W~środowisku Intel Quartus Prime wykorzystano narzędzie Qsys (Platform Designe
 \begin{itemize}
   \item \textbf{HPS} --- Hard Processor System (ARM Cortex-A9, kontrolery pamięci DDR3, peryferyjne),
 
-  \item \textbf{PixelForge GPU} --- zaimplementowany akcelerator graficzny (\code{graphics\_pipeline\_avalon\_csr}):
+  \item \textbf{PixelForge GPU} --- zaimplementowany akcelerator graficzny:
   \begin{itemize}
     \item interfejs Avalon-MM Slave (CSR) --- podłączony do~magistrali HPS,
-    \item interfejsy Avalon-MM Master (vertex, depth/stencil, color) --- podłączone do~kontrolera pamięci SDRAM lub~DDR3.
+    \item interfejsy Avalon-MM Master (index, vertex, depth/stencil, color) --- podłączone do~kontrolera pamięci SDRAM lub~DDR3.
   \end{itemize}
 
   \item \textbf{VGA Pixel Buffer DMA} --- kontroler DMA przekazujący dane z~bufora ramki do~przetwornika DAC VGA.
@@ -851,7 +851,7 @@ Projekt zawiera kilka aplikacji demonstracyjnych:
   \item \textbf{dump\_vga\_dma} --- narzędzie diagnostyczne wyświetlające rejestry kontrolera VGA DMA.
 \end{itemize}
 
-Aplikacje budowane są~przy~użyciu cross-compilera ARM (np. \code{arm-linux-gnueabihf-gcc}) i~uruchamiane na~płycie DE1-SoC.
+Aplikacje budowane są~przy~użyciu cross-compilera ARM i~uruchamiane na~płycie DE1-SoC.
 
 \subsection{Instalacja i~uruchomienie}
 
@@ -1019,7 +1019,7 @@ Dla modelu kuli (960~trójkątów) w~\code{demo\_obj}, akcelerator osiąga stabi
 
 \section{Zużycie zasobów FPGA}
 
-Po~syntezie projektu w~Intel Quartus Prime dla~układu Cyclone~V~5CSEMA5F31C6, zużycie zasobów wynosi:
+Po~syntezie projektu w~Intel Quartus dla~układu Cyclone~V~5CSEMA5F31C6, zużycie zasobów wynosi:
 
 \begin{table}[H]
 \centering
@@ -1044,7 +1044,7 @@ Projekt wykorzystuje w znacznym stopniu dostępne zasoby FPGA, pozostawiając ni
 W~ramach niniejszej pracy udało się~zrealizować wszystkie założone cele:
 
 \begin{enumerate}
-  \item \textbf{Zaprojektowanie i~zaimplementowanie potoku graficznego fixed-pipeline} --- zbudowano kompletny akcelerator graficzny obejmujący transformacje wierzchołków, cieniowanie, przycinanie, rasteryzację i~przetwarzanie fragmentów.
+  \item \textbf{Zaimplementowanie potoku graficznego fixed-pipeline} --- zbudowano kompletny akcelerator graficzny obejmujący transformacje wierzchołków, cieniowanie, przycinanie, rasteryzację i~przetwarzanie fragmentów.
 
   \item \textbf{Implementacja kluczowych funkcjonalności OpenGL~ES~1.1 Common-Lite}:
   \begin{itemize}

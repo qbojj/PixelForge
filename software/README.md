@@ -46,6 +46,8 @@ And debugging utilities:
 **What it does:**
 Renders a simple colored triangle demonstrating the basic graphics pipeline. By default renders a single frame with test pattern fill. Use `--render-triangle` to actually render geometry. This is the minimal example showing how vertices are transformed, rasterized, and rendered with interpolated colors.
 
+![pixelforge_demo output](../images/pixelforge_demo.png)
+
 ---
 
 ### 2. demo_cube - Rotating Colored Cube
@@ -66,6 +68,8 @@ Renders a simple colored triangle demonstrating the basic graphics pipeline. By 
 
 **What it does:**
 Renders a colorful cube rotating in real-time, demonstrating basic 3D transformations and color interpolation across triangle surfaces.
+
+![demo_cube output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/cube.gif)
 
 ---
 
@@ -90,8 +94,7 @@ Renders a colorful cube rotating in real-time, demonstrating basic 3D transforma
 **What it does:**
 Renders three colored cubes at different depths:
 
-**Performance note:**
-Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider reducing frame count for testing.
+![demo_depth output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/depth.gif)
 
 ---
 
@@ -112,6 +115,8 @@ Default is 120 frames. Each frame requires 3 draw calls (one per cube). Consider
 
 **What it does:**
 A rotating fan of translucent quads, each with alpha blending. An additional additive glow layer is rendered on top to create a neon-like highlight effect.
+
+![demo_alpha output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/alpha.gif)
 
 ---
 
@@ -157,6 +162,11 @@ This creates a glowing outline effect around the object, commonly used for selec
 **Performance note:**
 All provided models achieve 60FPS on PixelForge. As the pipeline is fill-rate limited we don't expect performance to drop significantly with more complex models, but extremely high polygon counts may impact frame time.
 
+![demo_obj sphere output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/sphere.gif)
+![demo_obj sphere faceted output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/sphere_faceted.gif)
+![demo_obj teapot output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/teapot.gif)
+![demo_obj tetrahedron output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/tetrahedron.gif)
+![demo_obj tetrahedron stencil output](https://github.com/qbojj/PixelForge/raw/refs/heads/main/images/tetrahedron_stencil.gif)
 ---
 
 ## Debugging Utilities

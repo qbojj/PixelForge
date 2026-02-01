@@ -404,8 +404,8 @@
   <parameter name="gui_multiply_factor" value="1" />
   <parameter name="gui_number_of_clocks" value="2" />
   <parameter name="gui_operation_mode" value="direct" />
-  <parameter name="gui_output_clock_frequency0" value="40.0" />
-  <parameter name="gui_output_clock_frequency1" value="60.0" />
+  <parameter name="gui_output_clock_frequency0" value="32.5" />
+  <parameter name="gui_output_clock_frequency1" value="65.0" />
   <parameter name="gui_output_clock_frequency10" value="100.0" />
   <parameter name="gui_output_clock_frequency11" value="100.0" />
   <parameter name="gui_output_clock_frequency12" value="100.0" />
@@ -584,7 +584,7 @@
   <parameter name="ENABLE_USER_ECC" value="false" />
   <parameter name="EXPORT_AFI_HALF_CLK" value="false" />
   <parameter name="EXTRA_SETTINGS" value="" />
-  <parameter name="F2H_AXI_CLOCK_FREQ" value="125000000" />
+  <parameter name="F2H_AXI_CLOCK_FREQ" value="130000000" />
   <parameter name="F2H_SDRAM0_CLOCK_FREQ" value="100" />
   <parameter name="F2H_SDRAM1_CLOCK_FREQ" value="100" />
   <parameter name="F2H_SDRAM2_CLOCK_FREQ" value="100" />
@@ -1137,7 +1137,7 @@
   <parameter name="gui_multiply_factor" value="1" />
   <parameter name="gui_number_of_clocks" value="1" />
   <parameter name="gui_operation_mode" value="direct" />
-  <parameter name="gui_output_clock_frequency0" value="125.0" />
+  <parameter name="gui_output_clock_frequency0" value="130.0" />
   <parameter name="gui_output_clock_frequency1" value="100.0" />
   <parameter name="gui_output_clock_frequency10" value="100.0" />
   <parameter name="gui_output_clock_frequency11" value="100.0" />
@@ -1238,7 +1238,7 @@
    kind="altera_up_avalon_video_pixel_buffer_dma"
    version="18.0"
    enabled="1">
-  <parameter name="AUTO_CLK_CLOCK_RATE" value="125000000" />
+  <parameter name="AUTO_CLK_CLOCK_RATE" value="130000000" />
   <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
   <parameter name="addr_mode" value="Consecutive" />
   <parameter name="back_start_address" value="1023410176" />
@@ -1473,7 +1473,7 @@
    kind="altera_up_avalon_video_rgb_resampler"
    version="18.0"
    enabled="1">
-  <parameter name="AUTO_CLK_CLOCK_RATE" value="125000000" />
+  <parameter name="AUTO_CLK_CLOCK_RATE" value="130000000" />
   <parameter name="AUTO_DEVICE_FAMILY" value="Cyclone V" />
   <parameter name="alpha" value="1023" />
   <parameter name="input_type" value="32-bit RGBA" />

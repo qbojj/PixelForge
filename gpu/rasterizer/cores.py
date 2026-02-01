@@ -926,13 +926,13 @@ class FragmentGenerator(wiring.Component):
         px_fp_reg = Signal(s_fb_type)
         py_fp_reg = Signal(s_fb_type)
 
-        w = Signal(data.ArrayLayout(weight_shape, 3))
-
         # Shared multiplier to reduce DSP usage
         mul_a = Signal(s_fb_type)
         mul_b = Signal(s_fb_type)
-        mul_p = Signal(weight_shape)
+        mul_p = Signal.like(mul_a * mul_b)
         m.d.comb += mul_p.eq(mul_a * mul_b)
+
+        w = Signal(data.ArrayLayout(mul_p.shape(), 3))
 
         # Edge computation intermediates (differences and partial products)
         dp_x = Signal(data.ArrayLayout(s_fb_type, 3))

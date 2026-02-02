@@ -3,81 +3,81 @@
 (* top =  1  *)
 (* src = "/home/kuba/Desktop/FPGA/praca/gpu/pipeline.py:776" *)
 (* generator = "Amaranth" *)
-module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest, avl_depthstencil__readdata, avl_depthstencil__waitrequest, avl_color__readdata, avl_color__waitrequest, avl_csr__address, avl_csr__write, avl_csr__read, avl_csr__writedata, pixel_clk, pixel_rst, clk, rst, ready, avl_index__address, avl_index__write, avl_index__read, avl_index__writedata, avl_vertex__address
+module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest, avl_depthstencil__readdata, avl_depthstencil__waitrequest, avl_color__readdata, avl_color__waitrequest, avl_csr__address, avl_csr__write, avl_csr__read, avl_csr__writedata, clk, rst, pixel_clk, pixel_rst, ready, avl_index__address, avl_index__write, avl_index__read, avl_index__writedata, avl_vertex__address
 , avl_vertex__write, avl_vertex__read, avl_vertex__writedata, avl_depthstencil__address, avl_depthstencil__write, avl_depthstencil__read, avl_depthstencil__writedata, avl_color__address, avl_color__write, avl_color__read, avl_color__writedata, avl_csr__readdata, avl_csr__waitrequest, avl_index__readdata);
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   wire [31:0] avl_bus__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   wire [31:0] \avl_bus__address$41 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   wire [31:0] \avl_bus__address$47 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   wire [31:0] \avl_bus__address$53 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   wire [9:0] \avl_bus__address$59 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   wire avl_bus__read;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   wire \avl_bus__read$42 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   wire \avl_bus__read$48 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   wire \avl_bus__read$54 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   wire \avl_bus__read$60 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] \avl_bus__readdata$43 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] \avl_bus__readdata$49 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] \avl_bus__readdata$55 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] \avl_bus__readdata$61 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   wire avl_bus__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   wire \avl_bus__waitrequest$44 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   wire \avl_bus__waitrequest$50 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   wire \avl_bus__waitrequest$56 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   wire \avl_bus__waitrequest$62 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   wire avl_bus__write;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   wire \avl_bus__write$45 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   wire \avl_bus__write$51 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   wire \avl_bus__write$57 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   wire \avl_bus__write$63 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] avl_bus__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] \avl_bus__writedata$46 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] \avl_bus__writedata$52 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] \avl_bus__writedata$58 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] \avl_bus__writedata$64 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   output [31:0] avl_color__address;
   wire [31:0] avl_color__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_color__read;
   wire avl_color__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   input [31:0] avl_color__readdata;
   wire [31:0] avl_color__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_color__waitrequest;
   wire avl_color__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_color__write;
   wire avl_color__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -86,13 +86,13 @@ module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:118" *)
   input [9:0] avl_csr__address;
   wire [9:0] avl_csr__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   input avl_csr__read;
   wire avl_csr__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   output [31:0] avl_csr__readdata;
   wire [31:0] avl_csr__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   output avl_csr__waitrequest;
   wire avl_csr__waitrequest;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
@@ -101,55 +101,55 @@ module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
   input [31:0] avl_csr__writedata;
   wire [31:0] avl_csr__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   output [31:0] avl_depthstencil__address;
   wire [31:0] avl_depthstencil__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_depthstencil__read;
   wire avl_depthstencil__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   input [31:0] avl_depthstencil__readdata;
   wire [31:0] avl_depthstencil__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_depthstencil__waitrequest;
   wire avl_depthstencil__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_depthstencil__write;
   wire avl_depthstencil__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
   output [31:0] avl_depthstencil__writedata;
   wire [31:0] avl_depthstencil__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   output [31:0] avl_index__address;
   wire [31:0] avl_index__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_index__read;
   wire avl_index__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   input [31:0] avl_index__readdata;
   wire [31:0] avl_index__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_index__waitrequest;
   wire avl_index__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_index__write;
   wire avl_index__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
   output [31:0] avl_index__writedata;
   wire [31:0] avl_index__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   output [31:0] avl_vertex__address;
   wire [31:0] avl_vertex__address;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_vertex__read;
   wire avl_vertex__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   input [31:0] avl_vertex__readdata;
   wire [31:0] avl_vertex__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_vertex__waitrequest;
   wire avl_vertex__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_vertex__write;
   wire avl_vertex__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -384,11 +384,11 @@ module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest
   assign wb_depthstencil__dat_r = avl_depthstencil__readdata;
   assign wb_color__dat_w = avl_color__writedata;
   assign wb_color__dat_r = avl_color__readdata;
-  assign wb_csr__stb = wb_csr__cyc;
-  assign wb_csr__we = avl_csr__write;
   assign wb_csr__dat_w = avl_csr__writedata;
   assign wb_csr__dat_r = avl_csr__readdata;
   assign wb_csr__adr = avl_csr__address;
+  assign wb_csr__we = avl_csr__write;
+  assign wb_csr__stb = wb_csr__cyc;
   assign wb_csr__sel = 1'h1;
   assign avl_index__address = { wb_index__adr, 2'h0 };
   assign avl_index__writedata = 32'd0;
@@ -398,27 +398,27 @@ module top(avl_index__waitrequest, avl_vertex__readdata, avl_vertex__waitrequest
   assign avl_color__address = { wb_color__adr, 2'h0 };
 endmodule
 
-(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:250" *)
+(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:274" *)
 (* generator = "Amaranth" *)
 module \top.bridge_color (avl_bus__waitrequest, avl_bus__write, avl_bus__read, wb_color__ack, wb_color__cyc, wb_color__adr, wb_color__we, wb_color__stb, avl_bus__writedata, wb_color__dat_r);
   wire \$1 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
-  wire [31:0] avl_bus__address;
   (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  wire [31:0] avl_bus__address;
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_bus__read;
   wire avl_bus__read;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_bus__waitrequest;
   wire avl_bus__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_bus__write;
   wire avl_bus__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
   input [31:0] avl_bus__writedata;
   wire [31:0] avl_bus__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:255" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:279" *)
   wire op_send;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:125" *)
   output wb_color__ack;
@@ -429,7 +429,7 @@ module \top.bridge_color (avl_bus__waitrequest, avl_bus__write, avl_bus__read, w
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:122" *)
   input wb_color__cyc;
   wire wb_color__cyc;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   input [31:0] wb_color__dat_r;
   wire [31:0] wb_color__dat_r;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -440,34 +440,34 @@ module \top.bridge_color (avl_bus__waitrequest, avl_bus__write, avl_bus__read, w
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   input wb_color__we;
   wire wb_color__we;
-  assign op_send = wb_color__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:256" *) wb_color__stb;
-  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:262" *) wb_color__we;
-  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) wb_color__we;
-  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) \$1 ;
-  assign wb_color__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:264" *) avl_bus__waitrequest;
+  assign op_send = wb_color__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:280" *) wb_color__stb;
+  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:285" *) wb_color__we;
+  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) wb_color__we;
+  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) \$1 ;
+  assign wb_color__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:292" *) avl_bus__waitrequest;
   assign avl_bus__address = { wb_color__adr, 2'h0 };
   assign wb_color__dat_w = avl_bus__writedata;
   assign avl_bus__readdata = wb_color__dat_r;
 endmodule
 
-(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:323" *)
+(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:355" *)
 (* generator = "Amaranth" *)
 module \top.bridge_csr (avl_bus__write, avl_bus__read, wb_csr__dat_w, send_op, avl_bus__waitrequest, avl_bus__readdata, wb_csr__ack, wb_csr__adr);
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
-  wire [9:0] avl_bus__address;
   (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  wire [9:0] avl_bus__address;
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   input avl_bus__read;
   wire avl_bus__read;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   input [31:0] avl_bus__readdata;
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   output avl_bus__waitrequest;
   wire avl_bus__waitrequest;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   input avl_bus__write;
   wire avl_bus__write;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] avl_bus__writedata;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:123" *)
   output send_op;
@@ -475,14 +475,14 @@ module \top.bridge_csr (avl_bus__write, avl_bus__read, wb_csr__dat_w, send_op, a
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:125" *)
   input wb_csr__ack;
   wire wb_csr__ack;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
   input [9:0] wb_csr__adr;
   wire [9:0] wb_csr__adr;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:122" *)
   wire wb_csr__cyc;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:120" *)
   wire [31:0] wb_csr__dat_r;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   input [31:0] wb_csr__dat_w;
   wire [31:0] wb_csr__dat_w;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:121" *)
@@ -491,38 +491,38 @@ module \top.bridge_csr (avl_bus__write, avl_bus__read, wb_csr__dat_w, send_op, a
   wire wb_csr__stb;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   wire wb_csr__we;
-  assign send_op = avl_bus__read | (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:329" *) avl_bus__write;
-  assign avl_bus__waitrequest = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:337" *) wb_csr__ack;
-  assign wb_csr__cyc = send_op;
-  assign wb_csr__stb = send_op;
-  assign wb_csr__we = avl_bus__write;
+  assign send_op = avl_bus__read | (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:361" *) avl_bus__write;
+  assign avl_bus__waitrequest = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:371" *) wb_csr__ack;
   assign avl_bus__writedata = wb_csr__dat_w;
   assign wb_csr__dat_r = avl_bus__readdata;
   assign avl_bus__address = wb_csr__adr;
+  assign wb_csr__we = avl_bus__write;
+  assign wb_csr__cyc = send_op;
+  assign wb_csr__stb = send_op;
   assign wb_csr__sel = 1'h1;
 endmodule
 
-(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:250" *)
+(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:274" *)
 (* generator = "Amaranth" *)
 module \top.bridge_depthstencil (avl_bus__waitrequest, avl_bus__write, avl_bus__read, wb_depthstencil__ack, wb_depthstencil__cyc, wb_depthstencil__stb, wb_depthstencil__adr, wb_depthstencil__we, avl_bus__writedata, wb_depthstencil__dat_r);
   wire \$1 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
-  wire [31:0] avl_bus__address;
   (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  wire [31:0] avl_bus__address;
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_bus__read;
   wire avl_bus__read;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_bus__waitrequest;
   wire avl_bus__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_bus__write;
   wire avl_bus__write;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
   input [31:0] avl_bus__writedata;
   wire [31:0] avl_bus__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:255" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:279" *)
   wire op_send;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:125" *)
   output wb_depthstencil__ack;
@@ -533,7 +533,7 @@ module \top.bridge_depthstencil (avl_bus__waitrequest, avl_bus__write, avl_bus__
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:122" *)
   input wb_depthstencil__cyc;
   wire wb_depthstencil__cyc;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   input [31:0] wb_depthstencil__dat_r;
   wire [31:0] wb_depthstencil__dat_r;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -544,36 +544,36 @@ module \top.bridge_depthstencil (avl_bus__waitrequest, avl_bus__write, avl_bus__
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   input wb_depthstencil__we;
   wire wb_depthstencil__we;
-  assign op_send = wb_depthstencil__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:256" *) wb_depthstencil__stb;
-  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:262" *) wb_depthstencil__we;
-  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) wb_depthstencil__we;
-  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) \$1 ;
-  assign wb_depthstencil__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:264" *) avl_bus__waitrequest;
+  assign op_send = wb_depthstencil__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:280" *) wb_depthstencil__stb;
+  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:285" *) wb_depthstencil__we;
+  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) wb_depthstencil__we;
+  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) \$1 ;
+  assign wb_depthstencil__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:292" *) avl_bus__waitrequest;
   assign avl_bus__address = { wb_depthstencil__adr, 2'h0 };
   assign wb_depthstencil__dat_w = avl_bus__writedata;
   assign avl_bus__readdata = wb_depthstencil__dat_r;
 endmodule
 
-(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:250" *)
+(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:274" *)
 (* generator = "Amaranth" *)
 module \top.bridge_index (avl_bus__waitrequest, avl_bus__write, avl_bus__read, wb_index__ack, wb_index__cyc, wb_index__adr, wb_index__we, wb_index__stb, wb_index__dat_r);
   wire \$1 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
-  wire [31:0] avl_bus__address;
   (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  wire [31:0] avl_bus__address;
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_bus__read;
   wire avl_bus__read;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_bus__waitrequest;
   wire avl_bus__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_bus__write;
   wire avl_bus__write;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] avl_bus__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:255" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:279" *)
   wire op_send;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:125" *)
   output wb_index__ack;
@@ -584,7 +584,7 @@ module \top.bridge_index (avl_bus__waitrequest, avl_bus__write, avl_bus__read, w
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:122" *)
   input wb_index__cyc;
   wire wb_index__cyc;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   input [31:0] wb_index__dat_r;
   wire [31:0] wb_index__dat_r;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -595,37 +595,37 @@ module \top.bridge_index (avl_bus__waitrequest, avl_bus__write, avl_bus__read, w
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   input wb_index__we;
   wire wb_index__we;
-  assign op_send = wb_index__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:256" *) wb_index__stb;
-  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:262" *) wb_index__we;
-  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) wb_index__we;
-  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) \$1 ;
-  assign wb_index__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:264" *) avl_bus__waitrequest;
+  assign op_send = wb_index__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:280" *) wb_index__stb;
+  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:285" *) wb_index__we;
+  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) wb_index__we;
+  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) \$1 ;
+  assign wb_index__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:292" *) avl_bus__waitrequest;
   assign avl_bus__address = { wb_index__adr, 2'h0 };
   assign avl_bus__writedata = 32'd0;
   assign wb_index__dat_w = 32'd0;
   assign avl_bus__readdata = wb_index__dat_r;
 endmodule
 
-(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:250" *)
+(* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:274" *)
 (* generator = "Amaranth" *)
 module \top.bridge_vertex (avl_bus__waitrequest, avl_bus__write, avl_bus__read, wb_vertex__ack, wb_vertex__cyc, wb_vertex__stb, wb_vertex__adr, wb_vertex__we, wb_vertex__dat_r);
   wire \$1 ;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:61" *)
-  wire [31:0] avl_bus__address;
   (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:63" *)
+  wire [31:0] avl_bus__address;
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
   output avl_bus__read;
   wire avl_bus__read;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   wire [31:0] avl_bus__readdata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:68" *)
   input avl_bus__waitrequest;
   wire avl_bus__waitrequest;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:62" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
   output avl_bus__write;
   wire avl_bus__write;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:64" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:66" *)
   wire [31:0] avl_bus__writedata;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:255" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:279" *)
   wire op_send;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:125" *)
   output wb_vertex__ack;
@@ -636,7 +636,7 @@ module \top.bridge_vertex (avl_bus__waitrequest, avl_bus__write, avl_bus__read, 
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:122" *)
   input wb_vertex__cyc;
   wire wb_vertex__cyc;
-  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:65" *)
+  (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:67" *)
   input [31:0] wb_vertex__dat_r;
   wire [31:0] wb_vertex__dat_r;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:119" *)
@@ -647,11 +647,11 @@ module \top.bridge_vertex (avl_bus__waitrequest, avl_bus__write, avl_bus__read, 
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth_soc/wishbone/bus.py:124" *)
   input wb_vertex__we;
   wire wb_vertex__we;
-  assign op_send = wb_vertex__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:256" *) wb_vertex__stb;
-  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:262" *) wb_vertex__we;
-  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) wb_vertex__we;
-  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:263" *) \$1 ;
-  assign wb_vertex__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:264" *) avl_bus__waitrequest;
+  assign op_send = wb_vertex__cyc & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:280" *) wb_vertex__stb;
+  assign avl_bus__write = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:285" *) wb_vertex__we;
+  assign \$1  = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) wb_vertex__we;
+  assign avl_bus__read = op_send & (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:286" *) \$1 ;
+  assign wb_vertex__ack = ~ (* src = "/home/kuba/Desktop/FPGA/praca/gpu/utils/avalon.py:292" *) avl_bus__waitrequest;
   assign avl_bus__address = { wb_vertex__adr, 2'h0 };
   assign avl_bus__writedata = 32'd0;
   assign wb_vertex__dat_w = 32'd0;
@@ -660,7 +660,7 @@ endmodule
 
 (* src = "/home/kuba/Desktop/FPGA/praca/gpu/pipeline.py:421" *)
 (* generator = "Amaranth" *)
-module \top.pipeline (wb_vertex__dat_r, wb_depthstencil__dat_r, wb_color__dat_r, wb_bus__adr, wb_bus__we, wb_bus__dat_w, pixel_clk, pixel_rst, clk, rst, r_data, wb_index__ack, wb_vertex__ack, wb_depthstencil__ack, wb_color__ack, wb_bus__cyc, wb_index__cyc, wb_index__adr, wb_index__we, wb_index__stb, wb_vertex__cyc
+module \top.pipeline (wb_vertex__dat_r, wb_depthstencil__dat_r, wb_color__dat_r, wb_bus__adr, wb_bus__we, wb_bus__dat_w, clk, rst, pixel_clk, pixel_rst, r_data, wb_index__ack, wb_vertex__ack, wb_depthstencil__ack, wb_color__ack, wb_bus__cyc, wb_index__cyc, wb_index__adr, wb_index__we, wb_index__stb, wb_vertex__cyc
 , wb_vertex__stb, wb_vertex__adr, wb_vertex__we, wb_depthstencil__cyc, wb_depthstencil__stb, wb_depthstencil__adr, wb_depthstencil__we, wb_depthstencil__dat_w, wb_color__cyc, wb_color__adr, wb_color__we, wb_color__stb, wb_color__dat_w, wb_csr__dat_r, wb_csr__ack, wb_index__dat_r);
   wire \$1 ;
   wire \$10 ;
@@ -12532,7 +12532,7 @@ endmodule
 
 (* src = "/home/kuba/Desktop/FPGA/praca/gpu/pipeline.py:130" *)
 (* generator = "Amaranth" *)
-module \top.pipeline.pipeline (\bus__dat_r$154 , wb_bus__dat_r, \wb_bus__dat_r$186 , pixel_clk, pixel_rst, clk, rst, start, filtered, \filtered$215 , \filtered$218 , \port$78$0 , \port$79$0 , \port$80$0 , \port$81$0 , \ready$227 , synced, bus__ack, \bus__ack$148 , wb_bus__ack, \wb_bus__ack$180
+module \top.pipeline.pipeline (\bus__dat_r$154 , wb_bus__dat_r, \wb_bus__dat_r$186 , clk, rst, pixel_clk, pixel_rst, start, filtered, \filtered$215 , \filtered$218 , \port$78$0 , \port$79$0 , \port$80$0 , \port$81$0 , \ready$227 , synced, bus__ack, \bus__ack$148 , wb_bus__ack, \wb_bus__ack$180
 , c_pos, c_norm, c_col, material, lights__0, pa_conf, fb_info, wb_index__cyc, wb_index__adr, wb_index__we, wb_index__stb, wb_index__sel, wb_vertex__cyc, wb_vertex__stb, wb_vertex__adr, wb_vertex__we, wb_vertex__sel, wb_depthstencil__cyc, wb_depthstencil__stb, wb_depthstencil__adr, wb_depthstencil__we
 , wb_depthstencil__sel, wb_depthstencil__dat_w, wb_color__cyc, wb_color__adr, wb_color__we, wb_color__stb, wb_color__sel, wb_color__dat_w, c_address, c_count, c_kind, c_input_topology, c_primitive_restart_enable, c_primitive_restart_index, c_base_vertex, enabled, position_mv, position_p, normal_mv_inv_t, stencil_conf_front, stencil_conf_back
 , depth_conf, blend_conf, bus__dat_r);
@@ -79593,7 +79593,7 @@ endmodule
 
 (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth/lib/fifo.py:558" *)
 (* generator = "Amaranth" *)
-module \top.pipeline.pipeline.tri_prep_to_rast_fifo (pixel_rst, clk, rst, w_rdy, w_data, w_en, r_en, r_data, r_rdy, pixel_clk);
+module \top.pipeline.pipeline.tri_prep_to_rast_fifo (rst, pixel_clk, pixel_rst, w_rdy, w_data, w_en, r_en, r_data, r_rdy, clk);
   reg \$auto$verilog_backend.cc:2355:dump_module$114  = 0;
   wire [1:0] \$1 ;
   reg [757:0] \$10 ;
@@ -79761,7 +79761,7 @@ endmodule
 
 (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth/lib/fifo.py:401" *)
 (* generator = "Amaranth" *)
-module \top.pipeline.pipeline.tri_prep_to_rast_fifo.unbuffered (pixel_rst, clk, rst, r_level, w_rdy, r_rdy, r_data, w_port__data, w_en, r_en, w_level, \r_rst$31 , pixel_clk);
+module \top.pipeline.pipeline.tri_prep_to_rast_fifo.unbuffered (rst, pixel_clk, pixel_rst, r_level, w_rdy, r_rdy, r_data, w_port__data, w_en, r_en, w_level, \r_rst$31 , clk);
   reg \$auto$verilog_backend.cc:2355:dump_module$115  = 0;
   wire \$1 ;
   wire \$10 ;
@@ -80537,7 +80537,7 @@ endmodule
 
 (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth/vendor/_altera.py:510" *)
 (* generator = "Amaranth" *)
-module \top.pipeline.pipeline.tri_prep_to_rast_fifo.unbuffered.rst_cdc (rst, r_rst, pixel_clk);
+module \top.pipeline.pipeline.tri_prep_to_rast_fifo.unbuffered.rst_cdc (pixel_clk, r_rst, rst);
   wire \$1 ;
   (* src = "/home/kuba/Desktop/FPGA/praca/.venv/lib/python3.14/site-packages/amaranth/hdl/_ir.py:283" *)
   input pixel_clk;

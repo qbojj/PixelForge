@@ -33,6 +33,7 @@ class Signature(WiringSignature):
         burst_count_width: int | None = None,
         has_byte_enable: bool = True,
         has_readdatavalid: bool = False,
+        pipelined: bool = False,
     ) -> None:
         if not isinstance(addr_width, int) or addr_width < 0:
             raise TypeError(
@@ -56,6 +57,7 @@ class Signature(WiringSignature):
         self._burst_count_width = burst_count_width
         self._has_byte_enable = bool(has_byte_enable)
         self._has_readdatavalid = bool(has_readdatavalid)
+        self._pipelined = bool(pipelined)
 
         members: dict[str, wiring.Direction] = {
             "address": Out(unsigned(addr_width)),
@@ -73,6 +75,10 @@ class Signature(WiringSignature):
 
         if self._has_readdatavalid:
             members["readdatavalid"] = In(1)
+
+        if self._pipelined:
+            members["readdatavalid"] = In(1)
+            members["writeresponsevalid"] = In(1)
 
         super().__init__(members)
 
@@ -96,6 +102,10 @@ class Signature(WiringSignature):
     def has_readdatavalid(self) -> bool:
         return self._has_readdatavalid
 
+    @property
+    def pipelined(self) -> bool:
+        return self._pipelined
+
     def create(self, *, path=None, src_loc_at: int = 0):
         """Create a compatible Avalon-MM interface."""
 
@@ -105,6 +115,7 @@ class Signature(WiringSignature):
             burst_count_width=self.burst_count_width,
             has_byte_enable=self.has_byte_enable,
             has_readdatavalid=self.has_readdatavalid,
+            pipelined=self.pipelined,
             path=path,
             src_loc_at=1 + src_loc_at,
         )
@@ -117,6 +128,7 @@ class Signature(WiringSignature):
             and self.burst_count_width == other.burst_count_width
             and self.has_byte_enable == other.has_byte_enable
             and self.has_readdatavalid == other.has_readdatavalid
+            and self.pipelined == other.pipelined
         )
 
     def __repr__(self):
@@ -134,6 +146,7 @@ class Interface(wiring.PureInterface):
         burst_count_width: int | None = None,
         has_byte_enable: bool = True,
         has_readdatavalid: bool = True,
+        pipelined: bool = False,
         path=None,
         src_loc_at: int = 0,
     ) -> None:
@@ -144,6 +157,7 @@ class Interface(wiring.PureInterface):
                 burst_count_width=burst_count_width,
                 has_byte_enable=has_byte_enable,
                 has_readdatavalid=has_readdatavalid,
+                pipelined=pipelined,
             ),
             path=path,
             src_loc_at=1 + src_loc_at,
@@ -169,6 +183,10 @@ class Interface(wiring.PureInterface):
     @property
     def has_readdatavalid(self) -> bool:
         return self.signature.has_readdatavalid
+
+    @property
+    def pipelined(self) -> bool:
+        return self.signature.pipelined
 
     @property
     def memory_map(self):
@@ -220,8 +238,11 @@ class WishboneMasterToAvalonBridge(Component):
         if not isinstance(unflipped_bus, wb.Interface):
             raise TypeError(f"bus must be a Wishbone Interface, not {unflipped_bus!r}")
 
-        if len(unflipped_bus.features) != 0:
-            raise ValueError("Wishbone features are not supported by Avalon bridge")
+        if not unflipped_bus.features.issubset({wb.Feature.STALL}):
+            raise ValueError(
+                "Wishbone features other than STALL are not supported by Avalon bridge",
+                str(list(unflipped_bus.features)),
+            )
 
         self._addr_width = unflipped_bus.signature.addr_width
         self._data_width = unflipped_bus.signature.data_width
@@ -237,10 +258,13 @@ class WishboneMasterToAvalonBridge(Component):
                 f"data_width={self._data_width}, granularity={self._granularity}"
             )
 
+        self._pipelined = wb.Feature.STALL in unflipped_bus.features
+
         avl_signature = Signature(
             addr_width=self._addr_width + self._shift_bits,
             data_width=self._data_width,
             has_byte_enable=self._has_byte_enable,
+            pipelined=self._pipelined,
         )
 
         super().__init__({"avl_bus": Out(avl_signature)})
@@ -255,17 +279,20 @@ class WishboneMasterToAvalonBridge(Component):
         op_send = Signal()
         m.d.comb += op_send.eq(wb_bus.cyc & wb_bus.stb)
 
-        m.d.comb += [
-            avl.address.eq(Cat(Const(0, self._shift_bits), wb_bus.adr)),
-            avl.writedata.eq(wb_bus.dat_w),
-            wb_bus.dat_r.eq(avl.readdata),
-            avl.write.eq(op_send & wb_bus.we),
-            avl.read.eq(op_send & ~wb_bus.we),
-            wb_bus.ack.eq(~avl.waitrequest),
-        ]
+        m.d.comb += avl.address.eq(Cat(Const(0, self._shift_bits), wb_bus.adr))
+        m.d.comb += avl.writedata.eq(wb_bus.dat_w)
+        m.d.comb += wb_bus.dat_r.eq(avl.readdata)
+        m.d.comb += avl.write.eq(op_send & wb_bus.we)
+        m.d.comb += avl.read.eq(op_send & ~wb_bus.we)
 
         if self._has_byte_enable:
             m.d.comb += avl.byteenable.eq(wb_bus.sel)
+
+        if not self._pipelined:
+            m.d.comb += wb_bus.ack.eq(~avl.waitrequest)
+        else:
+            m.d.comb += wb_bus.ack.eq(avl.readdatavalid | avl.writeresponsevalid)
+            m.d.comb += wb_bus.stall.eq(avl.waitrequest)
 
         return m
 
@@ -295,8 +322,10 @@ class WishboneSlaveToAvalonBridge(Component):
                 f"wb_bus must be a Wishbone Interface, not {unflipped_bus!r}"
             )
 
-        if len(unflipped_bus.features) != 0:
-            raise ValueError("Wishbone features are not supported by Avalon bridge")
+        if not unflipped_bus.features.issubset({wb.Feature.STALL}):
+            raise ValueError(
+                "Wishbone features other than STALL are not supported by Avalon bridge"
+            )
 
         if unflipped_bus.data_width == unflipped_bus.granularity:
             has_byte_enable = False
@@ -308,12 +337,15 @@ class WishboneSlaveToAvalonBridge(Component):
                 f"data_width={unflipped_bus.data_width}, granularity={unflipped_bus.granularity}"
             )
 
+        self._pipelined = wb.Feature.STALL in unflipped_bus.features
+
         # Create Avalon signature with same address and data widths (word-addressed on both sides)
         # Derive byteenable from Wishbone granularity
         avl_sig = Signature(
             addr_width=unflipped_bus.addr_width,
             data_width=unflipped_bus.data_width,
             has_byte_enable=has_byte_enable,
+            pipelined=self._pipelined,
         )
 
         super().__init__({"avl_bus": In(avl_sig)})
@@ -328,15 +360,39 @@ class WishboneSlaveToAvalonBridge(Component):
         send_op = Signal()
         m.d.comb += send_op.eq(avl.read | avl.write)
 
-        m.d.comb += [
-            wb_bus.cyc.eq(send_op),
-            wb_bus.stb.eq(send_op),
-            wb_bus.we.eq(avl.write),
-            wb_bus.dat_w.eq(avl.writedata),
-            avl.readdata.eq(wb_bus.dat_r),
-            avl.waitrequest.eq(~wb_bus.ack),
-            wb_bus.adr.eq(avl.address),
-        ]
+        m.d.comb += wb_bus.dat_w.eq(avl.writedata)
+        m.d.comb += avl.readdata.eq(wb_bus.dat_r)
+        m.d.comb += wb_bus.adr.eq(avl.address)
+        m.d.comb += wb_bus.we.eq(avl.write)
+
+        if not self._pipelined:
+            m.d.comb += wb_bus.cyc.eq(send_op)
+            m.d.comb += wb_bus.stb.eq(send_op)
+            m.d.comb += avl.waitrequest.eq(~wb_bus.ack)
+        else:
+            max_transactions = 8
+            was_write = Signal(max_transactions)
+
+            submit_idx = Signal(range(max_transactions + 1))
+            complete_idx = Signal.like(submit_idx)
+
+            can_accept = Signal()
+            m.d.comb += can_accept.eq(submit_idx + 1 != complete_idx)
+
+            m.d.comb += wb_bus.cyc.eq(send_op | (submit_idx != complete_idx))
+            m.d.comb += wb_bus.stb.eq(send_op & can_accept)
+            m.d.comb += avl.waitrequest.eq(~can_accept)
+
+            with m.If(wb_bus.stb):
+                m.d.sync += was_write[submit_idx].eq(wb_bus.we)
+                m.d.sync += submit_idx.eq(submit_idx + 1)
+
+            with m.If(wb_bus.ack):
+                with m.If(was_write[complete_idx]):
+                    m.d.comb += avl.writeresponsevalid.eq(1)
+                with m.Else():
+                    m.d.comb += avl.readdatavalid.eq(1)
+                m.d.sync += complete_idx.eq(complete_idx + 1)
 
         if self.avl_bus.has_byte_enable:
             m.d.comb += wb_bus.sel.eq(avl.byteenable)

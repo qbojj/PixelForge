@@ -68,6 +68,8 @@ quartus/soc_system
 *.out
 *.synctex.gz
 *.toc
+*.snm
+*.nav
 
 # do not include software artefacts
 *.d

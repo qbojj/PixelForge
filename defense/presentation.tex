@@ -1,0 +1,234 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usecolortheme{default}
+\usepackage[polish]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+
+\title[GPU na FPGA]{Akcelerator graficzny fixed-pipeline oparty na FPGA}
+\author{Jakub Janeczko}
+\institute[II UWr]{
+  Instytut Informatyki, Uniwersytet Wrocławski \\
+  \medskip
+  Promotor: Dr. Marek Materzok
+}
+\date{6 lutego 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Cel projektu i problem}
+  \begin{itemize}
+    \item Problem: sprzętowe przyspieszenie renderingu 3D w systemach wbudowanych.
+    \item Cel: zaprojektować i zaimplementować fixed-pipeline GPU zgodny z wybranym podzbiorem OpenGL ES 1.1 Common-Lite.
+    \item Założenia: arytmetyka stałoprzecinkowa, integracja z SoC, możliwość testowania i demonstracji.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Motywacja i kontekst}
+  \begin{itemize}
+    \item FPGA łączy elastyczność z deterministycznym czasem działania.
+    \item Fixed-pipeline pozwala precyzyjnie kontrolować zasoby i opóźnienia.
+    \item Projekt jako punkt wyjścia do dalszych rozszerzeń (teksturowanie, shadery).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Zakres funkcjonalny}
+  Zaimplementowane elementy potoku:
+  \begin{itemize}
+    \item Transformacje wierzchołków (model--view--projection).
+    \item Rasteryzacja trójkątów z interpolacją perspektywiczną.
+    \item Oświetlenie (ambient, diffuse) w wierzchołkach.
+    \item Testy głębokości i szablonu.
+    \item Mieszanie kolorów (alpha blending).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Technologie --- dlaczego te?}
+  \begin{itemize}
+    \item \textbf{FPGA Intel Cyclone V (DE1-SoC)}: elastyczność, możliwość iteracji architektury, integracja z HPS.
+    \item \textbf{Amaranth HDL}: generatywność w Pythonie, szybka iteracja, symulacja i eksport do SystemVerilog.
+    \item \textbf{OpenGL ES 1.1 Common-Lite}: klasyczny fixed-pipeline, naturalny punkt odniesienia i arytmetyka fixed-point.
+    \item \textbf{SoC + Linux}: łatwy dostęp do CSR i uruchamianie aplikacji demonstracyjnych.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wymagania i założenia}
+  \begin{itemize}
+    \item Docelowa platforma: Intel Cyclone V (DE1-SoC).
+    \item Podzbiór OpenGL ES 1.1 Common-Lite (fixed-pipeline).
+    \item Arytmetyka stałoprzecinkowa (brak FPU w profilu).
+    \item Integracja z SoC: CSR + dostęp do pamięci przez magistrale.
+    \item Weryfikacja funkcjonalna w symulacji i na płytce.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Środowisko i narzędzia}
+  \begin{itemize}
+    \item Symulacja i testy funkcjonalne na poziomie modułów.
+    \item Integracja z Qsys/Platform Designer (Avalon-MM).
+    \item Aplikacje demonstracyjne w userspace Linux.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Architektura systemu (wysoki poziom)}
+  \begin{itemize}
+    \item HPS (ARM) konfiguruje GPU przez rejestry CSR.
+    \item GPU jako akcelerator w logice FPGA.
+    \item Magistrale: Avalon-MM (CSR i dostęp do pamięci), mostek do Wishbone.
+    \item Bufory: wierzchołki, indeksy, ramka, głębokość, szablon.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Architektura potoku graficznego}
+  \begin{enumerate}
+    \item Wejście i składanie prymitywów (Input Assembly).
+    \item Transformacje wierzchołków (Vertex Transform).
+    \item Cieniowanie wierzchołków (Vertex Shading).
+    \item Rasteryzacja (barycentryczne, perspektywa).
+    \item Operacje fragmentów: depth/stencil/blend.
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}{Diagram potoku graficznego}
+  \centering
+  \vspace{-0.3cm}
+  \begin{tikzpicture}[node distance=1.0cm, auto, scale=0.8, transform shape,
+    block/.style={rectangle, draw, fill=blue!20, text width=5em, text centered, rounded corners, minimum height=1.8em, font=\footnotesize},
+    arrow/.style={-{Stealth[length=2mm]}, thick}]
+
+    \node [block] (mem) {Pamięć};
+    \node [block, below=0.5cm of mem] (input) {Input Assembly};
+    \node [block, below=0.5cm of input] (vtransform) {Vertex Transform};
+    \node [block, below=0.5cm of vtransform] (vshading) {Vertex Shading};
+    \node [block, below=0.5cm of vshading] (raster) {Rasterizer};
+    \node [block, below=0.5cm of raster] (pixel) {Pixel Shading};
+    \node [block, below=0.5cm of pixel] (fb) {Frame Buffer};
+
+    \draw [arrow] (mem) -- (input);
+    \draw [arrow] (input) -- (vtransform);
+    \draw [arrow] (vtransform) -- (vshading);
+    \draw [arrow] (vshading) -- (raster);
+    \draw [arrow] (raster) -- (pixel);
+    \draw [arrow] (pixel) -- (fb);
+
+    \node [right=0.3cm of vtransform, text width=3cm, font=\tiny] {MVP matrix};
+    \node [right=0.3cm of vshading, text width=3cm, font=\tiny] {Lighting};
+    \node [right=0.3cm of raster, text width=3cm, font=\tiny] {Interpolacja};
+    \node [right=0.3cm of pixel, text width=3cm, font=\tiny] {Depth/stencil};
+  \end{tikzpicture}
+\end{frame}
+
+\begin{frame}{Zgodność z OpenGL ES 1.1 Common-Lite}
+  \begin{itemize}
+    \item Zaimplementowane: transformacje, rasteryzacja trójkątów, oświetlenie ambient/diffuse, depth/stencil, blending.
+    \item Braki: teksturowanie, specular, linie/punkty, MSAA.
+    \item Skupienie na kluczowych elementach fixed-pipeline i stabilności działania.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Arytmetyka stałoprzecinkowa}
+  \begin{itemize}
+    \item Brak FPU w profilu Common-Lite --- konieczność fixed-point.
+    \item Stabilność czasowa i przewidywalne zasoby w FPGA.
+    \item Kluczowe miejsca: macierze, interpolacja perspektywiczna, testy głębokości.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Interfejs CSR i konfiguracja}
+  \begin{itemize}
+    \item Rejestry sterujące: adresy buforów, formaty danych, topologia.
+    \item Parametry macierzy, oświetlenia, viewport/scissor.
+    \item Tryby testów depth/stencil i ustawienia blendingu.
+    \item Dostęp z Linuxa przez mapowanie \texttt{/dev/mem}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wkład własny}
+  \begin{itemize}
+    \item Projekt architektury fixed-pipeline i podział na moduły sprzętowe.
+    \item Implementacja modułów Amaranth: transformacje, rasteryzacja, testy, blending.
+    \item Zaprojektowanie mapy CSR i integracja z SoC.
+    \item Środowisko testowe i aplikacje demonstracyjne.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Testowanie i weryfikacja}
+  \begin{itemize}
+    \item Testy jednostkowe modułów potoku (symulacja).
+    \item Porównanie wyników renderingu z referencją (obrazy PPM).
+    \item Testy integracyjne na płycie DE1-SoC.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wyniki --- zasoby FPGA (Cyclone V)}
+  \begin{itemize}
+    \item ALM: 31\,372 / 32\,070 (98\%).
+    \item DSP: 75 / 87 (86\%).
+    \item Pamięć: 634\,097 / 4\,065\,280 bitów (16\%).
+    \item PLL: 3 / 6 (50\%), DLL: 1 / 4 (25\%).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wyniki i demonstracja}
+  \begin{itemize}
+    \item Poprawne renderowanie trójkątów z interpolacją i testami.
+    \item Sceny demonstracyjne uruchamiane na płycie DE1-SoC.
+  \end{itemize}
+  \vspace{2mm}
+  \centering
+  \includegraphics[width=0.5\linewidth]{../thesis/assets/pixelforge_demo.png}
+\end{frame}
+
+\begin{frame}{Ograniczenia}
+  \begin{itemize}
+    \item Brak teksturowania i specular.
+    \item Brak rasteryzacji linii i punktów.
+    \item Wysokie zużycie ALM (98\%) ogranicza dalszą rozbudowę bez optymalizacji.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Wnioski}
+  \begin{itemize}
+    \item Fixed-pipeline GPU na FPGA jest możliwe i edukacyjnie wartościowe.
+    \item Amaranth HDL ułatwia iterację i testowanie architektury.
+    \item Architektura modułowa ułatwia rozwój i izolację błędów.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Plany rozwoju}
+  \begin{itemize}
+    \item Rozszerzenie funkcjonalności o teksturowanie, MSAA, shadery.
+    \item Ulepszenia wydajności: większa równoległość, TBR.
+    \item Lepsze narzędzia debug/telemetria w CSR.
+    \item Zbliżenie do pełnej zgodności z OpenGL ES 1.1.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Źródła}
+  \begin{itemize}
+    \item OpenGL ES 1.1 Specification (Khronos Group).
+    \item Dokumentacja Amaranth HDL.
+    \item Dokumentacja DE1-SoC i Cyclone V.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Demonstracja}
+    \centering
+    \Large Krótka demonstracja działania akceleratora na płycie DE1-SoC
+\end{frame}
+
+\begin{frame}{Pytania}
+  \centering
+  \Large Dziękuję za uwagę
+\end{frame}
+
+\end{document}

@@ -189,7 +189,7 @@ def test_clip_to_perspective_divide_colors():
                 vtx = ctx.get(div.o.payload)
                 color = tuple(comp.as_float() for comp in vtx.color)
                 logged_colors.append(color)
-                print(f"Passing vertex {len(logged_colors)-1} color: {color}")
+                print(f"Passing vertex {len(logged_colors) - 1} color: {color}")
                 if len(logged_colors) == geom["idx_count"]:
                     break
 
@@ -241,10 +241,12 @@ def test_rasterizer_single_triangle(persp: bool):
     # Triangle vertices in NDC [-1, 1]
     triangle_vertices = [
         make_pa_vertex(
-            [-1.0, -1.0, 0.5, 1.0], [1.0, 0.0, 0.0, 1.0]  # Bottom-left (NDC)  # Red
+            [-1.0, -1.0, 0.5, 1.0],
+            [1.0, 0.0, 0.0, 1.0],  # Bottom-left (NDC)  # Red
         ),
         make_pa_vertex(
-            [1.0, -1.0, 0.5, 1.0], [0.0, 1.0, 0.0, 1.0]  # Bottom-right (NDC)  # Green
+            [1.0, -1.0, 0.5, 1.0],
+            [0.0, 1.0, 0.0, 1.0],  # Bottom-right (NDC)  # Green
         ),
         make_pa_vertex([0.0, 1.0, 0.5, 1.0], [0.0, 0.0, 1.0, 1.0]),  # Top (NDC)  # Blue
     ]

@@ -852,3 +852,4 @@ if __name__ == "__main__":
 
     with open("graphics_pipeline_csr_map.json", "w") as f:
         json.dump(csr_map, f, indent=2)
+        f.write("\n")

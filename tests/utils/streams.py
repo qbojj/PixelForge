@@ -70,8 +70,7 @@ def stream_testbench(
     if output_stream is not None:
         if expected_output_data is None and output_data_checker is None:
             raise ValueError(
-                "Either expected_output_data or output_data_checker must be provided "
-                "to verify output data."
+                "Either expected_output_data or output_data_checker must be provided to verify output data."
             )
 
         # only one of the two can be provided

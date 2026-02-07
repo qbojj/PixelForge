@@ -117,7 +117,7 @@ class VertexTransform(wiring.Component):
             for i, attr in enumerate(attr_info):
                 base = f"{attr['name']}"
                 next_state = (
-                    f"{attr_info[i+1]['name']}_INIT"
+                    f"{attr_info[i + 1]['name']}_INIT"
                     if i + 1 < len(attr_info)
                     else "SEND"
                 )
@@ -144,7 +144,7 @@ class VertexTransform(wiring.Component):
                             ]
 
                             m.next = (
-                                f"{base}_{i}_{j+1}"
+                                f"{base}_{i}_{j + 1}"
                                 if j < attr["dim"] - 1
                                 else (f"{base}_STORE_{i}")
                             )
@@ -152,7 +152,7 @@ class VertexTransform(wiring.Component):
                         m.d.sync += attr["result"][i].eq(cum_result)
                         m.d.sync += cum_result.eq(0)
                         m.next = (
-                            next_state if i == attr["dim"] - 1 else f"{base}_{i+1}_0"
+                            next_state if i == attr["dim"] - 1 else f"{base}_{i + 1}_0"
                         )
 
             with m.State("SEND"):

@@ -205,8 +205,7 @@ class Interface(wiring.PureInterface):
         granularity = 8 if self.has_byte_enable else self.data_width
         if memory_map.data_width != granularity:
             raise ValueError(
-                f"Memory map has data width {memory_map.data_width}, which is not the same as "
-                f"bus granularity {granularity}"
+                f"Memory map has data width {memory_map.data_width}, which is not the same as bus granularity {granularity}"
             )
 
         granularity_bits = exact_log2(self.data_width // granularity)
@@ -254,8 +253,7 @@ class WishboneMasterToAvalonBridge(Component):
 
         if self._granularity != 8 and self._granularity != self._data_width:
             raise ValueError(
-                "Unsupported Wishbone granularity for Avalon bridge: "
-                f"data_width={self._data_width}, granularity={self._granularity}"
+                f"Unsupported Wishbone granularity for Avalon bridge: data_width={self._data_width}, granularity={self._granularity}"
             )
 
         self._pipelined = wb.Feature.STALL in unflipped_bus.features

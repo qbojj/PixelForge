@@ -16,7 +16,6 @@ __all__ = ["Shape", "SQ", "UQ", "Value", "Const"]
 
 
 class Shape(hdl.ShapeCastable):
-
     def __init__(self, shape, f_bits=0):
         self._storage_shape = shape
         self.i_bits, self.f_bits = shape.width - f_bits, f_bits

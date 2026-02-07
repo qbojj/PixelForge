@@ -31,7 +31,7 @@ def _flatten_regs(
         elif isinstance(value, dict):
             yield from _flatten_regs(value, path + [key])
         else:
-            raise TypeError(f"Unexpected leaf at {'.'.join(path+[key])}: {value!r}")
+            raise TypeError(f"Unexpected leaf at {'.'.join(path + [key])}: {value!r}")
 
 
 def _sanitize(parts: List[str], upper: bool) -> str:

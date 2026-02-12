@@ -8,6 +8,7 @@
 #include "pixelforge_utils.h"
 #include "graphics_pipeline_csr_access.h"
 #include "demo_utils.h"
+#include "small_alloc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -100,6 +101,11 @@ typedef struct {
 typedef struct {
     /* PixelForge device */
     pixelforge_dev *dev;
+
+    /* GPU buffer memory pool */
+    pool_t *gpu_buffer_pool;
+    void *gpu_pool_virt;        /* Virtual address of pool backing memory */
+    uint32_t gpu_pool_phys;     /* Physical address of pool backing memory */
 
     /* Dirty flags */
     uint32_t dirty;
@@ -536,6 +542,26 @@ bool glInit(void) {
         return false;
     }
 
+    /* Allocate GPU buffer memory pool from linear allocator (16 MB) */
+    struct vram_block pool_block;
+    if (vram_alloc(&g_ctx->dev->vram, 16 * 1024 * 1024, 4096, &pool_block) != 0) {
+        pixelforge_close_dev(g_ctx->dev);
+        free(g_ctx);
+        g_ctx = NULL;
+        return false;
+    }
+
+    /* Initialize GPU buffer memory pool using allocated memory */
+    g_ctx->gpu_pool_virt = pool_block.virt;
+    g_ctx->gpu_pool_phys = pool_block.phys;
+    g_ctx->gpu_buffer_pool = small_init(pool_block.virt, 16 * 1024 * 1024);
+    if (!g_ctx->gpu_buffer_pool) {
+        pixelforge_close_dev(g_ctx->dev);
+        free(g_ctx);
+        g_ctx = NULL;
+        return false;
+    }
+
     /* Initialize matrix stacks */
     init_matrix_stack(&g_ctx->modelview_stack);
     init_matrix_stack(&g_ctx->projection_stack);
@@ -615,6 +641,7 @@ void glDestroy(void) {
     wait_for_draw(g_ctx);
 
     pixelforge_close_dev(g_ctx->dev);
+    small_destroy(g_ctx->gpu_buffer_pool);
     free(g_ctx->buffers);
     free(g_ctx);
     g_ctx = NULL;
@@ -1463,26 +1490,26 @@ void glBufferData(GLenum target, size_t size, const void *data, GLenum usage) {
     gl_buffer_t *buf = get_buffer_by_id(g_ctx, bound);
     if (!buf) return;
 
-    if (size == 0) {
-        buf->size = 0;
-        buf->virt = NULL;
-        buf->phys = 0;
-        return;
+    if (buf->phys != 0) {
+        // Wait for GPU to be idle before modifying or freeing existing buffer memory
+        pixelforge_wait_for_gpu_ready(g_ctx->dev, GPU_STAGE_IA, NULL);
     }
 
-    if (!buf->virt || size > buf->size) {
-        struct vram_block block;
-        if (vram_alloc(&g_ctx->dev->vram, size, 4096, &block) != 0) {
-            return;
-        }
-        buf->virt = block.virt;
-        buf->phys = block.phys;
+    void *new_data = small_realloc(g_ctx->gpu_buffer_pool, buf->virt, size);
+    if (!new_data && size > 0) {
+        assert(false && "GPU buffer pool out of memory");
+        return; // Allocation failed, keep old buffer
     }
 
     buf->size = size;
+    buf->virt = new_data;
+    buf->phys = g_ctx->gpu_pool_phys + (uint32_t)((uintptr_t)new_data - (uintptr_t)g_ctx->gpu_pool_virt);
+
 
     if (data) {
-        pixelforge_wait_for_gpu_ready(g_ctx->dev, GPU_STAGE_IA, NULL);
+        // copy the provided data into the buffer
+        // we don't need to wait here since if the buffer was used before then it had to have non-zero
+        // physical address, and we have already waited for the GPU to be idle if that was the case
         memcpy(buf->virt, data, size);
     }
 }

@@ -6,7 +6,7 @@ LDFLAGS ?= -static
 LDLIBS ?= -lm
 
 INCLUDE := -Iinclude
-SRC := src/graphics_pipeline_csr_access.c src/pixelforge_utils.c src/demo_utils.c src/udma_alloc.c src/obj_loader.c src/frame_capture.c src/gles11_wrapper.c
+SRC := src/graphics_pipeline_csr_access.c src/pixelforge_utils.c src/demo_utils.c src/udma_alloc.c src/obj_loader.c src/frame_capture.c src/small_alloc.c src/gles11_wrapper.c
 OBJ := $(SRC:.c=.o)
 LIB := libpixelforgecsr.a
 DEMO := pixelforge_demo

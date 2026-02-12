@@ -199,7 +199,7 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
         light.diffuse[i] = fp16_16(0.0f);
         light.specular[i] = fp16_16(0.0f);
     }
-    pf_csr_set_light0(csr, &light);
+    pf_csr_set_light(csr, 0, &light);
     DBG("Light 0 set: pos=(0,0,1) ambient=1.0 diffuse=0.0 specular=0.0");
 
     /* Primitive config */

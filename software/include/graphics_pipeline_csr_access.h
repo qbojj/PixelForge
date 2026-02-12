@@ -49,6 +49,9 @@ void pf_csr_get_attr_normal(volatile uint8_t *base, pixelforge_input_attr_t *att
 void pf_csr_set_attr_color(volatile uint8_t *base, const pixelforge_input_attr_t *attr);
 void pf_csr_get_attr_color(volatile uint8_t *base, pixelforge_input_attr_t *attr);
 
+void pf_csr_set_attr_texcoord(volatile uint8_t *base, uint32_t unit, const pixelforge_input_attr_t *attr);
+void pf_csr_get_attr_texcoord(volatile uint8_t *base, uint32_t unit, pixelforge_input_attr_t *attr);
+
 /* =============================
  * Vertex Transform
  * ============================= */
@@ -56,13 +59,13 @@ void pf_csr_set_vtx_xf(volatile uint8_t *base, const pixelforge_vtx_xf_config_t 
 void pf_csr_get_vtx_xf(volatile uint8_t *base, pixelforge_vtx_xf_config_t *cfg);
 
 /* =============================
- * Material & Light 0
+ * Material & Lights
  * ============================= */
 void pf_csr_set_material(volatile uint8_t *base, const pixelforge_material_t *mat);
 void pf_csr_get_material(volatile uint8_t *base, pixelforge_material_t *mat);
 
-void pf_csr_set_light0(volatile uint8_t *base, const pixelforge_light_t *lit);
-void pf_csr_get_light0(volatile uint8_t *base, pixelforge_light_t *lit);
+void pf_csr_set_light(volatile uint8_t *base, uint32_t light_idx, const pixelforge_light_t *lit);
+void pf_csr_get_light(volatile uint8_t *base, uint32_t light_idx, pixelforge_light_t *lit);
 
 /* =============================
  * Primitive Assembly

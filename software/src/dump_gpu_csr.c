@@ -173,7 +173,7 @@ static void dump_material(volatile uint8_t *csr) {
 static void dump_light(volatile uint8_t *csr, int index) {
     pixelforge_light_t light;
     if (index == 0) {
-        pf_csr_get_light0(csr, &light);
+        pf_csr_get_light(csr, 0, &light);
     } else {
         printf("  Light %d: not supported in getter functions\n", index);
         return;

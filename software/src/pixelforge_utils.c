@@ -114,6 +114,16 @@ pixelforge_dev* pixelforge_open_dev(void) {
     dev->vga_dma_regs->back_buffer = dev->buffer_phys[1];
     dev->vga_dma_regs->front_buffer = 1; /* Trigger initial swap */
 
+    /* Initialize depth/stencil buffer */
+    size_t ds_size = (size_t)dev->x_resolution * dev->y_resolution * 4;
+    struct vram_block ds_block;
+    if (vram_alloc(&dev->vram, ds_size, PAGE_SIZE, &ds_block)) {
+        goto error;
+    }
+    dev->depthstencil_buffer = ds_block.virt;
+    dev->depthstencil_buffer_phys = ds_block.phys;
+    memset(dev->depthstencil_buffer, 0, ds_size);
+
     return dev;
 
 error:

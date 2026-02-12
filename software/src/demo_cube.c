@@ -123,7 +123,7 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t idx_addr, uint32_t idx_c
     light.specular[0] = fp16_16(0.0f);
     light.specular[1] = fp16_16(0.0f);
     light.specular[2] = fp16_16(0.0f);
-    pf_csr_set_light0(csr, &light);
+    pf_csr_set_light(csr, 0, &light);
 
     /* No face culling; using depth testing instead */
     pixelforge_prim_config_t prim = {

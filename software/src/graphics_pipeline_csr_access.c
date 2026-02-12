@@ -1,4 +1,5 @@
 #include "graphics_pipeline_csr_access.h"
+#include <assert.h>
 
 /* =============================
  * Index Generator
@@ -114,6 +115,21 @@ void pf_csr_get_attr_color(volatile uint8_t *base, pixelforge_input_attr_t *attr
     }
 }
 
+void pf_csr_set_attr_texcoord(volatile uint8_t *base, uint32_t unit, const pixelforge_input_attr_t *attr) {
+    (void)base;
+    (void)unit;
+    (void)attr;
+
+    assert(false && "not implemented");
+}
+void pf_csr_get_attr_texcoord(volatile uint8_t *base, uint32_t unit, pixelforge_input_attr_t *attr) {
+    (void)base;
+    (void)unit;
+    (void)attr;
+
+    assert(false && "not implemented");
+}
+
 /* =============================
  * Vertex Transform
  * ============================= */
@@ -154,21 +170,47 @@ void pf_csr_get_material(volatile uint8_t *base, pixelforge_material_t *mat) {
     mat->shininess = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_MATERIAL_SHININESS);
 }
 
-void pf_csr_set_light0(volatile uint8_t *base, const pixelforge_light_t *lit) {
-    for (int i = 0; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION + i*4, (uint32_t)lit->position[i]);
-    for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT  + i*4, (uint32_t)lit->ambient[i]);
-    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT  + i*4, 0);
-    for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE  + i*4, (uint32_t)lit->diffuse[i]);
-    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE  + i*4, 0);
-    for (int i = 0; i < 3; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR + i*4, (uint32_t)lit->specular[i]);
-    for (int i = 3; i < 4; ++i) pf_csr_write32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR + i*4, 0);
+static void pf_csr_set_light_any(volatile uint8_t *base, uint32_t light_base, const pixelforge_light_t *lit) {
+    uint32_t pos_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t amb_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t dif_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t spec_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+
+    for (int i = 0; i < 4; ++i) pf_csr_write32(base, light_base + pos_off + i*4, (uint32_t)lit->position[i]);
+    for (int i = 0; i < 3; ++i) pf_csr_write32(base, light_base + amb_off + i*4, (uint32_t)lit->ambient[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, light_base + amb_off + i*4, 0);
+    for (int i = 0; i < 3; ++i) pf_csr_write32(base, light_base + dif_off + i*4, (uint32_t)lit->diffuse[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, light_base + dif_off + i*4, 0);
+    for (int i = 0; i < 3; ++i) pf_csr_write32(base, light_base + spec_off + i*4, (uint32_t)lit->specular[i]);
+    for (int i = 3; i < 4; ++i) pf_csr_write32(base, light_base + spec_off + i*4, 0);
 }
-void pf_csr_get_light0(volatile uint8_t *base, pixelforge_light_t *lit) {
-    for (int i = 0; i < 4; ++i) lit->position[i] = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION + i*4);
-    for (int i = 0; i < 3; ++i) lit->ambient[i]  = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT  + i*4);
-    for (int i = 0; i < 3; ++i) lit->diffuse[i]  = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE  + i*4);
-    for (int i = 0; i < 3; ++i) lit->specular[i] = (int32_t)pf_csr_read32(base, PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR + i*4);
+
+static void pf_csr_get_light_any(volatile uint8_t *base, uint32_t light_base, pixelforge_light_t *lit) {
+    uint32_t pos_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t amb_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_AMBIENT - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t dif_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_DIFFUSE - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+    uint32_t spec_off = PIXELFORGE_CSR_VTX_SH_0_LIGHT_SPECULAR - PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION;
+
+    for (int i = 0; i < 4; ++i) lit->position[i] = (int32_t)pf_csr_read32(base, light_base + pos_off + i*4);
+    for (int i = 0; i < 3; ++i) lit->ambient[i]  = (int32_t)pf_csr_read32(base, light_base + amb_off + i*4);
+    for (int i = 0; i < 3; ++i) lit->diffuse[i]  = (int32_t)pf_csr_read32(base, light_base + dif_off + i*4);
+    for (int i = 0; i < 3; ++i) lit->specular[i] = (int32_t)pf_csr_read32(base, light_base + spec_off + i*4);
 }
+
+static const uint32_t light_bases[] = {
+    PIXELFORGE_CSR_VTX_SH_0_LIGHT_POSITION,
+};
+
+void pf_csr_set_light(volatile uint8_t *base, uint32_t light_idx, const pixelforge_light_t *lit) {
+    assert(light_idx < sizeof(light_bases)/sizeof(light_bases[0]));
+    pf_csr_set_light_any(base, light_bases[light_idx], lit);
+}
+
+void pf_csr_get_light(volatile uint8_t *base, uint32_t light_idx, pixelforge_light_t *lit) {
+    assert(light_idx < sizeof(light_bases)/sizeof(light_bases[0]));
+    pf_csr_get_light_any(base, light_bases[light_idx], lit);
+}
+
 
 /* =============================
  * Primitive Assembly

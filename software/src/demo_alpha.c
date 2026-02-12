@@ -153,7 +153,7 @@ static void configure_gpu(
     light.ambient[0] = fp16_16(1.0f);
     light.ambient[1] = fp16_16(1.0f);
     light.ambient[2] = fp16_16(1.0f);
-    pf_csr_set_light0(csr, &light);
+    pf_csr_set_light(csr, 0, &light);
 
     pixelforge_prim_config_t prim = {
         .type = PIXELFORGE_PRIM_TRIANGLES,

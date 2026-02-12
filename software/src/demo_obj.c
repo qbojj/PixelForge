@@ -207,7 +207,7 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
     light.specular[0] = fp16_16(0.5f);
     light.specular[1] = fp16_16(0.5f);
     light.specular[2] = fp16_16(0.5f);
-    pf_csr_set_light0(csr, &light);
+    pf_csr_set_light(csr, 0, &light);
 
     pixelforge_prim_config_t prim = {
         .type = PIXELFORGE_PRIM_TRIANGLES,
@@ -303,7 +303,7 @@ static void set_stencil_outline_mode(pixelforge_dev *dev) {
         .diffuse = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
         .specular = { fp16_16(0.0f), fp16_16(0.0f), fp16_16(0.0f) },
     };
-    pf_csr_set_light0(csr, &light);
+    pf_csr_set_light(csr, 0, &light);
 
     pixelforge_material_t mat = {
         .ambient = { fp16_16(1.0f), fp16_16(1.0f), fp16_16(1.0f) },

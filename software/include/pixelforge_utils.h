@@ -33,6 +33,8 @@ typedef struct {
     int old_display_buffer;         /* Buffer previously displayed (possibly still being scanned out) */
     int current_display_buffer;     /* Buffer currently being displayed */
     int render_buffer;              /* Buffer being rendered to */
+    uint8_t *depthstencil_buffer;
+    uint32_t depthstencil_buffer_phys;
     uint32_t x_resolution;
     uint32_t y_resolution;
     uint32_t data_width;

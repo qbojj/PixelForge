@@ -242,6 +242,7 @@ static float* get_current_stack_matrix(gles_context_t *ctx) {
         case GL_TEXTURE:
             return ctx->texture_stack.matrices[ctx->texture_stack.depth];
         default:
+            assert(false && "Invalid matrix mode");
             return ctx->modelview_stack.matrices[ctx->modelview_stack.depth];
     }
 }
@@ -256,7 +257,9 @@ static GLenum gl_compare_to_pf_compare(GLenum func) {
         case GL_NOTEQUAL: return PIXELFORGE_CMP_NOT_EQUAL;
         case GL_GEQUAL:   return PIXELFORGE_CMP_GREATER_OR_EQUAL;
         case GL_ALWAYS:   return PIXELFORGE_CMP_ALWAYS;
-        default:          return PIXELFORGE_CMP_ALWAYS;
+        default:
+            assert(false && "Invalid compare function");
+            return PIXELFORGE_CMP_ALWAYS;
     }
 }
 
@@ -272,7 +275,9 @@ static GLenum gl_blend_to_pf_blend(GLenum factor) {
         case GL_ONE_MINUS_SRC_ALPHA:    return PIXELFORGE_BLEND_ONE_MINUS_SRC_ALPHA;
         case GL_DST_ALPHA:              return PIXELFORGE_BLEND_DST_ALPHA;
         case GL_ONE_MINUS_DST_ALPHA:    return PIXELFORGE_BLEND_ONE_MINUS_DST_ALPHA;
-        default:                        return PIXELFORGE_BLEND_ONE;
+        default:
+            assert(false && "Invalid blend factor");
+            return PIXELFORGE_BLEND_ONE;
     }
 }
 
@@ -285,7 +290,9 @@ static GLenum gl_stencil_op_to_pf(GLenum op) {
         case GL_INVERT:    return PIXELFORGE_STENCIL_INVERT;
         case GL_INCR_WRAP: return PIXELFORGE_STENCIL_INCR_WRAP;
         case GL_DECR_WRAP: return PIXELFORGE_STENCIL_DECR_WRAP;
-        default:           return PIXELFORGE_STENCIL_KEEP;
+        default:
+            assert(false && "Invalid stencil operation");
+            return PIXELFORGE_STENCIL_KEEP;
     }
 }
 
@@ -297,7 +304,20 @@ static pixelforge_input_topology_t gl_mode_to_topology(GLenum mode) {
         case GL_TRIANGLES:      return PIXELFORGE_TOPOLOGY_TRIANGLE_LIST;
         case GL_TRIANGLE_STRIP: return PIXELFORGE_TOPOLOGY_TRIANGLE_STRIP;
         case GL_TRIANGLE_FAN:   return PIXELFORGE_TOPOLOGY_TRIANGLE_FAN;
-        default:                return PIXELFORGE_TOPOLOGY_TRIANGLE_LIST;
+        default:
+            assert(false && "Invalid topology mode");
+            return PIXELFORGE_TOPOLOGY_TRIANGLE_LIST;
+    }
+}
+
+static pixelforge_cull_face_t gl_cull_to_pf_cull(GLenum mode) {
+    switch (mode) {
+        case GL_FRONT: return PIXELFORGE_CULL_FRONT;
+        case GL_BACK:  return PIXELFORGE_CULL_BACK;
+        case GL_FRONT_AND_BACK: return PIXELFORGE_CULL_FRONT_AND_BACK;
+        default:
+            assert(false && "Invalid cull mode");
+            return PIXELFORGE_CULL_NONE;
     }
 }
 
@@ -326,7 +346,7 @@ static void upload_matrices(gles_context_t *ctx) {
     mat3_from_mat4(nm, mv);
     mat3_to_fp16_16(xf.normal_mv_inv_t, nm);
 
-    // TODO: Texture matrices
+    // TODO: Texture matrix
 
     pf_csr_set_vtx_xf(csr, &xf);
     ctx->dirty &= ~DIRTY_MATRICES;
@@ -467,21 +487,9 @@ static void upload_cull(gles_context_t *ctx) {
 
     volatile uint8_t *csr = ctx->dev->csr_base;
 
-    pixelforge_cull_face_t cull_mode = PIXELFORGE_CULL_NONE;
-
-    if (ctx->cull_face_enabled) {
-        if (ctx->cull_face_mode == GL_FRONT) {
-            cull_mode = PIXELFORGE_CULL_FRONT;
-        } else if (ctx->cull_face_mode == GL_BACK) {
-            cull_mode = PIXELFORGE_CULL_BACK;
-        } else if (ctx->cull_face_mode == GL_FRONT_AND_BACK) {
-            cull_mode = PIXELFORGE_CULL_FRONT_AND_BACK;
-        }
-    }
-
     pixelforge_prim_config_t prim = {
         .type = PIXELFORGE_PRIM_TRIANGLES,
-        .cull = cull_mode,
+        .cull = ctx->cull_face_enabled ? gl_cull_to_pf_cull(ctx->cull_face_mode) : PIXELFORGE_CULL_NONE,
         .winding = ctx->front_face == GL_CCW ? PIXELFORGE_WINDING_CCW : PIXELFORGE_WINDING_CW,
     };
 
@@ -512,8 +520,8 @@ static void upload_framebuffer(gles_context_t *ctx) {
     fb.scissor_height = ctx->scissor_height;
     fb.color_address = ctx->dev->buffer_phys[ctx->dev->render_buffer];
     fb.color_pitch = ctx->dev->buffer_stride;
-    fb.depthstencil_address = 0;
-    fb.depthstencil_pitch = 0;
+    fb.depthstencil_address = ctx->dev->depthstencil_buffer_phys;
+    fb.depthstencil_pitch = ctx->dev->buffer_stride;
 
     pf_csr_set_fb(csr, &fb);
     ctx->dirty &= ~DIRTY_FRAMEBUFFER;

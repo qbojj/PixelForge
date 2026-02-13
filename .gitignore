@@ -11,6 +11,8 @@ test.gtkw
 .mypy_cache
 .ruff_cache
 
+uv.lock
+
 *.gtkw
 *.vcd
 

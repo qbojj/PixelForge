@@ -36,7 +36,7 @@ from ..utils.visualization import Fragment, FragmentVisualizer
 def make_pa_vertex(pos, color):
     """Create a primitive assembly vertex (output of PrimitiveAssembly)"""
     return {
-        "position_ndc": pos,
+        "position": pos,
         "texcoords": [[0.0, 0.0, 0.0, 1.0] for _ in range(num_textures)],
         "color": color,
     }
@@ -254,7 +254,7 @@ def test_rasterizer_single_triangle(persp: bool):
     if persp:
         for i, v in enumerate(triangle_vertices):
             for j in range(4):
-                v["position_ndc"][j] *= (
+                v["position"][j] *= (
                     0.5 + i * 0.5
                 )  # Vary w for perspective interpolation
 

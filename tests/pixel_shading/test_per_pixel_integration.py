@@ -149,3 +149,169 @@ def test_per_pixel_pipeline_end_to_end():
     )
 
     sim.run()
+
+
+def test_depthstencil_ordering_same_pixel():
+    m = Module()
+
+    m.submodules.ds = ds = DepthStencilTest()
+    m.submodules.swp = swp = SwapchainOutput()
+
+    wiring.connect(m, ds.o, swp.i)
+
+    t = SimpleTestbench(m, mem_size=4096, mem_addr=0)
+    t.arbiter.add(ds.wb_bus)
+    t.arbiter.add(swp.wb_bus)
+
+    fb_info = make_fb_info()
+
+    stencil_conf = {
+        "compare_op": CompareOp.ALWAYS,
+        "pass_op": StencilOp.KEEP,
+        "fail_op": StencilOp.KEEP,
+        "depth_fail_op": StencilOp.KEEP,
+        "reference": 0,
+        "mask": 0xFF,
+        "write_mask": 0xFF,
+    }
+
+    depth_conf = {
+        "test_enabled": 1,
+        "write_enabled": 1,
+        "compare_op": CompareOp.GREATER,
+    }
+
+    blend_conf = {
+        "src_factor": BlendFactor.ONE,
+        "dst_factor": BlendFactor.ZERO,
+        "src_a_factor": BlendFactor.ONE,
+        "dst_a_factor": BlendFactor.ZERO,
+        "enabled": 0,
+        "blend_op": BlendOp.ADD,
+        "blend_a_op": BlendOp.ADD,
+        "color_write_mask": 0xF,
+    }
+
+    frag1 = make_fragment(1, 1, 0.1, [1.0, 0.0, 0.0, 1.0])
+    frag2 = make_fragment(1, 1, 0.2, [0.0, 1.0, 0.0, 1.0])
+    frag3 = make_fragment(1, 1, 0.15, [0.0, 0.0, 1.0, 1.0])
+    fragments = [frag1, frag2, frag3]
+
+    expected_color = [0.0, 1.0, 0.0, 1.0]
+    expected_depth = 0.2
+
+    sim = Simulator(t)
+    sim.add_clock(1e-6)
+
+    async def init_proc(ctx):
+        await t.initialize_memory(ctx, fb_info["color_address"], b"\x00" * 64)
+        await t.initialize_memory(ctx, fb_info["depthstencil_address"], b"\x00" * 64)
+
+        ctx.set(ds.fb_info, fb_info)
+        ctx.set(swp.fb_info, fb_info)
+        ctx.set(ds.stencil_conf_front, stencil_conf)
+        ctx.set(ds.stencil_conf_back, stencil_conf)
+        ctx.set(ds.depth_conf, depth_conf)
+        ctx.set(swp.conf, blend_conf)
+
+    async def final_checker(ctx):
+        color_bytes = await t.dbg_access.read_bytes(ctx, fb_info["color_address"], 4)
+        bgra_values = [c / 255.0 for c in color_bytes]
+        color_values = [bgra_values[2], bgra_values[1], bgra_values[0], bgra_values[3]]
+        assert color_values == pytest.approx(expected_color, abs=1 / 255)
+
+        depth_bytes = await t.dbg_access.read_bytes(
+            ctx, fb_info["depthstencil_address"], 2
+        )
+        depth_value = int.from_bytes(depth_bytes, "little") / 65535.0
+        assert depth_value == pytest.approx(expected_depth, abs=1 / 65535)
+
+    stream_testbench(
+        sim,
+        input_stream=ds.i,
+        input_data=fragments,
+        init_process=init_proc,
+        final_checker=final_checker,
+        wait_after_supposed_finish=200,
+    )
+
+    sim.run()
+
+
+def test_blend_ordering_same_pixel():
+    m = Module()
+
+    m.submodules.ds = ds = DepthStencilTest()
+    m.submodules.swp = swp = SwapchainOutput()
+
+    wiring.connect(m, ds.o, swp.i)
+
+    t = SimpleTestbench(m, mem_size=4096, mem_addr=0)
+    t.arbiter.add(ds.wb_bus)
+    t.arbiter.add(swp.wb_bus)
+
+    fb_info = make_fb_info()
+
+    stencil_conf = {
+        "compare_op": CompareOp.ALWAYS,
+        "pass_op": StencilOp.KEEP,
+        "fail_op": StencilOp.KEEP,
+        "depth_fail_op": StencilOp.KEEP,
+        "reference": 0,
+        "mask": 0xFF,
+        "write_mask": 0xFF,
+    }
+
+    depth_conf = {
+        "test_enabled": 0,
+        "write_enabled": 0,
+        "compare_op": CompareOp.ALWAYS,
+    }
+
+    blend_conf = {
+        "src_factor": BlendFactor.ONE,
+        "dst_factor": BlendFactor.ONE_MINUS_SRC_ALPHA,
+        "src_a_factor": BlendFactor.ONE,
+        "dst_a_factor": BlendFactor.ONE_MINUS_SRC_ALPHA,
+        "enabled": 1,
+        "blend_op": BlendOp.ADD,
+        "blend_a_op": BlendOp.ADD,
+        "color_write_mask": 0xF,
+    }
+
+    frag1 = make_fragment(2, 2, 0.0, [1.0, 0.0, 0.0, 0.5])
+    frag2 = make_fragment(2, 2, 0.0, [0.0, 1.0, 0.0, 0.25])
+    fragments = [frag1, frag2]
+
+    expected_color = [0.75, 1.0, 0.0, 0.625]
+
+    sim = Simulator(t)
+    sim.add_clock(1e-6)
+
+    async def init_proc(ctx):
+        await t.initialize_memory(ctx, fb_info["color_address"], b"\x00" * 64)
+        await t.initialize_memory(ctx, fb_info["depthstencil_address"], b"\x00" * 64)
+
+        ctx.set(ds.fb_info, fb_info)
+        ctx.set(swp.fb_info, fb_info)
+        ctx.set(ds.stencil_conf_front, stencil_conf)
+        ctx.set(ds.stencil_conf_back, stencil_conf)
+        ctx.set(ds.depth_conf, depth_conf)
+        ctx.set(swp.conf, blend_conf)
+
+    async def final_checker(ctx):
+        color_bytes = await t.dbg_access.read_bytes(ctx, fb_info["color_address"], 4)
+        bgra_values = [c / 255.0 for c in color_bytes]
+        color_values = [bgra_values[2], bgra_values[1], bgra_values[0], bgra_values[3]]
+        assert color_values == pytest.approx(expected_color, abs=1 / 255)
+
+    stream_testbench(
+        sim,
+        input_stream=ds.i,
+        input_data=fragments,
+        init_process=init_proc,
+        final_checker=final_checker,
+        wait_after_supposed_finish=200,
+    )
+
+    sim.run()

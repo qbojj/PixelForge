@@ -1,7 +1,6 @@
 """Visualization utilities for rasterizer output"""
 
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import numpy as np
 
@@ -10,8 +9,8 @@ import numpy as np
 class Fragment:
     """Represents a rasterized fragment"""
 
-    coord_pos: Tuple[int, int]
-    color: Tuple[float, float, float, float]
+    coord_pos: tuple[int, int]
+    color: tuple[float, float, float, float]
 
 
 class FragmentVisualizer:
@@ -25,7 +24,7 @@ class FragmentVisualizer:
         self.depth = np.full((height, width), 1.0, dtype=np.float32)  # Depth buffer
         self.stencil = np.zeros((height, width), dtype=np.uint8)  # Stencil buffer
 
-    def render(self, fragments: List[Fragment]):
+    def render(self, fragments: list[Fragment]):
         """Render fragments onto the canvas"""
 
         for frag in fragments:
@@ -55,7 +54,7 @@ class FragmentVisualizer:
             self.canvas[y, x, 0:3] = out_rgb
             self.canvas[y, x, 3] = out_a
 
-    def clear(self, color: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)):
+    def clear(self, color: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)):
         """Clear the canvas to a specific color"""
         self.canvas[:, :] = color
 
@@ -136,7 +135,7 @@ class FragmentVisualizer:
 
         print(f"Generated PPM image: {filepath}")
 
-    def generate_statistics(self, fragments: List[Fragment]) -> dict:
+    def generate_statistics(self, fragments: list[Fragment]) -> dict:
         """Generate statistics about the rasterized output
 
         Args:
@@ -185,7 +184,7 @@ class FragmentVisualizer:
         }
 
 
-def print_fragment_summary(fragments: List, visualizer: FragmentVisualizer):
+def print_fragment_summary(fragments: list, visualizer: FragmentVisualizer):
     """Print a comprehensive summary of fragments with visualization
 
     Args:

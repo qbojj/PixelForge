@@ -66,7 +66,7 @@ def test_indexed_u32():
         addr=0x80000000,
         count=5,
         kind=IndexKind.U32,
-        memory_data=b"".join((i.to_bytes(4, "little") for i in [0, 2, 4, 1, 5])),
+        memory_data=b"".join(i.to_bytes(4, "little") for i in [0, 2, 4, 1, 5]),
         expected=[0, 2, 4, 1, 5],
     )
 
@@ -76,7 +76,7 @@ def test_indexed_u16():
         addr=0x80000000,
         count=6,
         kind=IndexKind.U16,
-        memory_data=b"".join((i.to_bytes(2, "little") for i in [2, 3, 4, 5, 1, 0])),
+        memory_data=b"".join(i.to_bytes(2, "little") for i in [2, 3, 4, 5, 1, 0]),
         expected=[2, 3, 4, 5, 1, 0],
     )
 
@@ -86,9 +86,7 @@ def test_indexed_u8():
         addr=0x80000000,
         count=8,
         kind=IndexKind.U8,
-        memory_data=b"".join(
-            (i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8])
-        ),
+        memory_data=b"".join(i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8]),
         expected=[1, 2, 3, 4, 5, 6, 7, 8],
     )
 
@@ -98,9 +96,7 @@ def test_indexed_u8_unaligned():
         addr=0x80000001,
         count=8,
         kind=IndexKind.U8,
-        memory_data=b"".join(
-            (i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8])
-        ),
+        memory_data=b"".join(i.to_bytes(1, "little") for i in [1, 2, 3, 4, 5, 6, 7, 8]),
         expected=[1, 2, 3, 4, 5, 6, 7, 8],
     )
 
@@ -110,6 +106,6 @@ def test_indexed_u16_unaligned():
         addr=0x80000002,
         count=6,
         kind=IndexKind.U16,
-        memory_data=b"".join((i.to_bytes(2, "little") for i in [2, 3, 4, 5, 1, 0])),
+        memory_data=b"".join(i.to_bytes(2, "little") for i in [2, 3, 4, 5, 1, 0]),
         expected=[2, 3, 4, 5, 1, 0],
     )

@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 from amaranth import *
 from amaranth.lib import stream
@@ -63,9 +63,9 @@ def stream_testbench(
     idle_for: int | None = None,
 ) -> None:
     if input_data is not None or input_stream is not None:
-        assert (
-            input_data is not None and input_stream is not None
-        ), "Both input_stream and input_data must be provided to send data."
+        assert input_data is not None and input_stream is not None, (
+            "Both input_stream and input_data must be provided to send data."
+        )
 
     if output_stream is not None:
         if expected_output_data is None and output_data_checker is None:
@@ -83,14 +83,14 @@ def stream_testbench(
             output_data_checker = data_checker(expected_output_data)
 
     if idle_for is not None:
-        assert (
-            output_stream is not None
-        ), "output_stream must be provided to idle based on its valid signal."
+        assert output_stream is not None, (
+            "output_stream must be provided to idle based on its valid signal."
+        )
 
     if output_data_checker is not None or expected_output_data is not None:
-        assert (
-            output_stream is not None
-        ), "output_stream must be provided to verify output data."
+        assert output_stream is not None, (
+            "output_stream must be provided to verify output data."
+        )
 
     is_initialized = Signal(1) if init_process is not None else C(1)
     all_data_sent = Signal(1) if input_data is not None else C(1)

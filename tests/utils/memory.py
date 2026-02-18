@@ -55,9 +55,9 @@ class DebugAccess(Interface):
             The read data as a list of Consts, one per byte.
         """
 
-        assert (
-            addr % (self.data_width // self.granularity) == 0
-        ), "Address must be aligned to data width/granularity"
+        assert addr % (self.data_width // self.granularity) == 0, (
+            "Address must be aligned to data width/granularity"
+        )
 
         data = []
         for i in range(width):
@@ -123,9 +123,9 @@ class DebugAccess(Interface):
             The data to write as a list of Consts, one per byte.
         """
 
-        assert (
-            addr % (self.data_width // self.granularity) == 0
-        ), "Address must be aligned to data width/granularity"
+        assert addr % (self.data_width // self.granularity) == 0, (
+            "Address must be aligned to data width/granularity"
+        )
 
         for i, datum in enumerate(data):
             ctx.set(self.adr, addr // (self.data_width // self.granularity) + i)

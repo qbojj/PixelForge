@@ -272,9 +272,9 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
             case _:
                 raise ValueError("Unsupported primitive type")
 
-        assert (
-            len(results) % num_verts_per_prim == 0
-        ), "Output vertex count not multiple of primitive size"
+        assert len(results) % num_verts_per_prim == 0, (
+            "Output vertex count not multiple of primitive size"
+        )
 
         output_prims = [
             results[i : i + num_verts_per_prim]
@@ -286,9 +286,9 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
         print(f"Output primitives: {len(output_prims)}")
         print(f"Expected count: {expected_count}")
 
-        assert (
-            len(output_prims) == expected_count
-        ), f"Expected {expected_count} primitives, got {len(output_prims)}"
+        assert len(output_prims) == expected_count, (
+            f"Expected {expected_count} primitives, got {len(output_prims)}"
+        )
 
         print("Output Primitives:", output_prims)
 
@@ -301,15 +301,15 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
                 ndc_y = y / w
                 ndc_z = z / w
                 err = 0.001
-                assert (
-                    -1.0 - err <= ndc_x <= 1.0 + err
-                ), f"Primitive {prim_idx} Vertex {vert_idx} x out of NDC bounds: {ndc_x}"
-                assert (
-                    -1.0 - err <= ndc_y <= 1.0 + err
-                ), f"Primitive {prim_idx} Vertex {vert_idx} y out of NDC bounds: {ndc_y}"
-                assert (
-                    -1.0 - err <= ndc_z <= 1.0 + err
-                ), f"Primitive {prim_idx} Vertex {vert_idx} z out of NDC bounds: {ndc_z}"
+                assert -1.0 - err <= ndc_x <= 1.0 + err, (
+                    f"Primitive {prim_idx} Vertex {vert_idx} x out of NDC bounds: {ndc_x}"
+                )
+                assert -1.0 - err <= ndc_y <= 1.0 + err, (
+                    f"Primitive {prim_idx} Vertex {vert_idx} y out of NDC bounds: {ndc_y}"
+                )
+                assert -1.0 - err <= ndc_z <= 1.0 + err, (
+                    f"Primitive {prim_idx} Vertex {vert_idx} z out of NDC bounds: {ndc_z}"
+                )
 
     async def init_process(ctx):
         # Set primitive type
@@ -377,9 +377,9 @@ def test_clipper_interpolation():
 
                 # color values should sum to approximately 1.0 (ignoring alpha)
                 assert 0.9 <= r + g + b <= 1.1, "Color channels do not sum to ~1.0"
-                assert (
-                    r > 0.0 or b > 0.0
-                ), "At least one of red or blue should be non-zero"
+                assert r > 0.0 or b > 0.0, (
+                    "At least one of red or blue should be non-zero"
+                )
                 assert a == 1.0, "Alpha channel should be 1.0"
 
                 # colors should be in [(1,0,0), (0,0,1), (0.5,0.5,0), (0,0.5,0.5)]

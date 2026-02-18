@@ -42,7 +42,7 @@ class Shape(hdl.ShapeCastable):
 
     def const(self, value):
         if value is None:
-            value = int(0)
+            value = 0
         return Const(value, self)._target
 
     def as_shape(self) -> hdl.Shape:
@@ -376,7 +376,6 @@ class Value(hdl.ValueCastable):
 
 class Const(Value):
     def __init__(self, value, shape=None, clamp=False):
-
         if isinstance(value, float) or isinstance(value, int):
             num, den = value.as_integer_ratio()
         elif isinstance(value, Const):

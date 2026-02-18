@@ -136,24 +136,22 @@ class IndexGenerator(wiring.Component):
                     m.d.sync += data_read.eq(self.bus.dat_r)
                     m.next = "INDEX_SEND"
 
-            with m.State("INDEX_SEND"):
-                with m.If(~self.o.valid | self.o.ready):
-                    next_addr = address + index_increment
-                    m.d.sync += [
-                        self.o.payload.eq(extended_data),
-                        self.o.valid.eq(1),
-                        address.eq(next_addr),
-                        cur_idx.eq(cur_idx + 1),
-                    ]
-                    with m.If(cur_idx + 1 == count):
-                        m.next = "WAIT_FLUSH"
-                    with m.Elif(next_addr[: len(offset)] != 0):
-                        m.next = "INDEX_SEND"
-                    with m.Else():
-                        m.next = "MEM_READ"  # crossed word boundary -> read next word
-            with m.State("WAIT_FLUSH"):
-                with m.If(~self.o.valid | self.o.ready):
-                    m.next = "IDLE"
+            with m.State("INDEX_SEND"), m.If(~self.o.valid | self.o.ready):
+                next_addr = address + index_increment
+                m.d.sync += [
+                    self.o.payload.eq(extended_data),
+                    self.o.valid.eq(1),
+                    address.eq(next_addr),
+                    cur_idx.eq(cur_idx + 1),
+                ]
+                with m.If(cur_idx + 1 == count):
+                    m.next = "WAIT_FLUSH"
+                with m.Elif(next_addr[: len(offset)] != 0):
+                    m.next = "INDEX_SEND"
+                with m.Else():
+                    m.next = "MEM_READ"  # crossed word boundary -> read next word
+            with m.State("WAIT_FLUSH"), m.If(~self.o.valid | self.o.ready):
+                m.next = "IDLE"
 
         return m
 
@@ -210,152 +208,147 @@ class InputTopologyProcessor(wiring.Component):
             m.d.sync += vertex_count.eq(0)
             m.d.comb += self.i.ready.eq(1)
 
-        with m.If(self.i.valid & ~reset_sig):
-            with m.Switch(self.c_input_topology):
-                with m.Case(InputTopology.POINT_LIST):
+        with m.If(self.i.valid & ~reset_sig), m.Switch(self.c_input_topology):
+            with m.Case(InputTopology.POINT_LIST):
+                m.d.comb += [
+                    w_out.i.p.data[0].eq(idx),
+                    w_out.i.p.n.eq(1),
+                    w_out.i.valid.eq(1),
+                    self.i.ready.eq(w_out.i.ready),
+                ]
+            with m.Case(InputTopology.LINE_LIST), m.Switch(vertex_count):
+                with m.Case(0):
+                    m.d.sync += [
+                        v1.eq(idx),
+                        vertex_count.eq(1),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
+                with m.Case(1):
                     m.d.comb += [
-                        w_out.i.p.data[0].eq(idx),
-                        w_out.i.p.n.eq(1),
+                        w_out.i.p.data[0].eq(v1),
+                        w_out.i.p.data[1].eq(idx),
+                        w_out.i.p.n.eq(2),
                         w_out.i.valid.eq(1),
                         self.i.ready.eq(w_out.i.ready),
                     ]
-                with m.Case(InputTopology.LINE_LIST):
-                    with m.Switch(vertex_count):
-                        with m.Case(0):
-                            m.d.sync += [
-                                v1.eq(idx),
-                                vertex_count.eq(1),
-                            ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(1):
-                            m.d.comb += [
-                                w_out.i.p.data[0].eq(v1),
-                                w_out.i.p.data[1].eq(idx),
-                                w_out.i.p.n.eq(2),
-                                w_out.i.valid.eq(1),
-                                self.i.ready.eq(w_out.i.ready),
-                            ]
-                            with m.If(w_out.i.ready):
-                                m.d.sync += vertex_count.eq(0)
-                with m.Case(InputTopology.TRIANGLE_LIST):
-                    with m.Switch(vertex_count):
-                        with m.Case(0):
-                            m.d.sync += [
-                                v1.eq(idx),
-                                vertex_count.eq(1),
-                            ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(1):
-                            m.d.sync += [
-                                v2.eq(idx),
-                                vertex_count.eq(2),
-                            ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(2):
-                            m.d.comb += [
-                                w_out.i.p.data[0].eq(v1),
-                                w_out.i.p.data[1].eq(v2),
-                                w_out.i.p.data[2].eq(idx),
-                                w_out.i.p.n.eq(3),
-                                w_out.i.valid.eq(1),
-                                self.i.ready.eq(w_out.i.ready),
-                            ]
-                            with m.If(w_out.i.ready):
-                                m.d.sync += vertex_count.eq(0)
-                with m.Case(InputTopology.LINE_STRIP):
-                    with m.If(vertex_count == 0):
+                    with m.If(w_out.i.ready):
+                        m.d.sync += vertex_count.eq(0)
+            with m.Case(InputTopology.TRIANGLE_LIST):
+                with m.Switch(vertex_count):
+                    with m.Case(0):
                         m.d.sync += [
                             v1.eq(idx),
                             vertex_count.eq(1),
                         ]
                         m.d.comb += self.i.ready.eq(1)
-                    with m.Else():
+                    with m.Case(1):
+                        m.d.sync += [
+                            v2.eq(idx),
+                            vertex_count.eq(2),
+                        ]
+                        m.d.comb += self.i.ready.eq(1)
+                    with m.Case(2):
                         m.d.comb += [
                             w_out.i.p.data[0].eq(v1),
-                            w_out.i.p.data[1].eq(idx),
-                            w_out.i.p.n.eq(2),
+                            w_out.i.p.data[1].eq(v2),
+                            w_out.i.p.data[2].eq(idx),
+                            w_out.i.p.n.eq(3),
                             w_out.i.valid.eq(1),
                             self.i.ready.eq(w_out.i.ready),
                         ]
                         with m.If(w_out.i.ready):
-                            m.d.sync += v1.eq(idx)
-                with m.Case(InputTopology.TRIANGLE_STRIP):
-                    with m.Switch(vertex_count):
-                        with m.Case(0):
+                            m.d.sync += vertex_count.eq(0)
+            with m.Case(InputTopology.LINE_STRIP):
+                with m.If(vertex_count == 0):
+                    m.d.sync += [
+                        v1.eq(idx),
+                        vertex_count.eq(1),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
+                with m.Else():
+                    m.d.comb += [
+                        w_out.i.p.data[0].eq(v1),
+                        w_out.i.p.data[1].eq(idx),
+                        w_out.i.p.n.eq(2),
+                        w_out.i.valid.eq(1),
+                        self.i.ready.eq(w_out.i.ready),
+                    ]
+                    with m.If(w_out.i.ready):
+                        m.d.sync += v1.eq(idx)
+            with m.Case(InputTopology.TRIANGLE_STRIP):
+                with m.Switch(vertex_count):
+                    with m.Case(0):
+                        m.d.sync += [
+                            v1.eq(idx),
+                            vertex_count.eq(1),
+                        ]
+                        m.d.comb += self.i.ready.eq(1)
+                    with m.Case(1):
+                        m.d.sync += [
+                            v2.eq(idx),
+                            vertex_count.eq(2),
+                        ]
+                        m.d.comb += self.i.ready.eq(1)
+                    with m.Case(2):
+                        # Odd triangle -> indexes n, n+1, n+2
+                        # so v1, v2, idx
+                        m.d.comb += [
+                            w_out.i.p.data[0].eq(v1),
+                            w_out.i.p.data[1].eq(v2),
+                            w_out.i.p.data[2].eq(idx),
+                            w_out.i.p.n.eq(3),
+                            w_out.i.valid.eq(1),
+                            self.i.ready.eq(w_out.i.ready),
+                        ]
+                        with m.If(w_out.i.ready):
                             m.d.sync += [
-                                v1.eq(idx),
-                                vertex_count.eq(1),
-                            ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(1):
-                            m.d.sync += [
+                                vertex_count.eq(3),
+                                v1.eq(v2),
                                 v2.eq(idx),
-                                vertex_count.eq(2),
                             ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(2):
-                            # Odd triangle -> indexes n, n+1, n+2
-                            # so v1, v2, idx
-                            m.d.comb += [
-                                w_out.i.p.data[0].eq(v1),
-                                w_out.i.p.data[1].eq(v2),
-                                w_out.i.p.data[2].eq(idx),
-                                w_out.i.p.n.eq(3),
-                                w_out.i.valid.eq(1),
-                                self.i.ready.eq(w_out.i.ready),
-                            ]
-                            with m.If(w_out.i.ready):
-                                m.d.sync += [
-                                    vertex_count.eq(3),
-                                    v1.eq(v2),
-                                    v2.eq(idx),
-                                ]
-                        with m.Case(3):
-                            # Even triangle -> indexes n+1, n, n+2
-                            # so v2, v1, idx
-                            m.d.comb += [
-                                w_out.i.p.data[0].eq(v2),
-                                w_out.i.p.data[1].eq(v1),
-                                w_out.i.p.data[2].eq(idx),
-                                w_out.i.p.n.eq(3),
-                                w_out.i.valid.eq(1),
-                                self.i.ready.eq(w_out.i.ready),
-                            ]
-                            with m.If(w_out.i.ready):
-                                m.d.sync += [
-                                    vertex_count.eq(2),
-                                    v1.eq(v2),
-                                    v2.eq(idx),
-                                ]
-                with m.Case(InputTopology.TRIANGLE_FAN):
-                    with m.Switch(vertex_count):
-                        with m.Case(0):
+                    with m.Case(3):
+                        # Even triangle -> indexes n+1, n, n+2
+                        # so v2, v1, idx
+                        m.d.comb += [
+                            w_out.i.p.data[0].eq(v2),
+                            w_out.i.p.data[1].eq(v1),
+                            w_out.i.p.data[2].eq(idx),
+                            w_out.i.p.n.eq(3),
+                            w_out.i.valid.eq(1),
+                            self.i.ready.eq(w_out.i.ready),
+                        ]
+                        with m.If(w_out.i.ready):
                             m.d.sync += [
-                                v1.eq(idx),  # center vertex
-                                vertex_count.eq(1),
-                            ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Case(1):
-                            m.d.sync += [
-                                v2.eq(idx),  # first outer vertex
                                 vertex_count.eq(2),
+                                v1.eq(v2),
+                                v2.eq(idx),
                             ]
-                            m.d.comb += self.i.ready.eq(1)
-                        with m.Default():
-                            m.d.comb += [
-                                w_out.i.p.data[0].eq(v1),  # center vertex
-                                w_out.i.p.data[1].eq(v2),  # previous outer vertex
-                                w_out.i.p.data[2].eq(idx),  # current outer vertex
-                                w_out.i.p.n.eq(3),
-                                w_out.i.valid.eq(1),
-                                self.i.ready.eq(w_out.i.ready),
-                            ]
-                            with m.If(w_out.i.ready):
-                                m.d.sync += v2.eq(idx)
+            with m.Case(InputTopology.TRIANGLE_FAN), m.Switch(vertex_count):
+                with m.Case(0):
+                    m.d.sync += [
+                        v1.eq(idx),  # center vertex
+                        vertex_count.eq(1),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
+                with m.Case(1):
+                    m.d.sync += [
+                        v2.eq(idx),  # first outer vertex
+                        vertex_count.eq(2),
+                    ]
+                    m.d.comb += self.i.ready.eq(1)
                 with m.Default():
-                    m.d.sync += Assert(
-                        0, "unsupported topology"
-                    )  # unsupported topology
+                    m.d.comb += [
+                        w_out.i.p.data[0].eq(v1),  # center vertex
+                        w_out.i.p.data[1].eq(v2),  # previous outer vertex
+                        w_out.i.p.data[2].eq(idx),  # current outer vertex
+                        w_out.i.p.n.eq(3),
+                        w_out.i.valid.eq(1),
+                        self.i.ready.eq(w_out.i.ready),
+                    ]
+                    with m.If(w_out.i.ready):
+                        m.d.sync += v2.eq(idx)
+            with m.Default():
+                m.d.sync += Assert(0, "unsupported topology")  # unsupported topology
 
         return m
 
@@ -485,12 +478,11 @@ class InputAssembly(wiring.Component):
                                 # all components read
                                 m.next = "DONE"
 
-            with m.State("DONE"):
-                with m.If(output_next_free):
-                    m.d.sync += [
-                        self.o.payload.eq(vtx),
-                        self.o.valid.eq(1),
-                    ]
-                    m.next = "IDLE"
+            with m.State("DONE"), m.If(output_next_free):
+                m.d.sync += [
+                    self.o.payload.eq(vtx),
+                    self.o.valid.eq(1),
+                ]
+                m.next = "IDLE"
 
         return m

@@ -5,6 +5,7 @@ test.vcd
 test.gtkw
 
 .vscode
+.zed
 .qsys_edit
 .pytest_cache
 .venv

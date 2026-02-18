@@ -17,13 +17,14 @@ import argparse
 import json
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 
 def _flatten_regs(
-    node: Dict[str, Any], path: List[str]
-) -> Iterable[Tuple[List[str], int, int]]:
+    node: dict[str, Any], path: list[str]
+) -> Iterable[tuple[list[str], int, int]]:
     """Yield (path, address, size_bytes) for every leaf register."""
     for key, value in node.items():
         if isinstance(value, dict) and {"address", "size"} <= set(value.keys()):
@@ -34,7 +35,7 @@ def _flatten_regs(
             raise TypeError(f"Unexpected leaf at {'.'.join(path + [key])}: {value!r}")
 
 
-def _sanitize(parts: List[str], upper: bool) -> str:
+def _sanitize(parts: list[str], upper: bool) -> str:
     joined = "_".join(parts)
     cleaned = re.sub(r"[^0-9a-zA-Z_]", "_", joined)
     return cleaned.upper() if upper else cleaned.lower()
@@ -58,7 +59,7 @@ def generate_header(json_path: Path, prefix: str) -> str:
     def field(parts):
         return _sanitize(parts, upper=False)
 
-    lines: List[str] = []
+    lines: list[str] = []
     guard = f"{prefix}_H"
     lines.append(f"#ifndef {guard}")
     lines.append(f"#define {guard}")
@@ -77,7 +78,7 @@ def generate_header(json_path: Path, prefix: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate C header from CSR JSON map")
     parser.add_argument(
         "--json", type=Path, required=True, help="Path to CSR JSON file"

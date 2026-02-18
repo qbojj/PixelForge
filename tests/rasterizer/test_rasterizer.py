@@ -273,9 +273,9 @@ def test_rasterizer_single_triangle(persp: bool):
             assert 0 <= x < fb_width, f"Fragment X {x} out of bounds"
             assert 0 <= y < fb_height, f"Fragment Y {y} out of bounds"
 
-            assert all(
-                0.0 <= c.as_float() <= 1.0 for c in frag.color
-            ), f"Fragment color {frag.color} out of range"
+            assert all(0.0 <= c.as_float() <= 1.0 for c in frag.color), (
+                f"Fragment color {frag.color} out of range"
+            )
 
     sim = Simulator(t)
     sim.add_clock(1e-6)

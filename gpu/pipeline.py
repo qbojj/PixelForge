@@ -36,21 +36,13 @@ from .utils.layouts import (
     wb_bus_addr_width,
     wb_bus_data_width,
 )
-from .utils.types import (
-    FixedPoint_mem,
-    IndexKind,
-    InputTopology,
-    address_shape,
-)
+from .utils.types import FixedPoint_mem, IndexKind, InputTopology, address_shape
 from .vertex_shading.cores import (
     LightPropertyLayout,
     MaterialPropertyLayout,
     VertexShading,
 )
-from .vertex_transform.cores import (
-    VertexTransform,
-    VertexTransformEnablementLayout,
-)
+from .vertex_transform.cores import VertexTransform, VertexTransformEnablementLayout
 
 __all__ = ["GraphicsPipeline", "GraphicsPipelineCSR", "GraphicsPipelineAvalonCSR"]
 
@@ -483,7 +475,7 @@ class GraphicsPipelineCSR(wiring.Component):
             ia_tex_mode = []
             ia_tex_info = []
             for i in range(num_textures):
-                with bld.Index(i):
+                with bld.Cluster(str(i)):
                     mode, info = add_attr_cluster("tex", pipeline.c_tex[i])
                     ia_tex_mode.append(mode)
                     ia_tex_info.append(info)
@@ -520,13 +512,12 @@ class GraphicsPipelineCSR(wiring.Component):
             )
             tex_xf_regs = []
             for t in range(num_textures):
-                for i in range(len(pipeline.texture_transforms[t])):
-                    tex_xf_regs.append(
-                        bld.add(
-                            "texture_transform",
-                            RWReg(pipeline.texture_transforms[t].shape()),
-                        )
+                tex_xf_regs.append(
+                    bld.add(
+                        "texture_transform",
+                        RWReg(pipeline.texture_transforms[t].shape()),
                     )
+                )
             m.d.comb += [
                 pipeline.vt_enabled.eq(vt_enabled.f.data),
                 pipeline.position_mv.eq(pos_mv_regs.f.data),
@@ -554,26 +545,25 @@ class GraphicsPipelineCSR(wiring.Component):
 
             light_regs = []
             for l_idx in range(num_lights):
-                with bld.Cluster(f"{l_idx}"):
-                    with bld.Cluster("light"):
-                        light = pipeline.lights[l_idx]
-                        pos = bld.add(
-                            "position",
-                            RWReg(light.position.shape()),
-                        )
-                        amb = bld.add(
-                            "ambient",
-                            RWReg(light.ambient.shape()),
-                        )
-                        dif = bld.add(
-                            "diffuse",
-                            RWReg(light.diffuse.shape()),
-                        )
-                        spe = bld.add(
-                            "specular",
-                            RWReg(light.specular.shape()),
-                        )
-                        light_regs.append((pos, amb, dif, spe))
+                with bld.Cluster(f"{l_idx}"), bld.Cluster("light"):
+                    light = pipeline.lights[l_idx]
+                    pos = bld.add(
+                        "position",
+                        RWReg(light.position.shape()),
+                    )
+                    amb = bld.add(
+                        "ambient",
+                        RWReg(light.ambient.shape()),
+                    )
+                    dif = bld.add(
+                        "diffuse",
+                        RWReg(light.diffuse.shape()),
+                    )
+                    spe = bld.add(
+                        "specular",
+                        RWReg(light.specular.shape()),
+                    )
+                    light_regs.append((pos, amb, dif, spe))
 
             m.d.comb += [
                 pipeline.material.ambient.eq(mat_amb.f.data),

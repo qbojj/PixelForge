@@ -26,28 +26,19 @@ dev = [
 [tool.setuptools]
 py-modules= ["gpu"]
 
-[tool.black]
-line-length = 88
-target-version = ['py310']
-
-[tool.isort]
-profile = "black"
-
-[tool.ruff]
-line-length = 140
-fix = true
-
-[tool.ruff.lint.mccabe]
-max-complexity = 25
-
 [tool.ruff.lint]
-select = ["E", "F", "W", "C", "N", "I"]
-ignore = ["F403", "F405"]
-# Ignore F403 ("'from module import *' used; unable to detect undefined names").
-# Ignore F405 ("name may be undefined, or defined from star imports").
-# This repo uses `from amaranth import *` in places where star-imports
-# are intentional for HDL DSL convenience; silencing F405 avoids noisy
-# false-positives from Ruff/Flake8.
+select = [
+    "E", "F", "W",
+    "I",
+    "N",
+    "UP",
+    "C4",
+]
+ignore = [
+    "F403", # "'from module import *' used; unable to detect undefined names"
+    "F405", # "name may be undefined, or defined from star imports"
+    "E501", # line too long
+]
 
 [tool.pytest.ini_options]
 pythonpath = [

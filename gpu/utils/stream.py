@@ -45,16 +45,15 @@ class VectorToStream(wiring.Component):
                     ]
                     m.next = next_state(0)
             for i in range(1, num_elem):
-                with m.State(f"SEND_{i}"):
-                    with m.If(self.o.ready):
-                        m.d.sync += [
-                            self.o.p.eq(self.i.p[i]),
-                            self.o.valid.eq(1),
-                        ]
-                        m.next = next_state(i)
+                with m.State(f"SEND_{i}"), m.If(self.o.ready):
+                    m.d.sync += [
+                        self.o.p.eq(self.i.p[i]),
+                        self.o.valid.eq(1),
+                    ]
+                    m.next = next_state(i)
 
-                        if i + 1 == num_elem:
-                            m.d.comb += self.i.ready.eq(1)
+                    if i + 1 == num_elem:
+                        m.d.comb += self.i.ready.eq(1)
 
         return m
 
@@ -176,26 +175,24 @@ class ValueDuplicator(wiring.Component):
         count = Signal.like(self.n.p)
 
         with m.FSM():
-            with m.State("IDLE"):
-                with m.If(self.i.valid & self.n.valid):
-                    m.d.comb += [
-                        self.i.ready.eq(1),
-                        self.n.ready.eq(1),
+            with m.State("IDLE"), m.If(self.i.valid & self.n.valid):
+                m.d.comb += [
+                    self.i.ready.eq(1),
+                    self.n.ready.eq(1),
+                ]
+                with m.If(self.n.p > 0):
+                    m.d.sync += [
+                        count.eq(self.n.p - 1),
+                        self.o.p.eq(self.i.p),
+                        self.o.valid.eq(1),
                     ]
-                    with m.If(self.n.p > 0):
-                        m.d.sync += [
-                            count.eq(self.n.p - 1),
-                            self.o.p.eq(self.i.p),
-                            self.o.valid.eq(1),
-                        ]
-                        m.next = "DUPLICATE"
-            with m.State("DUPLICATE"):
-                with m.If(self.o.ready):
-                    with m.If(count > 0):
-                        m.d.sync += count.eq(count - 1)
-                    with m.Else():
-                        m.d.sync += self.o.valid.eq(0)
-                        m.next = "IDLE"
+                    m.next = "DUPLICATE"
+            with m.State("DUPLICATE"), m.If(self.o.ready):
+                with m.If(count > 0):
+                    m.d.sync += count.eq(count - 1)
+                with m.Else():
+                    m.d.sync += self.o.valid.eq(0)
+                    m.next = "IDLE"
 
         return m
 
@@ -403,11 +400,10 @@ class WideStreamOutput(wiring.Component):
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.i.ready.eq(1)
-                with m.If(self.i.valid):
-                    with m.If(self.i.p.n > 0):
-                        m.d.sync += num_valid.eq(self.i.p.n)
-                        m.d.sync += data.eq(self.i.p.data)
-                        m.next = "SEND"
+                with m.If(self.i.valid), m.If(self.i.p.n > 0):
+                    m.d.sync += num_valid.eq(self.i.p.n)
+                    m.d.sync += data.eq(self.i.p.data)
+                    m.next = "SEND"
             with m.State("SEND"):
                 m.d.comb += [
                     self.o.valid.eq(1),

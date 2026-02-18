@@ -567,9 +567,9 @@ def test_swapchain_output(blend_conf, fragments, expected_color, dst_color):
         color_values = [bgra_values[2], bgra_values[1], bgra_values[0], bgra_values[3]]
         expected_values = expected_color
 
-        assert color_values == pytest.approx(
-            expected_values, abs=1 / 255
-        ), f"Final color mismatch: got {color_values}, expected {expected_values}"
+        assert color_values == pytest.approx(expected_values, abs=1 / 255), (
+            f"Final color mismatch: got {color_values}, expected {expected_values}"
+        )
 
     stream_testbench(
         sim,

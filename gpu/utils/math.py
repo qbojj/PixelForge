@@ -218,16 +218,15 @@ class FixedPointInv(wiring.Component):
             m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
-            with m.State("IDLE"):
-                with m.If(self.i.valid):
-                    m.d.sync += [
-                        sgn.eq(self.i.p < 0),
-                        v0.eq(abs(self.i.p)),
-                        clz.i.p.eq(abs(self.i.p)),
-                        clz.i.valid.eq(1),
-                    ]
-                    m.d.comb += self.i.ready.eq(1)
-                    m.next = "CLZ"
+            with m.State("IDLE"), m.If(self.i.valid):
+                m.d.sync += [
+                    sgn.eq(self.i.p < 0),
+                    v0.eq(abs(self.i.p)),
+                    clz.i.p.eq(abs(self.i.p)),
+                    clz.i.valid.eq(1),
+                ]
+                m.d.comb += self.i.ready.eq(1)
+                m.next = "CLZ"
             with m.State("CLZ"):
                 with m.If(clz.o.valid & (~inv_small.i.valid | inv_small.i.ready)):
                     m.d.comb += clz.o.ready.eq(1)
@@ -464,16 +463,16 @@ class FixedPointInvSqrt(wiring.Component):
 
                     m.next = "CLZ"
 
-            with m.State("CLZ"):
-                with m.If(
-                    clz.o.valid & (~inv_sqrt_small.i.valid | inv_sqrt_small.i.ready)
-                ):
-                    m.d.sync += [
-                        inv_sqrt_small.i.p.eq(self.i.p.as_value() << lz),
-                        inv_sqrt_small.i.valid.eq(1),
-                    ]
-                    m.d.comb += self.i.ready.eq(1)
-                    m.next = "INV_SQRT_SMALL"
+            with (
+                m.State("CLZ"),
+                m.If(clz.o.valid & (~inv_sqrt_small.i.valid | inv_sqrt_small.i.ready)),
+            ):
+                m.d.sync += [
+                    inv_sqrt_small.i.p.eq(self.i.p.as_value() << lz),
+                    inv_sqrt_small.i.valid.eq(1),
+                ]
+                m.d.comb += self.i.ready.eq(1)
+                m.next = "INV_SQRT_SMALL"
 
             with m.State("INV_SQRT_SMALL"):
                 m.d.comb += inv_sqrt_small.o.ready.eq(1)
@@ -489,25 +488,22 @@ class FixedPointInvSqrt(wiring.Component):
                         m.d.sync += pre_shift_value.eq(inv_sqrt_small.o.p)
 
                     m.next = "SHIFT_BACK"
-            with m.State("SHIFT_BACK"):
-                with m.If(self.o.ready | ~self.o.valid):
-                    sv_s = shift_value >> 1
+            with m.State("SHIFT_BACK"), m.If(self.o.ready | ~self.o.valid):
+                sv_s = shift_value >> 1
 
-                    with m.If(sv_s >= 0):
-                        m.d.comb += norm_value.eq(pre_shift_value << sv_s.as_unsigned())
-                    with m.Else():
-                        m.d.comb += norm_value.eq(
-                            pre_shift_value >> (-sv_s).as_unsigned()
-                        )
+                with m.If(sv_s >= 0):
+                    m.d.comb += norm_value.eq(pre_shift_value << sv_s.as_unsigned())
+                with m.Else():
+                    m.d.comb += norm_value.eq(pre_shift_value >> (-sv_s).as_unsigned())
 
-                    m.d.comb += clz.o.ready.eq(1)
+                m.d.comb += clz.o.ready.eq(1)
 
-                    m.d.sync += [
-                        self.o.p.eq(norm_value),
-                        self.o.valid.eq(1),
-                    ]
+                m.d.sync += [
+                    self.o.p.eq(norm_value),
+                    self.o.valid.eq(1),
+                ]
 
-                    m.next = "IDLE"
+                m.next = "IDLE"
 
         return m
 
@@ -589,36 +585,33 @@ class FixedPointVecNormalize(wiring.Component):
             m.d.sync += self.o.valid.eq(0)
 
         with m.FSM():
-            with m.State("IDLE"):
-                with m.If(self.i.valid):
-                    m.d.sync += [
-                        v2s_a.i.p.eq(self.i.p),
-                        v2s_b.i.p.eq(self.i.p),
-                        v2s_a.i.valid.eq(1),
-                        v2s_b.i.valid.eq(1),
-                    ]
-                    m.next = "COMPUTE_DOT"
-            with m.State("COMPUTE_DOT"):
-                with m.If(s2v.o.valid):
-                    m.d.comb += s2v.o.ready.eq(1)
-                    m.d.sync += [
-                        inv_sqrt.i.p.eq(sum_value(*s2v.o.p)),
-                        inv_sqrt.i.valid.eq(1),
-                    ]
-                    m.next = "INV_SQRT"
-            with m.State("INV_SQRT"):
-                with m.If(inv_sqrt.o.valid):
-                    m.d.comb += [
-                        inv_sqrt.o.ready.eq(1),
-                        self.i.ready.eq(1),
-                    ]
-                    m.d.sync += [
-                        v2s_a.i.p.eq(self.i.p),
-                        v2s_b.i.p.eq(Cat([inv_sqrt.o.p for _ in range(len(v))])),
-                        v2s_a.i.valid.eq(1),
-                        v2s_b.i.valid.eq(1),
-                    ]
-                    m.next = "MULTIPLY"
+            with m.State("IDLE"), m.If(self.i.valid):
+                m.d.sync += [
+                    v2s_a.i.p.eq(self.i.p),
+                    v2s_b.i.p.eq(self.i.p),
+                    v2s_a.i.valid.eq(1),
+                    v2s_b.i.valid.eq(1),
+                ]
+                m.next = "COMPUTE_DOT"
+            with m.State("COMPUTE_DOT"), m.If(s2v.o.valid):
+                m.d.comb += s2v.o.ready.eq(1)
+                m.d.sync += [
+                    inv_sqrt.i.p.eq(sum_value(*s2v.o.p)),
+                    inv_sqrt.i.valid.eq(1),
+                ]
+                m.next = "INV_SQRT"
+            with m.State("INV_SQRT"), m.If(inv_sqrt.o.valid):
+                m.d.comb += [
+                    inv_sqrt.o.ready.eq(1),
+                    self.i.ready.eq(1),
+                ]
+                m.d.sync += [
+                    v2s_a.i.p.eq(self.i.p),
+                    v2s_b.i.p.eq(Cat([inv_sqrt.o.p for _ in range(len(v))])),
+                    v2s_a.i.valid.eq(1),
+                    v2s_b.i.valid.eq(1),
+                ]
+                m.next = "MULTIPLY"
             with m.State("MULTIPLY"):
                 with m.If(s2v.o.valid & (self.o.ready | ~self.o.valid)):
                     m.d.comb += s2v.o.ready.eq(1)

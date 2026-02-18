@@ -29,8 +29,6 @@ class Shape(hdl.ShapeCastable):
             )
         if shape.signed and self.i_bits == 0:
             raise TypeError("A signed fixed.Shape cannot be created with i_bits=0")
-        if self.i_bits + self.f_bits == 0:
-            raise TypeError("fixed.Shape may not be created with zero width")
 
     @property
     def signed(self) -> bool:
@@ -137,7 +135,9 @@ class Value(hdl.ValueCastable):
             # the _target of a Value, and then use this
             # to reconstruct a Value, we may lose the
             # signedness of its underlying _target.
-            self._target = target.as_signed()
+            self._target = (
+                target.as_signed() if len(target) > 0 else hdl.Const(0, hdl.signed(1))
+            )
         else:
             self._target = target
 
@@ -176,10 +176,6 @@ class Value(hdl.ValueCastable):
     def reshape(self, f_bits):
         # If we're increasing precision, extend with more fractional bits. If we're
         # reducing precision, truncate bits.
-
-        if self.i_bits == 0 and f_bits == 0:
-            return Const(0.0)
-
         shape = hdl.Shape(self.i_bits + f_bits, signed=self.signed)
         if f_bits > self.f_bits:
             result = Shape(shape, f_bits)(
@@ -342,7 +338,7 @@ class Value(hdl.ValueCastable):
                 raise TypeError("Shift amount must be unsigned")
             # Extend by maximum possible shift represented by hdl.Value.
             f_bits = self.f_bits + 2 ** other.shape().width - 1
-            i_bits = self.i_bits - (f_bits - self.f_bits)
+            i_bits = self.i_bits
             numerator = self.reshape(f_bits).as_value() >> other
         else:
             raise TypeError("Shift amount must be an integer value")

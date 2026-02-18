@@ -80,49 +80,41 @@ class Shape(hdl.ShapeCastable):
 
     def format(self, obj: "Value", spec: str):
         # format as standard fixed_point
-        decimal_length = ceil(log10(2) * self.f_bits) + 1
+        decimal_length = ceil(log10(1 << self.f_bits)) + 1
         len_pow = 10**decimal_length
+
+        integer = obj.as_value() >> self.f_bits
+        fract = obj.as_value() & ((1 << self.f_bits) - 1)
 
         if spec == "b":
             # format as binary
-            return Format(
-                "{value.int:b}.{value.fract:0{fract_bits}b}}",
-                value=obj.as_value(),
-                fract_bits=self.f_bits,
-            )
+            return Format("{:b}.{:0{}b}}", integer, fract, self.f_bits)
         elif spec == "x":
             # format as hex
-            if self.f_bits % 4 != 0:
-                raise ValueError(
-                    "Hex format requires number of fractional bits to be multiple of 4"
-                )
+            f_width = (self.f_bits + 3) // 4
+            alignment = f_width * 4 - self.f_bits
 
             return Format(
-                "{value.int:x}.{value.fract:0{fract_bits}x}}",
-                value=obj.as_value(),
-                fract_bits=self.f_bits // 4,
+                "{:x}.{:0{}x}}",
+                integer,
+                fract << alignment,
+                f_width,
             )
         elif spec != "":
-            raise ValueError(f"Format specifier {spec!r} is not supported for layouts")
+            raise ValueError(
+                f"Format specifier {spec!r} is not supported for fixed point values"
+            )
 
-        fract = obj.as_value() & ((1 << self.f_bits) - 1)
-        integer = obj.as_value() >> self.f_bits
-
-        if self.f_bits == 0:
-            return Format("{:d}.", integer)
-
-        fract_part = (obj.as_value() * len_pow // (1 << self.f_bits)) % len_pow
+        fract_part = (obj * len_pow).round() % len_pow
         if self.signed:
             v1 = Mux((integer < 0) & (fract > 0), integer + 1, integer)
             v2 = Mux((integer < 0) & (fract > 0), len_pow - fract_part, fract_part)
-
-            sgn = Mux(obj < 0, hdl.Const(ord("-"), 16), hdl.Const(ord("\0"), 16))
-
-            return Format("{:s}{:d}.{:0{}d}", sgn, abs(v1), v2, decimal_length)
         else:
             v1 = integer
             v2 = fract_part
-            return Format("{:d}.{:0{}d}", abs(v1), v2, decimal_length)
+
+        sgn = Mux(obj < 0, hdl.Const(ord("-"), 8), hdl.Const(0, 0))
+        return Format("{:s}{:d}.{:0{}d}", sgn, abs(v1), v2, decimal_length)
 
 
 class SQ(Shape):

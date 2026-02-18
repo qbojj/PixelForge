@@ -16,7 +16,11 @@ __all__ = ["Shape", "SQ", "UQ", "Value", "Const"]
 
 
 class Shape(hdl.ShapeCastable):
-    def __init__(self, shape, f_bits=0):
+    i_bits: int
+    f_bits: int
+    _storage_shape: hdl.Shape
+
+    def __init__(self, shape: hdl.Shape, f_bits: int = 0):
         self._storage_shape = shape
         self.i_bits, self.f_bits = shape.width - f_bits, f_bits
         if self.i_bits < 0 or self.f_bits < 0:
@@ -29,24 +33,24 @@ class Shape(hdl.ShapeCastable):
             raise TypeError("fixed.Shape may not be created with zero width")
 
     @property
-    def signed(self):
+    def signed(self) -> bool:
         return self._storage_shape.signed
 
     @staticmethod
-    def cast(shape, f_bits=0):
+    def cast(shape: hdl.ShapeLike, f_bits: int = 0):
         if not isinstance(shape, hdl.Shape):
             raise TypeError(f"Object {shape!r} cannot be converted to a fixed.Shape")
         return Shape(shape, f_bits)
 
     def const(self, value):
         if value is None:
-            value = 0
+            value = int(0)
         return Const(value, self)._target
 
-    def as_shape(self):
+    def as_shape(self) -> hdl.Shape:
         return self._storage_shape
 
-    def __call__(self, target):
+    def __call__(self, target: hdl.ValueLike):
         return Value(self, target)
 
     def min(self):
@@ -59,7 +63,7 @@ class Shape(hdl.ShapeCastable):
         c._value = c._max_value()
         return c
 
-    def from_bits(self, raw):
+    def from_bits(self, raw: int):
         c = Const(0, self)
         c._value = raw
         if self.signed and raw > c._max_value():
@@ -74,19 +78,19 @@ class Shape(hdl.ShapeCastable):
     def __repr__(self):
         return f"{'SQ' if self.signed else 'UQ'}({self.i_bits}, {self.f_bits})"
 
-    def format(self, value, format_spec):
+    def format(self, obj: "Value", spec: str):
         # format as standard fixed_point
         decimal_length = ceil(log10(2) * self.f_bits) + 1
         len_pow = 10**decimal_length
 
-        if format_spec == "b":
+        if spec == "b":
             # format as binary
             return Format(
                 "{value.int:b}.{value.fract:0{fract_bits}b}}",
-                value=value.as_value(),
+                value=obj.as_value(),
                 fract_bits=self.f_bits,
             )
-        elif format_spec == "x":
+        elif spec == "x":
             # format as hex
             if self.f_bits % 4 != 0:
                 raise ValueError(
@@ -95,26 +99,24 @@ class Shape(hdl.ShapeCastable):
 
             return Format(
                 "{value.int:x}.{value.fract:0{fract_bits}x}}",
-                value=value.as_value(),
+                value=obj.as_value(),
                 fract_bits=self.f_bits // 4,
             )
-        elif format_spec != "":
-            raise ValueError(
-                f"Format specifier {format_spec!r} is not supported for layouts"
-            )
+        elif spec != "":
+            raise ValueError(f"Format specifier {spec!r} is not supported for layouts")
 
-        fract = value.as_value() & ((1 << self.f_bits) - 1)
-        integer = value.as_value() >> self.f_bits
+        fract = obj.as_value() & ((1 << self.f_bits) - 1)
+        integer = obj.as_value() >> self.f_bits
 
         if self.f_bits == 0:
             return Format("{:d}.", integer)
 
-        fract_part = (value.as_value() * len_pow // (1 << self.f_bits)) % len_pow
+        fract_part = (obj.as_value() * len_pow // (1 << self.f_bits)) % len_pow
         if self.signed:
             v1 = Mux((integer < 0) & (fract > 0), integer + 1, integer)
             v2 = Mux((integer < 0) & (fract > 0), len_pow - fract_part, fract_part)
 
-            sgn = Mux(value < 0, hdl.Const(ord("-"), 16), hdl.Const(ord("\0"), 16))
+            sgn = Mux(obj < 0, hdl.Const(ord("-"), 16), hdl.Const(ord("\0"), 16))
 
             return Format("{:s}{:d}.{:0{}d}", sgn, abs(v1), v2, decimal_length)
         else:
@@ -134,7 +136,9 @@ class UQ(Shape):
 
 
 class Value(hdl.ValueCastable):
-    def __init__(self, shape, target):
+    _shape: Shape
+
+    def __init__(self, shape: Shape, target):
         self._shape = shape
         if self.signed and not target.shape().signed:
             # When methods bit-pick or concatenate to
@@ -238,6 +242,10 @@ class Value(hdl.ValueCastable):
         return self.reshape_ceil(f_bits)
 
     def clamp(self, lo, hi):
+        if isinstance(lo, int) or isinstance(lo, float):
+            lo = Const(lo, shape=self.shape())
+        if isinstance(hi, int) or isinstance(hi, float):
+            hi = Const(hi, shape=self.shape())
         if not isinstance(lo, Value) or not isinstance(hi, Value):
             raise TypeError("Cannot `clamp` as lo, hi are not fixed.Value")
         lo = lo.reshape(self.f_bits)

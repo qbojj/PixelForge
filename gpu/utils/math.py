@@ -1,4 +1,5 @@
 from amaranth import *
+from amaranth.hdl import ShapeLike
 from amaranth.lib import stream, wiring
 from amaranth.lib.memory import Memory as Mem
 from amaranth.lib.wiring import In, Out
@@ -13,7 +14,10 @@ class CountLeadingZeros(wiring.Component):
     Counts leading zeros in a FixedPoint number.
     """
 
-    def __init__(self, type: Shape):
+    i: stream.Interface
+    o: stream.Interface
+
+    def __init__(self, type: ShapeLike):
         super().__init__(
             {
                 "i": In(stream.Signature(type)),
@@ -46,6 +50,9 @@ class FixedPointInvSmallDomain(wiring.Component):
     Input value should be in range of [1.0, 2.0).
     Result will be in (0.5, 1.0]
     """
+
+    i: stream.Interface
+    o: stream.Interface
 
     def __init__(self, type: fixed.Shape, steps: int = 4, initial_guess_bits: int = 8):
         super().__init__(
@@ -161,6 +168,9 @@ class FixedPointInv(wiring.Component):
     signed   input n.m -> output signed m.n
     """
 
+    i: stream.Interface
+    o: stream.Interface
+
     def __init__(self, type: fixed.Shape, steps: int = 4):
         if type.signed:
             output_type = fixed.SQ(max(type.f_bits, 2), type.i_bits)
@@ -271,6 +281,9 @@ class FixedPointInvSqrtSmallDomain(wiring.Component):
     The value in should be 1.{pattern}, where {pattern} is the fractional part.
     Result will be (0.7, 1.0]
     """
+
+    i: stream.Interface
+    o: stream.Interface
 
     def __init__(self, type: fixed.Shape, steps: int = 2, initial_guess_bits: int = 4):
         super().__init__(
@@ -394,6 +407,9 @@ class FixedPointInvSqrt(wiring.Component):
     Works for any positive FixedPoint number.
     """
 
+    i: stream.Interface
+    o: stream.Interface
+
     def __init__(self, type: fixed.Shape, steps: int = 2):
         super().__init__(
             {
@@ -497,6 +513,10 @@ class FixedPointInvSqrt(wiring.Component):
 
 
 class SimpleOpModule(wiring.Component):
+    a: stream.Interface
+    b: stream.Interface
+    o: stream.Interface
+
     def __init__(self, op, type):
         super().__init__(
             {
@@ -522,6 +542,9 @@ class SimpleOpModule(wiring.Component):
 
 
 class FixedPointVecNormalize(wiring.Component):
+    i: stream.Interface
+    o: stream.Interface
+
     def __init__(self, vector_type, steps=2):
         super().__init__(
             {

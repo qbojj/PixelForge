@@ -1,5 +1,5 @@
 from amaranth import *
-from amaranth.lib import data, stream, wiring
+from amaranth.lib import data, fifo, stream, wiring
 from amaranth.lib.wiring import In, Out
 
 from gpu.utils.stream import WideStreamOutput
@@ -11,7 +11,6 @@ from ..utils.layouts import (
     FramebufferInfoLayout,
     RasterizerLayout,
     RasterizerLayoutNDC,
-    num_textures,
 )
 from ..utils.stream import AnyDistributor, AnyRecombiner
 from ..utils.transactron_utils import max_value, min_value, popcount
@@ -33,529 +32,326 @@ class PrimitiveClipper(wiring.Component):
     - Clipping: trivial accept/reject against NDC cube.
     """
 
-    i: In(stream.Signature(RasterizerLayout))
-    o: Out(stream.Signature(RasterizerLayout))
+    i: stream.Interface
+    o: stream.Interface
 
-    prim_type: In(PrimitiveType)
-    ready: Out(1)
+    prim_type: PrimitiveType
+    ready: Value
+
+    def __init__(self, inv_steps: int = 2):
+        super().__init__(
+            {
+                "i": In(stream.Signature(RasterizerLayout)),
+                "o": Out(stream.Signature(RasterizerLayout)),
+                "prim_type": In(PrimitiveType),
+                "ready": Out(1),
+            }
+        )
+        self._inv_steps = inv_steps
 
     def elaborate(self, platform):
         m = Module()
         # Reciprocal unit for t computation (t = num / den = num * inv(den))
-        m.submodules.inv = inv = gpu_math.FixedPointInv(FixedPoint, steps=4)
-
-        buf = Array(Signal(RasterizerLayout) for _ in range(3))
-        idx = Signal(range(3))
-        needed = Signal(range(4))
-
-        # Clipping work buffers (up to 9 vertices after clipping against 6 planes)
-        clip_buf = Array(
-            Array(Signal(RasterizerLayout) for _ in range(9)) for _ in range(2)
+        m.submodules.inv = inv = gpu_math.FixedPointInv(
+            FixedPoint, steps=self._inv_steps
         )
-        clip_count = Array(Signal(range(10)) for _ in range(2))
-        clip_src = Signal()  # ping-pong buffer index
+
+        needed = Signal(range(4))
+        looping_primitive = Signal()
+
+        num_planes = 6
+
+        max_vtx = 3 + 6  # 3 vertices + 6 planes
+        vtx_buf_width = Shape.cast(RasterizerLayout).width
+
+        m.submodules.vtx_buf = vtx_buf = fifo.SyncFIFOBuffered(
+            width=vtx_buf_width, depth=(max_vtx * 2)
+        )
+
+        src_cnt = Signal(range(max_vtx + 1))
+
         clip_plane = Signal(range(6))  # current plane being clipped against
-        clip_idx = Signal(range(9))  # current vertex index during clipping
-        # Interpolation helper signals
-        t_num = Signal(FixedPoint)
-        t_den = Signal(FixedPoint)
-        t_recip = Signal(FixedPoint)
-        emit_next = Signal()  # entering case: emit intersection and next vertex
-        edge_curr_idx = Signal(range(9))
-        edge_next_idx = Signal(range(9))
 
-        # Single shared multiplier for t and interpolation (time-multiplexed)
-        mul_in_a = Signal(FixedPoint)
-        mul_in_b = Signal(FixedPoint)
-        mul_p = Signal(FixedPoint)
-        m.d.comb += mul_p.eq(mul_in_a * mul_in_b)
+        is_first = Signal()
+        finish = Signal()
 
-        t_reg = Signal(FixedPoint)
-        lerp_a_reg = Signal(FixedPoint)
-        lerp_phase = Signal()  # 0=setup multiply, 1=accumulate/write
-        # Number of components to lerp: 4 pos + 4 color + 4*num_textures texcoords
-        total_fields = 8 + 4 * num_textures
-        lerp_stage = Signal(range(max(1, total_fields)))
-        out_count_reg = Signal(range(10))
-        src_reg = Signal()
-        dst_reg = Signal()
+        first_v = Signal(RasterizerLayout)  # for finishing the loop
+        first_dist = Signal(FixedPoint)
+        first_inside = Signal()
+
+        prev_v = Signal(RasterizerLayout)
+        prev_dist = Signal(FixedPoint)
+        prev_inside = Signal()
+        curr_v = Signal(RasterizerLayout)
+        curr_dist = Signal(FixedPoint)
+        curr_inside = Signal()
+
+        # For water-tight clipping we sort the vertices by the distance metric
+        # before clipping an edge (we always use v_inside + (v_outside - v_inside)*t)
+        v_inside = Signal(RasterizerLayout)
+        v_inside_dist = Signal(FixedPoint)
+        v_outside = Signal(RasterizerLayout)
+        v_outside_dist = Signal(FixedPoint)
+
+        component_count = len(v_inside.as_value()) // Shape.cast(FixedPoint).width
+        assert len(v_inside.as_value()) % Shape.cast(FixedPoint).width == 0
+
+        inside_attrs = Signal(data.ArrayLayout(FixedPoint, component_count))
+        outside_attrs = Signal(data.ArrayLayout(FixedPoint, component_count))
+        interp_attrs = Signal(data.ArrayLayout(FixedPoint, component_count))
+        attr_idx = Signal(range(component_count))
+        t = Signal(fixed.UQ(1, 17))
 
         # Primitive vertex count based on register
         with m.Switch(self.prim_type):
-            with m.Case(PrimitiveType.POINTS):
-                m.d.comb += needed.eq(1)
+            with m.Case(PrimitiveType.TRIANGLES):
+                m.d.comb += needed.eq(3)
+                m.d.comb += looping_primitive.eq(1)
             with m.Case(PrimitiveType.LINES):
                 m.d.comb += needed.eq(2)
-            with m.Default():
-                m.d.comb += needed.eq(3)
+                m.d.comb += looping_primitive.eq(0)
+            with m.Case(PrimitiveType.POINTS):
+                m.d.comb += needed.eq(1)
+                m.d.comb += looping_primitive.eq(0)
 
         m.submodules.w_out = w_out = WideStreamOutput(self.o.p.shape(), 3)
         wiring.connect(m, wiring.flipped(self.o), w_out.o)
 
-        with m.If(w_out.o.ready & w_out.o.valid):
-            m.d.sync += Print("clipper vtx out: ", w_out.o.p)
-
         with m.FSM():
             with m.State("COLLECT"):
-                m.d.comb += self.ready.eq((idx == 0) & w_out.i.ready)
+                m.d.comb += self.ready.eq((vtx_buf.level == 0) & w_out.i.ready)
                 m.d.comb += self.i.ready.eq(1)
-                with m.If(self.i.valid):
-                    m.d.sync += buf[idx].eq(self.i.payload)
-                    m.d.sync += Print("clipper vtx in: ", self.i.payload)
-                    with m.If(idx == (needed - 1)):
-                        m.d.sync += idx.eq(0)
-                        m.next = "CHECK"
-                    with m.Else():
-                        m.d.sync += idx.eq(idx + 1)
-
-            with m.State("CHECK"):
-                # Compute clip codes for trivial accept/reject (no polygon splitting).
-                # Helper function to compute clip code for a vertex
-                def compute_clip_code(vtx):
-                    x, y, z, w = vtx.position_ndc
-                    bits = [
-                        x > w,  # +x
-                        x < -w,  # -x
-                        y > w,  # +y
-                        y < -w,  # -y
-                        z > w,  # +z
-                        z < -w,  # -z
-                    ]
-                    return Cat(bits)
-
-                codes = Array(Signal(6) for _ in range(3))
-                for i in range(3):
-                    m.d.comb += codes[i].eq(compute_clip_code(buf[i]))
-
-                m.d.sync += [
-                    Print(
-                        Format(
-                            "vtx0: {}, vtx1: {}, vtx2: {}",
-                            buf[0].position_ndc,
-                            buf[1].position_ndc,
-                            buf[2].position_ndc,
-                        )
-                    ),
-                    Print(
-                        Format(
-                            "Clip codes: {:06b}, {:06b}, {:06b}",
-                            codes[0],
-                            codes[1],
-                            codes[2],
-                        )
-                    ),
-                ]
-                with m.If((codes[0] & codes[1] & codes[2]) != 0):
-                    m.d.sync += Print("Trivial reject")
-                    # Fully outside; drop primitive.
-                    m.next = "COLLECT"
-                with m.Elif((codes[0] | codes[1] | codes[2]) == 0):
-                    # Fully inside; forward primitive.
-                    m.d.comb += [
-                        w_out.i.p.data[0].eq(buf[0]),
-                        w_out.i.p.data[1].eq(buf[1]),
-                        w_out.i.p.data[2].eq(buf[2]),
-                        w_out.i.p.n.eq(needed),
-                        w_out.i.valid.eq(1),
-                    ]
-                    with m.If(w_out.i.ready):
-                        m.d.sync += Print("Trivial accept")
-                        m.next = "COLLECT"
-                with m.Else():
-                    # Needs clipping (only triangles and lines should reach here).
-                    m.next = "CLIP"
-
-            with m.State("CLIP"):
-                # Sutherland-Hodgman clipping for triangles only
-                # Initialize first buffer with triangle vertices
-                with m.If(needed == 3):
-                    m.d.sync += [
-                        clip_buf[0][0].eq(buf[0]),
-                        clip_buf[0][1].eq(buf[1]),
-                        clip_buf[0][2].eq(buf[2]),
-                        clip_count[0].eq(3),
-                        clip_plane.eq(0),
-                        clip_src.eq(0),
-                    ]
+                m.d.comb += vtx_buf.w_data.eq(self.i.payload)
+                m.d.comb += vtx_buf.w_en.eq(self.i.valid)
+                m.d.sync += Assert(vtx_buf.w_rdy)
+                with m.If(self.i.valid & (vtx_buf.level == (needed - 1))):
+                    m.d.sync += clip_plane.eq(0)
                     m.next = "CLIP_PLANE"
-                with m.Else():
-                    # TODO: implement line clipping (Cohen-Sutherland or Liang-Barsky)
-                    m.next = "COLLECT"
 
             with m.State("CLIP_PLANE"):
-                # Clip against current plane
-                # Planes: 0: +x, 1: -x, 2: +y, 3: -y, 4: +z, 5: -z
-                src = clip_src
-                dst = ~clip_src
-                m.d.sync += Print(
-                    Format(
-                        "CLIP_PLANE enter plane {} src {} dst {} count {}",
-                        clip_plane,
-                        src,
-                        dst,
-                        clip_count[src],
-                    )
-                )
+                with m.If(vtx_buf.level == 0):
+                    # polygon fully clipped away
+                    m.next = "COLLECT"
+                with m.Elif(clip_plane == num_planes):
+                    # every plane was clipped away
+                    m.next = "CLIP_EMIT"
+                with m.Elif(vtx_buf.r_rdy):
+                    # wait for buffer in the fifo and start
+                    m.d.sync += is_first.eq(1)
+                    m.d.sync += curr_v.eq(vtx_buf.r_data)
+                    m.d.sync += first_v.eq(vtx_buf.r_data)
+                    m.d.comb += vtx_buf.r_en.eq(1)
+                    m.d.sync += src_cnt.eq(vtx_buf.level - 1)
+                    m.d.sync += finish.eq(0)
+                    m.next = "PASS_VTX"
 
-                # If source polygon is empty or clipped away, skip to emit
-                with m.If(clip_count[src] == 0):
-                    m.next = "CLIP_EMIT"
-                with m.Elif(clip_plane > 5):
-                    # All planes processed
-                    m.next = "CLIP_EMIT"
+            with m.State("CONTINUE_PLANE"):
+                with m.If((curr_dist >= 0) & ~finish):
+                    m.d.comb += vtx_buf.w_data.eq(curr_v)
+                    m.d.comb += vtx_buf.w_en.eq(1)
+                    m.d.sync += Assert(vtx_buf.w_rdy)
+                    m.next = "PASS_VTX"
+
+                with m.If(src_cnt > 0):
+                    m.d.sync += prev_v.eq(curr_v)
+                    m.d.sync += prev_dist.eq(curr_dist)
+                    m.d.sync += prev_inside.eq(curr_inside)
+                    m.d.sync += curr_v.eq(vtx_buf.r_data)
+                    m.d.comb += vtx_buf.r_en.eq(1)
+                    m.d.sync += src_cnt.eq(src_cnt - 1)
+                    m.next = "PASS_VTX"
+                with m.Elif(looping_primitive & ~finish):
+                    m.d.sync += finish.eq(1)
+                    # All vertices from SRC were consumed, but we are looping
+                    #   -> check if we need interpolation for last-first
+
+                    # the last vertex is already in some inside/outside buffer
+                    with m.If(first_inside):
+                        m.d.sync += v_inside.eq(first_v)
+                        m.d.sync += v_inside_dist.eq(first_dist)
+                    with m.Else():
+                        m.d.sync += v_outside.eq(first_v)
+                        m.d.sync += v_outside_dist.eq(first_dist)
+
+                    with m.If(first_inside != curr_inside):
+                        m.next = "MAKE_INTERPOLATION"
+                    with m.Else():
+                        m.d.sync += clip_plane.eq(clip_plane + 1)
+                        m.next = "CLIP_PLANE"  # go to the next plane
                 with m.Else():
-                    m.d.sync += [
-                        clip_count[dst].eq(0),
-                        clip_idx.eq(0),
-                    ]
-                    m.next = "CLIP_EDGE"
+                    m.d.sync += clip_plane.eq(clip_plane + 1)
+                    m.next = "CLIP_PLANE"
 
-            with m.State("CLIP_EDGE"):
-                # Clip edge across current plane
-                src = clip_src
-                dst = ~clip_src
-                curr_idx = clip_idx
-                next_idx = Mux(clip_idx == clip_count[src] - 1, 0, clip_idx + 1)
-
-                curr_v = clip_buf[src][curr_idx]
-                next_v = clip_buf[src][next_idx]
-
-                m.d.sync += Print(
-                    Format(
-                        "CLIP_EDGE plane {} src {} curr {} next {} count {}",
-                        clip_plane,
-                        src,
-                        curr_idx,
-                        next_idx,
-                        clip_count[src],
-                    )
-                )
-
-                c_x, c_y, c_z, c_w = curr_v.position_ndc
-                n_x, n_y, n_z, n_w = next_v.position_ndc
-
-                m.d.sync += Print(
-                    Format(
-                        "   curr ({}, {}, {}, {}), next ({}, {}, {}, {})",
-                        c_x,
-                        c_y,
-                        c_z,
-                        c_w,
-                        n_x,
-                        n_y,
-                        n_z,
-                        n_w,
-                    )
-                )
-
-                # Compute distance from plane in clip space using ±w comparisons
+            with m.State("PASS_VTX"):
+                # Calculate the distance from the plane in clip space using ±w comparisons
                 # plane 0: +x (x <= w) => dist = w - x
                 # plane 1: -x (x >= -w) => dist = x + w
                 # plane 2: +y (y <= w) => dist = w - y
                 # plane 3: -y (y >= -w) => dist = y + w
-                # plane 4: +z (z <= w) => dist = w - z (far)
-                # plane 5: -z (z >= -w) => dist = z + w (near)
-                curr_dist = Signal(FixedPoint)
-                next_dist = Signal(FixedPoint)
+                # plane 4: +z (z <= w) => dist = w - z
+                # plane 5: -z (z >= -w) => dist = z + w
 
+                x, y, z, w = curr_v.position
+
+                # Calculate the distance from the plane in clip space
+                d = Signal(FixedPoint)
                 with m.Switch(clip_plane):
                     with m.Case(0):
-                        m.d.comb += [
-                            curr_dist.eq(c_w - c_x),
-                            next_dist.eq(n_w - n_x),
-                        ]
+                        m.d.comb += d.eq(w - x)
                     with m.Case(1):
-                        m.d.comb += [
-                            curr_dist.eq(c_x + c_w),
-                            next_dist.eq(n_x + n_w),
-                        ]
+                        m.d.comb += d.eq(w + x)
                     with m.Case(2):
-                        m.d.comb += [
-                            curr_dist.eq(c_w - c_y),
-                            next_dist.eq(n_w - n_y),
-                        ]
+                        m.d.comb += d.eq(w - y)
                     with m.Case(3):
-                        m.d.comb += [
-                            curr_dist.eq(c_y + c_w),
-                            next_dist.eq(n_y + n_w),
-                        ]
+                        m.d.comb += d.eq(w + y)
                     with m.Case(4):
-                        m.d.comb += [
-                            curr_dist.eq(c_w - c_z),
-                            next_dist.eq(n_w - n_z),
-                        ]
+                        m.d.comb += d.eq(w - z)
                     with m.Case(5):
-                        m.d.comb += [
-                            curr_dist.eq(c_z + c_w),
-                            next_dist.eq(n_z + n_w),
-                        ]
+                        m.d.comb += d.eq(w + z)
 
-                curr_inside = curr_dist >= 0
-                next_inside = next_dist >= 0
+                m.d.sync += curr_dist.eq(d)
+                m.d.sync += curr_inside.eq(d >= 0)
 
-                m.d.sync += Print(
-                    Format(
-                        "   dists {} {} inside {} {}",
-                        curr_dist,
-                        next_dist,
-                        curr_inside,
-                        next_inside,
-                    )
-                )
+                # If the distance is negative, the vertex is behind the plane
 
-                out_count = clip_count[dst]
-
-                # Prepare indices for use across states
-                m.d.sync += [
-                    edge_curr_idx.eq(curr_idx),
-                    edge_next_idx.eq(next_idx),
-                ]
-
-                # Both inside: emit next vertex and move to next edge
-                with m.If(curr_inside & next_inside):
-                    m.d.sync += [
-                        clip_buf[dst][out_count].eq(next_v),
-                        clip_count[dst].eq(out_count + 1),
-                    ]
-                    # Move to next edge
-                    with m.If(clip_idx == clip_count[src] - 1):
-                        # Done with this plane
-                        m.d.sync += clip_src.eq(dst)
-                        with m.If(clip_plane == 5):
-                            # All planes done
-                            m.next = "CLIP_EMIT"
-                        with m.Else():
-                            m.d.sync += clip_plane.eq(clip_plane + 1)
-                            m.next = "CLIP_PLANE"
-                    with m.Else():
-                        m.d.sync += clip_idx.eq(clip_idx + 1)
-                # Exiting: emit intersection
-                with m.Elif(curr_inside & ~next_inside):
-                    # Compute t via reciprocal: request inv(t_den)
-                    m.d.sync += [
-                        t_num.eq(curr_dist),
-                        t_den.eq(curr_dist - next_dist),
-                        emit_next.eq(0),
-                    ]
-                    m.next = "CLIP_INV_REQ"
-                # Entering: emit intersection and next vertex
-                with m.Elif(~curr_inside & next_inside):
-                    # Compute t via reciprocal: request inv(t_den)
-                    m.d.sync += [
-                        t_num.eq(curr_dist),
-                        t_den.eq(curr_dist - next_dist),
-                        emit_next.eq(1),
-                    ]
-                    m.next = "CLIP_INV_REQ"
-                # Both outside: emit nothing, move to next edge
+                with m.If(d >= 0):
+                    m.d.sync += v_inside.eq(curr_v)
+                    m.d.sync += v_inside_dist.eq(d)
                 with m.Else():
-                    # Move to next edge
-                    with m.If(clip_idx == clip_count[src] - 1):
-                        # Done with this plane
-                        m.d.sync += clip_src.eq(dst)
-                        with m.If(clip_plane == 5):
-                            # All planes done
-                            m.next = "CLIP_EMIT"
-                        with m.Else():
-                            m.d.sync += clip_plane.eq(clip_plane + 1)
-                            m.next = "CLIP_PLANE"
-                    with m.Else():
-                        m.d.sync += clip_idx.eq(clip_idx + 1)
+                    m.d.sync += v_outside.eq(curr_v)
+                    m.d.sync += v_outside_dist.eq(d)
 
-            # Request reciprocal for t_den
-            with m.State("CLIP_INV_REQ"):
-                m.d.comb += [
-                    inv.i.valid.eq(1),
-                    inv.i.payload.eq(t_den),
-                ]
+                with m.If(is_first):
+                    m.d.sync += first_dist.eq(d)
+                    m.d.sync += first_inside.eq(d >= 0)
+                    m.d.sync += is_first.eq(0)
+                    m.next = "CONTINUE_PLANE"
+                with m.Elif(prev_inside != (d >= 0)):
+                    m.next = "MAKE_INTERPOLATION"
+                with m.Else():
+                    m.next = "CONTINUE_PLANE"
+
+            with m.State("MAKE_INTERPOLATION"):
+                # make the interpolated vertex between v_inside and v_outside
+                # we want p_interpolated_dist = 0
+                # p_interpolated = v_inside + (v_outside - v_inside) * t
+                # as distance is linear
+                # 0 = v_inside_dist + (v_outside_dist - v_inside_dist) * t
+                # t = v_inside_dist / (v_inside_dist - v_outside_dist)
+                m.d.comb += inv.i.valid.eq(1)
+                m.d.comb += inv.i.payload.eq(v_inside_dist - v_outside_dist)
+
+                m.d.sync += inside_attrs.eq(v_inside)
+                m.d.sync += outside_attrs.eq(v_outside)
+                m.d.sync += attr_idx.eq(0)
+
                 with m.If(inv.i.ready):
-                    m.next = "CLIP_INV_WAIT"
+                    m.next = "MAKE_INTERPOLATION_WAIT"
 
-            with m.State("CLIP_INV_WAIT"):
+            with m.State("MAKE_INTERPOLATION_WAIT"):
                 m.d.comb += inv.o.ready.eq(1)
                 with m.If(inv.o.valid):
-                    m.d.sync += [
-                        t_recip.eq(inv.o.p),
-                        src_reg.eq(clip_src),
-                        dst_reg.eq(~clip_src),
-                        out_count_reg.eq(clip_count[~clip_src]),
-                    ]
-                    m.next = "CLIP_T_MUL"
-
-            with m.State("CLIP_T_MUL"):
-                # Multiply t = t_num * t_recip using the shared multiplier
-                m.d.sync += [
-                    mul_in_a.eq(t_num),
-                    mul_in_b.eq(t_recip),
-                ]
-                m.next = "CLIP_T_LATCH"
-
-            with m.State("CLIP_T_LATCH"):
-                # Latch t and prepare for iterative interpolation
-                m.d.sync += [
-                    t_reg.eq(mul_p.reshape(FixedPoint.f_bits)),
-                    lerp_stage.eq(0),
-                    lerp_phase.eq(0),
-                ]
-                m.next = "CLIP_LERP"
+                    m.d.sync += t.eq((v_inside_dist * inv.o.p).clamp(0, 1))
+                    m.next = "CLIP_LERP"
 
             with m.State("CLIP_LERP"):
-                # Iteratively interpolate components using the shared multiplier
-                src = src_reg
-                dst = dst_reg
-                curr_idx = edge_curr_idx
-                next_idx = edge_next_idx
-                curr_v = clip_buf[src][curr_idx]
-                next_v = clip_buf[src][next_idx]
-                out_idx = out_count_reg
+                # as the vertex at this stage is a bundle of FixedPoint values
+                # we can just interpolate over each component and build up the
+                # interpolated vertex trivially
 
-                result = Signal(FixedPoint)
-                m.d.comb += result.eq(
-                    (lerp_a_reg + mul_p.reshape(FixedPoint.f_bits)).reshape(
-                        FixedPoint.f_bits
-                    )
+                # pull inside/outside attrs from left, and push to the right of interp
+                i_attr = Signal(FixedPoint)
+                o_attr = Signal(FixedPoint)
+
+                m.d.comb += i_attr.eq(inside_attrs[0])
+                m.d.comb += o_attr.eq(outside_attrs[0])
+
+                interp_attr = Signal(FixedPoint)
+                m.d.comb += interp_attr.eq(
+                    (i_attr + t * (o_attr - i_attr)).saturate(FixedPoint)
                 )
 
-                with m.If(lerp_phase == 0):
-                    # Setup multiply for current component
-                    with m.Switch(lerp_stage):
-                        for i in range(4):
-                            with m.Case(i):
-                                a_v = fixed.Value.cast(
-                                    curr_v.position_ndc[i], FixedPoint.f_bits
-                                )
-                                b_v = fixed.Value.cast(
-                                    next_v.position_ndc[i], FixedPoint.f_bits
-                                )
-                                m.d.sync += [
-                                    lerp_a_reg.eq(a_v),
-                                    mul_in_a.eq(t_reg),
-                                    mul_in_b.eq(b_v - a_v),
-                                ]
-                        for i in range(4):
-                            with m.Case(4 + i):
-                                a_v = fixed.Value.cast(
-                                    curr_v.color[i], FixedPoint.f_bits
-                                )
-                                b_v = fixed.Value.cast(
-                                    next_v.color[i], FixedPoint.f_bits
-                                )
-                                m.d.sync += [
-                                    lerp_a_reg.eq(a_v),
-                                    mul_in_a.eq(t_reg),
-                                    mul_in_b.eq(b_v - a_v),
-                                ]
-                        if num_textures > 0:
-                            for t_idx in range(num_textures):
-                                for comp in range(4):
-                                    stage_idx = 8 + t_idx * 4 + comp
-                                    with m.Case(stage_idx):
-                                        a_v = fixed.Value.cast(
-                                            curr_v.texcoords[t_idx][comp],
-                                            FixedPoint.f_bits,
-                                        )
-                                        b_v = fixed.Value.cast(
-                                            next_v.texcoords[t_idx][comp],
-                                            FixedPoint.f_bits,
-                                        )
-                                        m.d.sync += [
-                                            lerp_a_reg.eq(a_v),
-                                            mul_in_a.eq(t_reg),
-                                            mul_in_b.eq(b_v - a_v),
-                                        ]
-                    m.d.sync += lerp_phase.eq(1)
-                with m.Else():
-                    # Write interpolated component and advance
-                    with m.Switch(lerp_stage):
-                        for i in range(4):
-                            with m.Case(i):
-                                m.d.sync += (
-                                    clip_buf[dst][out_idx].position_ndc[i].eq(result)
-                                )
-                        for i in range(4):
-                            with m.Case(4 + i):
-                                m.d.sync += clip_buf[dst][out_idx].color[i].eq(result)
-                        if num_textures > 0:
-                            for t_idx in range(num_textures):
-                                for comp in range(4):
-                                    stage_idx = 8 + t_idx * 4 + comp
-                                    with m.Case(stage_idx):
-                                        m.d.sync += (
-                                            clip_buf[dst][out_idx]
-                                            .texcoords[t_idx][comp]
-                                            .eq(result)
-                                        )
+                m.d.sync += interp_attrs[-1].eq(interp_attr)
 
-                    with m.If(lerp_stage == (total_fields - 1)):
-                        # Finished interpolated vertex; finalize bookkeeping
-                        with m.If(emit_next):
-                            m.d.sync += [
-                                clip_buf[dst][out_idx + 1].eq(next_v),
-                                clip_count[dst].eq(out_idx + 2),
-                            ]
-                        with m.Else():
-                            m.d.sync += clip_count[dst].eq(out_idx + 1)
+                # shift the attributes right
+                m.d.sync += interp_attrs[:-1].eq(interp_attrs[1:])
+                m.d.sync += inside_attrs[:-1].eq(inside_attrs[1:])
+                m.d.sync += outside_attrs[:-1].eq(outside_attrs[1:])
 
-                        # Continue to next edge or plane
-                        with m.If(clip_idx == clip_count[src] - 1):
-                            m.d.sync += clip_src.eq(dst)
-                            with m.If(clip_plane == 5):
-                                m.next = "CLIP_EMIT"
-                            with m.Else():
-                                m.d.sync += clip_plane.eq(clip_plane + 1)
-                                m.next = "CLIP_PLANE"
-                        with m.Else():
-                            m.d.sync += clip_idx.eq(clip_idx + 1)
-                            m.next = "CLIP_EDGE"
-                        m.d.sync += lerp_phase.eq(0)
-                    with m.Else():
-                        m.d.sync += [
-                            lerp_stage.eq(lerp_stage + 1),
-                            lerp_phase.eq(0),
-                        ]
+                m.d.sync += attr_idx.eq(0)
+
+                m.d.sync += attr_idx.eq(attr_idx + 1)
+                with m.If(attr_idx == component_count - 1):
+                    m.d.sync += attr_idx.eq(0)
+                    m.next = "SAVE_INTERPOLATED"
+
+            with m.State("SAVE_INTERPOLATED"):
+                m.d.comb += vtx_buf.w_data.eq(interp_attrs)
+                m.d.comb += vtx_buf.w_en.eq(1)
+                m.d.sync += Assert(vtx_buf.w_rdy)
+                m.next = "CONTINUE_PLANE"
 
             with m.State("CLIP_EMIT"):
-                # Emit clipped polygon as triangle fan
-                final_buf = clip_src
-                final_count = clip_count[final_buf]
+                out_first = Signal(RasterizerLayout)
+                out_prev = Signal(RasterizerLayout)
 
-                m.d.sync += Print(
-                    Format(
-                        "CLIP_EMIT count {} plane {} src {}",
-                        final_count,
-                        clip_plane,
-                        final_buf,
-                    )
-                )
+                m.d.sync += Assert(vtx_buf.r_rdy)
+                m.d.sync += out_first.eq(vtx_buf.r_data)
+                m.d.sync += out_prev.eq(vtx_buf.r_data)
+                m.d.comb += vtx_buf.r_en.eq(1)
 
-                with m.If(final_count < 3):
-                    # Clipped to nothing
-                    m.next = "COLLECT"
-                with m.Else():
-                    # Emit first triangle
-                    m.d.sync += clip_idx.eq(2)
-                    m.next = "CLIP_OUTPUT"
+                with m.Switch(self.prim_type):
+                    with m.Case(PrimitiveType.TRIANGLES):
+                        m.d.sync += Assert(vtx_buf.level >= 3)
+                        m.next = "CLIP_EMIT_TRI_SND"
+                    with m.Case(PrimitiveType.LINES):
+                        m.d.sync += Assert(vtx_buf.level == 2)
+                        m.next = "CLIP_EMIT_LINE"
+                    with m.Case(PrimitiveType.POINTS):
+                        m.d.sync += Assert(vtx_buf.level == 1)
+                        m.next = "CLIP_EMIT_POINT"
 
-            with m.State("CLIP_OUTPUT"):
-                # Output triangle as fan: (0, idx-1, idx)
-                final_buf = clip_src
-                final_count = clip_count[final_buf]
-
+            with m.State("CLIP_EMIT_POINT"):
+                # only one point can be in the buffer
                 m.d.comb += [
-                    w_out.i.p.data[0].eq(clip_buf[final_buf][0]),
-                    w_out.i.p.data[1].eq(clip_buf[final_buf][clip_idx - 1]),
-                    w_out.i.p.data[2].eq(clip_buf[final_buf][clip_idx]),
-                    w_out.i.p.n.eq(3),
+                    w_out.i.p.data[0].eq(out_first),
+                    w_out.i.p.n.eq(1),
                     w_out.i.valid.eq(1),
                 ]
                 with m.If(w_out.i.ready):
-                    # Check if this is the last triangle
-                    with m.If(clip_idx == final_count - 1):
-                        # Done, go back to COLLECT
-                        m.next = "COLLECT"
-                    with m.Else():
-                        # More triangles to emit, increment and stay in CLIP_OUTPUT
-                        m.d.sync += clip_idx.eq(clip_idx + 1)
+                    m.next = "COLLECT"
+
+            with m.State("CLIP_EMIT_LINE"):
+                # line will have 2 points
+                m.d.comb += [
+                    w_out.i.p.data[0].eq(out_first),
+                    w_out.i.p.data[1].eq(vtx_buf.r_data),
+                    w_out.i.p.n.eq(2),
+                    w_out.i.valid.eq(1),
+                ]
+                with m.If(w_out.i.ready):
+                    m.d.comb += vtx_buf.r_en.eq(1)
+                    m.next = "COLLECT"
+
+            with m.State("CLIP_EMIT_TRI_SND"):
+                m.d.sync += out_prev.eq(vtx_buf.r_data)
+                m.d.comb += vtx_buf.r_en.eq(1)
+                m.next = "CLIP_EMIT_TRI"
+
+            with m.State("CLIP_EMIT_TRI"):
+                with m.If(vtx_buf.r_rdy):
+                    m.d.comb += [
+                        w_out.i.p.data[0].eq(out_first),
+                        w_out.i.p.data[1].eq(out_prev),
+                        w_out.i.p.data[2].eq(vtx_buf.r_data),
+                        w_out.i.p.n.eq(3),
+                        w_out.i.valid.eq(1),
+                    ]
+                    with m.If(w_out.i.ready):
+                        m.d.sync += out_prev.eq(vtx_buf.r_data)
+                        m.d.comb += vtx_buf.r_en.eq(1)
+                with m.Else():
+                    m.next = "COLLECT"
 
         return m
 
@@ -563,17 +359,23 @@ class PrimitiveClipper(wiring.Component):
 class PerspectiveDivide(wiring.Component):
     """Perspective divide: divides NDC coordinates by w to produce perspective-divided values.
 
-    Input: RasterizerLayout stream (position_ndc with x, y, z, w)
+    Input: RasterizerLayout stream (position with x, y, z, w)
     Output: RasterizerLayoutNDC stream (position_ndc with x/w, y/w, z/w, 1/w in UQ(1,17) format)
     """
 
-    ready: Out(1)
+    i: stream.Interface
+    o: stream.Interface
 
-    i: In(stream.Signature(RasterizerLayout))
-    o: Out(stream.Signature(RasterizerLayoutNDC))
+    ready: Value
 
     def __init__(self, inv_steps: int = 4):
-        super().__init__()
+        super().__init__(
+            {
+                "ready": Out(1),
+                "i": In(stream.Signature(RasterizerLayout)),
+                "o": Out(stream.Signature(RasterizerLayoutNDC)),
+            }
+        )
         self._inv_steps = inv_steps
 
     def elaborate(self, platform):
@@ -611,10 +413,9 @@ class PerspectiveDivide(wiring.Component):
                     m.next = "START_INV"
 
             with m.State("START_INV"):
-                m.d.sync += Print("W value: ", vtx_buf.position_ndc[3])
                 m.d.comb += [
                     inv.i.valid.eq(1),
-                    inv.i.payload.eq(vtx_buf.position_ndc[3]),
+                    inv.i.payload.eq(vtx_buf.position[3]),
                 ]
                 with m.If(inv.i.ready):
                     m.next = "WAIT_INV"
@@ -626,17 +427,17 @@ class PerspectiveDivide(wiring.Component):
                     m.next = "DIVIDE_X"
 
             with m.State("DIVIDE_X"):
-                m.d.comb += [mul_a.eq(vtx_buf.position_ndc[0]), mul_b.eq(inv_w)]
+                m.d.comb += [mul_a.eq(vtx_buf.position[0]), mul_b.eq(inv_w)]
                 m.d.sync += div_x.eq(((mul_p + 1) >> 1).saturate(persp_type))
                 m.next = "DIVIDE_Y"
 
             with m.State("DIVIDE_Y"):
-                m.d.comb += [mul_a.eq(vtx_buf.position_ndc[1]), mul_b.eq(inv_w)]
+                m.d.comb += [mul_a.eq(vtx_buf.position[1]), mul_b.eq(inv_w)]
                 m.d.sync += div_y.eq(((mul_p + 1) >> 1).saturate(persp_type))
                 m.next = "DIVIDE_Z"
 
             with m.State("DIVIDE_Z"):
-                m.d.comb += [mul_a.eq(vtx_buf.position_ndc[2]), mul_b.eq(inv_w)]
+                m.d.comb += [mul_a.eq(vtx_buf.position[2]), mul_b.eq(inv_w)]
                 m.d.sync += div_z.eq(((mul_p + 1) >> 1).saturate(persp_type))
                 m.next = "OUTPUT"
 
@@ -651,8 +452,6 @@ class PerspectiveDivide(wiring.Component):
                     self.o.p.texcoords.eq(vtx_buf.texcoords),
                 ]
                 with m.If(self.o.ready):
-                    m.d.sync += Print("Input vertex: ", vtx_buf)
-                    m.d.sync += Print("Output vertex: ", self.o.p)
                     m.next = "IDLE"
 
         return m
@@ -884,7 +683,6 @@ class TrianglePrep(wiring.Component):
                 m.d.comb += [self.o.p.screen_y[i].eq(screen_y[i]) for i in range(3)]
                 m.d.comb += self.o.valid.eq(1)
                 with m.If(self.o.ready):
-                    m.d.sync += Print("Output ctx: ", self.o.p)
                     m.next = "COLLECT"
 
         return m

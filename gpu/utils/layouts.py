@@ -49,9 +49,9 @@ class PrimitiveAssemblyLayout(data.Struct):
 
 
 class RasterizerLayout(data.Struct):
-    position_ndc: Vector4  # In normalized device coordinates
-    texcoords: texture_coords
+    position: Vector4  # In clip space coordinates
     color: Vector4
+    texcoords: texture_coords
 
 
 class RasterizerLayoutNDC(data.Struct):

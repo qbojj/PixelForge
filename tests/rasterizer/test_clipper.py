@@ -12,7 +12,7 @@ from ..utils.streams import stream_testbench
 def make_vertex(x, y, z, w=1.0, r=1.0, g=1.0, b=1.0, a=1.0):
     """Helper to create a vertex with NDC position and color."""
     return {
-        "position_ndc": [x, y, z, w],
+        "position": [x, y, z, w],
         "texcoords": [[0.0, 0.0, 0.0, 1.0] for _ in range(num_textures)],
         "color": [r, g, b, a],
     }
@@ -261,11 +261,7 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
     """Test primitive clipper with various cases."""
     dut = PrimitiveClipper()
 
-    output_triangles = []
-
     async def output_checker(ctx, results):
-        nonlocal output_triangles
-
         match prim_type:
             case PrimitiveType.POINTS:
                 num_verts_per_prim = 1
@@ -290,27 +286,20 @@ def test_clipper(test_name, prim_type, input_vertices, expected_count):
         print(f"Output primitives: {len(output_prims)}")
         print(f"Expected count: {expected_count}")
 
-        # For fully inside/outside cases, check exact count
-        if "fully_inside" in test_name or "fully_outside" in test_name:
-            assert (
-                len(output_prims) == expected_count
-            ), f"Expected {expected_count} primitives, got {len(output_prims)}"
-        else:
-            # For clipped cases, just check we got some output
-            assert (
-                len(output_prims) == expected_count
-            ), f"Expected {expected_count} primitives, got {len(output_prims)}"
+        assert (
+            len(output_prims) == expected_count
+        ), f"Expected {expected_count} primitives, got {len(output_prims)}"
 
         print("Output Primitives:", output_prims)
 
         # Verify all output vertices are within NDC bounds
         for prim_idx, prim in enumerate(output_prims):
             for vert_idx, v in enumerate(prim):
-                x, y, z, w = v.position_ndc
-                print(f"{x.as_float()} {y.as_float()} {z.as_float()} {w.as_float()}")
-                ndc_x = x.as_float() / w.as_float()
-                ndc_y = y.as_float() / w.as_float()
-                ndc_z = z.as_float() / w.as_float()
+                x, y, z, w = [q.as_float() for q in v.position]
+                print(f"{x} {y} {z} {w}")
+                ndc_x = x / w
+                ndc_y = y / w
+                ndc_z = z / w
                 err = 0.001
                 assert (
                     -1.0 - err <= ndc_x <= 1.0 + err
@@ -370,7 +359,7 @@ def test_clipper_interpolation():
 
         for prim_idx, prim in enumerate(output_prims):
             for vert_idx, v in enumerate(prim):
-                x, y, z, w = [p.as_float() for p in v.position_ndc]
+                x, y, z, w = [p.as_float() for p in v.position]
                 r, g, b, a = [s.as_float() for s in v.color]
 
                 print(

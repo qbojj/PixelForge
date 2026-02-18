@@ -1,7 +1,7 @@
 from collections.abc import Callable, Iterable
 
 from amaranth import *
-from amaranth import ShapeCastable, ValueCastable
+from amaranth import ShapeLike, ValueCastable
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 
@@ -11,7 +11,10 @@ class VectorToStream(wiring.Component):
     Converts a vector signal into a stream signal.
     """
 
-    def __init__(self, vector_type: ShapeCastable):
+    i: stream.Interface
+    o: stream.Interface
+
+    def __init__(self, vector_type: ShapeLike):
         super().__init__(
             {
                 "i": In(stream.Signature(vector_type)),
@@ -61,7 +64,10 @@ class StreamToVector(wiring.Component):
     Converts a stream signal into a vector signal.
     """
 
-    def __init__(self, vector_type: ShapeCastable):
+    i: stream.Interface
+    o: stream.Interface
+
+    def __init__(self, vector_type: ShapeLike):
         super().__init__(
             {
                 "i": In(stream.Signature(vector_type.elem_shape)),
@@ -104,8 +110,8 @@ class StreamToVector(wiring.Component):
 class StreamReshape(wiring.Component):
     def __init__(
         self,
-        shapes_in: Iterable[ShapeCastable],
-        shapes_out: Iterable[ShapeCastable],
+        shapes_in: Iterable[ShapeLike],
+        shapes_out: Iterable[ShapeLike],
         reshaper: Callable[[list[ValueCastable]], list[ValueCastable]],
     ):
         attrs = {}
@@ -151,7 +157,11 @@ class ValueDuplicator(wiring.Component):
     Duplicate input stream n times
     """
 
-    def __init__(self, shape: ShapeCastable, max_n: int):
+    i: stream.Interface
+    n: stream.Interface
+    o: stream.Interface
+
+    def __init__(self, shape: ShapeLike, max_n: int):
         super().__init__(
             {
                 "i": In(stream.Signature(shape)),
@@ -195,7 +205,12 @@ class RoundRobinDistributor(wiring.Component):
     Distributes input stream to multiple output streams in round-robin fashion
     """
 
-    def __init__(self, shape: ShapeCastable, num_outputs: int):
+    i: stream.Interface
+    o: list[stream.Interface]
+
+    num_outputs: int
+
+    def __init__(self, shape: ShapeLike, num_outputs: int):
         super().__init__(
             {
                 "i": In(stream.Signature(shape)),
@@ -235,7 +250,12 @@ class RoundRobinRecombiner(wiring.Component):
     or added, this component recombines them back into a single stream in the original order.
     """
 
-    def __init__(self, shape: ShapeCastable, num_inputs: int):
+    i: list[stream.Interface]
+    o: stream.Interface
+
+    num_inputs: int
+
+    def __init__(self, shape: ShapeLike, num_inputs: int):
         super().__init__(
             {
                 "i": In(stream.Signature(shape)).array(num_inputs),
@@ -270,7 +290,12 @@ class AnyDistributor(wiring.Component):
     If the subsequent modules are constant latency, you should use RoundRobinDistributor instead.
     """
 
-    def __init__(self, shape: ShapeCastable, num_outputs: int):
+    i: stream.Interface
+    o: list[stream.Interface]
+
+    num_outputs: int
+
+    def __init__(self, shape: ShapeLike, num_outputs: int):
         super().__init__(
             {
                 "i": In(stream.Signature(shape)),
@@ -309,7 +334,12 @@ class AnyRecombiner(wiring.Component):
     Recombines multiple input streams into a single output stream, taking data from any input that is valid.
     """
 
-    def __init__(self, shape: ShapeCastable, num_inputs: int):
+    i: list[stream.Interface]
+    o: stream.Interface
+
+    num_inputs: int
+
+    def __init__(self, shape: ShapeLike, num_inputs: int):
         super().__init__(
             {
                 "i": In(stream.Signature(shape)).array(num_inputs),
@@ -346,13 +376,17 @@ class WideStreamOutput(wiring.Component):
     Splits wide output stream into multiple cycles.
     """
 
-    def __init__(self, shape: ShapeCastable, max_width: int):
+    i: stream.Interface
+    o: stream.Interface
+
+    def __init__(self, shape: ShapeLike, max_width: int):
         sig = data.StructLayout(
             {
                 "data": data.ArrayLayout(shape, max_width),
                 "n": range(max_width + 1),
             }
         )
+
         super().__init__(
             {
                 "i": In(stream.Signature(sig)),
@@ -363,32 +397,27 @@ class WideStreamOutput(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        n = Signal.like(self.i.p.n)
-        i = Signal.like(self.i.p.n)
-        p = Signal.like(self.i.p.data)
+        num_valid = Signal.like(self.i.p.n)
+        data = Signal.like(self.i.p.data)
 
         with m.FSM():
             with m.State("IDLE"):
                 m.d.comb += self.i.ready.eq(1)
                 with m.If(self.i.valid):
                     with m.If(self.i.p.n > 0):
-                        m.d.sync += [
-                            n.eq(self.i.p.n),
-                            i.eq(0),
-                            p.eq(self.i.p.data),
-                            self.o.p.eq(self.i.p.data[0]),
-                            self.o.valid.eq(1),
-                        ]
+                        m.d.sync += num_valid.eq(self.i.p.n)
+                        m.d.sync += data.eq(self.i.p.data)
                         m.next = "SEND"
             with m.State("SEND"):
+                m.d.comb += [
+                    self.o.valid.eq(1),
+                    self.o.p.eq(data[0]),
+                ]
                 with m.If(self.o.ready):
-                    with m.If(i + 1 < n):
-                        m.d.sync += [
-                            i.eq(i + 1),
-                            self.o.p.eq(p[i + 1]),
-                        ]
+                    with m.If(num_valid > 1):
+                        m.d.sync += num_valid.eq(num_valid - 1)
+                        m.d.sync += data.eq(data[1:])
                     with m.Else():
-                        m.d.sync += self.o.valid.eq(0)
                         m.next = "IDLE"
 
         return m

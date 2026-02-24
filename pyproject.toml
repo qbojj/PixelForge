@@ -2,9 +2,9 @@
 name = "pixel-forge"
 dynamic = ["version"]
 dependencies = [
-    "amaranth >= 0.4.0",
-    "amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git@7e24efe2f6e95afddd0c1b56f1a9423c48caa472",
-    "amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc.git@5c43cf58f15d9cd9c69ff83c97997708d386b2dc",
+    "amaranth >= 0.5.0",
+    "amaranth-boards @ git+https://github.com/amaranth-lang/amaranth-boards.git@85d91df72a9d3ddb1498148a70e32f03027dd541",
+    "amaranth-soc @ git+https://github.com/amaranth-lang/amaranth-soc.git@a585f4c6465c220076bfb029c5d991761a9ae128",
     "amaranth-yosys >= 0.50.0.0.post120",
 ]
 requires-python = ">=3.10"

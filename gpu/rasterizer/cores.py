@@ -490,15 +490,22 @@ class PixelTask(data.Struct):
 class TrianglePrep(wiring.Component):
     """Triangle setup: collects 3 vertices, applies viewport/scissor and outputs context."""
 
-    i: In(stream.Signature(RasterizerLayoutNDC))
-    o: Out(stream.Signature(TriangleContext))
-
-    fb_info: In(FramebufferInfoLayout)
-    pa_conf: In(PrimitiveAssemblyConfigLayout)
-    ready: Out(1)
+    i: stream.Interface
+    o: stream.Interface
+    fb_info: Signal
+    pa_conf: Signal
+    ready: Signal
 
     def __init__(self, inv_steps: int = 4):
-        super().__init__()
+        super().__init__(
+            {
+                "i": In(stream.Signature(RasterizerLayoutNDC)),
+                "o": Out(stream.Signature(TriangleContext)),
+                "fb_info": In(FramebufferInfoLayout),
+                "pa_conf": In(PrimitiveAssemblyConfigLayout),
+                "ready": Out(1),
+            }
+        )
         self._inv_steps = inv_steps
 
     def elaborate(self, platform):
@@ -507,6 +514,14 @@ class TrianglePrep(wiring.Component):
         s_fb_type = FixedPoint_fb
         weight_shape = _weight_shape
         recip_shape = _area_recip_shape
+
+        cull_front = Signal()
+        cull_back = Signal()
+
+        m.d.comb += cull_front.eq(
+            (self.pa_conf.cull & CullFace.FRONT) == CullFace.FRONT
+        )
+        m.d.comb += cull_back.eq((self.pa_conf.cull & CullFace.BACK) == CullFace.BACK)
 
         # Single shared multiplier (time-multiplexed)
         mul_a = Signal(s_fb_type)
@@ -596,11 +611,6 @@ class TrianglePrep(wiring.Component):
             with m.State("BOUNDING_BOX"):
                 # Prepare edge deltas for area = (x1-x0)*(y2-y0) - (y1-y0)*(x2-x0)
                 m.d.sync += [
-                    Print("screen_x: ", *screen_x),
-                    Print("screen_y: ", *screen_y),
-                    Print("vtx: ", *vtx),
-                ]
-                m.d.sync += [
                     dx10.eq(screen_x[1] - screen_x[0]),
                     dy10.eq(screen_y[1] - screen_y[0]),
                     dx20.eq(screen_x[2] - screen_x[0]),
@@ -656,14 +666,10 @@ class TrianglePrep(wiring.Component):
 
                 m.d.sync += tri_front_facing.eq(ff)
 
-                with m.If(
-                    ff & ((self.pa_conf.cull & CullFace.FRONT) == CullFace.FRONT)
-                ):
+                with m.If(ff & cull_front):
                     m.d.sync += Print("Culling front face")
                     m.next = "COLLECT"
-                with m.Elif(
-                    ~ff & ((self.pa_conf.cull & CullFace.BACK) == CullFace.BACK)
-                ):
+                with m.Elif(~ff & cull_back):
                     m.d.sync += Print("Culling back face")
                     m.next = "COLLECT"
                 with m.Elif(outside_bits.any() | (area == 0)):
@@ -703,21 +709,28 @@ class TrianglePrep(wiring.Component):
 class FragmentGenerator(wiring.Component):
     """Fragment generator: barycentric test + interpolation for a single pixel."""
 
-    i: In(stream.Signature(PixelTask))
-    o: Out(stream.Signature(FragmentLayout))
+    i: stream.Interface
+    o: stream.Interface
+    ctx: Signal
+    d_x: Signal
+    d_y: Signal
+    winding_ccw: Signal
+    is_top_left: Signal
+    o_done: Signal
 
-    ctx: In(TriangleContext)
-
-    d_x: In(data.ArrayLayout(FixedPoint_fb, 3))
-    d_y: In(data.ArrayLayout(FixedPoint_fb, 3))
-
-    winding_ccw: In(1)
-    is_top_left: In(3)
-
-    o_done: Out(1)
-
-    def __init__(self, inv_steps: int = 4):
-        super().__init__()
+    def __init__(self, inv_steps: int):
+        super().__init__(
+            {
+                "i": In(stream.Signature(PixelTask)),
+                "o": Out(stream.Signature(FragmentLayout)),
+                "ctx": In(TriangleContext),
+                "d_x": In(data.ArrayLayout(FixedPoint_fb, 3)),
+                "d_y": In(data.ArrayLayout(FixedPoint_fb, 3)),
+                "winding_ccw": In(1),
+                "is_top_left": In(3),
+                "o_done": Out(1),
+            }
+        )
         self._inv_steps = inv_steps
 
     @staticmethod

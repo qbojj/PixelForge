@@ -108,7 +108,7 @@
           "size": 4
         }
       },
-      "light": {
+      "lights": {
         "0": {
           "position": {
             "address": 2112,

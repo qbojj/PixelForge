@@ -484,7 +484,7 @@ class GraphicsPipelineCSR(wiring.Component):
         ia_tex_mode = []
         ia_tex_info = []
         for i in range(num_textures):
-            with bld.Cluster(str(i)):
+            with bld.Index(i):
                 mode, info = add_attr_cluster("tex", pipeline.c_tex[i])
                 ia_tex_mode.append(mode)
                 ia_tex_info.append(info)
@@ -554,7 +554,7 @@ class GraphicsPipelineCSR(wiring.Component):
 
         light_regs = []
         for l_idx in range(num_lights):
-            with bld.Cluster("light"), bld.Cluster(f"{l_idx}"):
+            with bld.Cluster("lights"), bld.Index(l_idx):
                 light = pipeline.lights[l_idx]
                 pos = bld.add(
                     "position",

@@ -10,7 +10,7 @@ Implements the fragment pipeline with memory access:
 
 import amaranth_soc.wishbone.bus as wb
 from amaranth import *
-from amaranth.lib import data, enum, fifo, stream, wiring
+from amaranth.lib import data, enum, stream, wiring
 from amaranth.lib.wiring import In, Out
 
 from gpu.utils import fixed
@@ -21,11 +21,10 @@ from ..utils.layouts import (
     wb_bus_addr_width,
     wb_bus_data_width,
 )
-from ..utils.mem_pipelined import (
-    WishbonePipelinedMaster,
-    mem_read_response_layout,
-)
 from ..utils.types import CompareOp
+
+one = fixed.Const(1.0)
+zero = fixed.Const(0.0)
 
 BGRA_MAP = [2, 1, 0, 3]  # Mapping from RGBA to BGRA order
 
@@ -156,7 +155,6 @@ class DepthStencilTest(wiring.Component):
                     wb.Signature(
                         addr_width=wb_bus_addr_width,
                         data_width=wb_bus_data_width,
-                        features={wb.Feature.STALL},
                     )
                 ),
                 "ready": Out(1),
@@ -166,347 +164,221 @@ class DepthStencilTest(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        tag_width = 16
-        req_depth = 8
-        inflight_depth = 8
-        lock_depth = 8
-        fwd_depth = 8
+        v = Signal.like(self.i.payload)
 
-        req_layout = mem_read_response_layout(wb_bus_data_width, tag_width)
-        meta_layout = data.StructLayout(
-            {
-                "frag": FragmentLayout,
-                "addr": unsigned(wb_bus_addr_width),
-                "d_frag": unsigned(16),
-            }
-        )
+        # Combined depth/stencil buffer (D16_X8_S8 format)
+        depthstencil_addr = Signal(wb_bus_addr_width)
 
-        m.submodules.mem = mem = WishbonePipelinedMaster(
-            addr_width=wb_bus_addr_width,
-            data_width=wb_bus_data_width,
-            tag_width=tag_width,
-            req_depth=req_depth,
-            inflight_depth=inflight_depth,
-        )
-        wiring.connect(m, mem.wb_bus, wiring.flipped(self.wb_bus))
+        stencil_value = Signal(unsigned(8))
+        depth_value = Signal(unsigned(16))
+        depthstencil_data = Signal(unsigned(32))  # Full 32-bit value from memory
 
-        m.submodules.meta_fifo = meta_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(meta_layout).width,
-            depth=lock_depth,
-        )
-        m.submodules.read_req_fifo = read_req_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(req_layout).width,
-            depth=req_depth,
-        )
-        m.submodules.write_req_fifo = write_req_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(req_layout).width,
-            depth=req_depth,
-        )
-        m.submodules.out_fifo = out_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(FragmentLayout).width,
-            depth=lock_depth,
-        )
-
-        lock_valid = Array(Signal() for _ in range(lock_depth))
-        lock_addr = Array(
-            Signal(unsigned(wb_bus_addr_width)) for _ in range(lock_depth)
-        )
-
-        fwd_valid = Array(Signal() for _ in range(fwd_depth))
-        fwd_addr = Array(Signal(unsigned(wb_bus_addr_width)) for _ in range(fwd_depth))
-        fwd_data = Array(Signal(unsigned(wb_bus_data_width)) for _ in range(fwd_depth))
-        fwd_seq = Array(Signal(unsigned(tag_width)) for _ in range(fwd_depth))
-        write_seq_counter = Signal(unsigned(tag_width))
-
-        def compare(op, value, reference):
-            less = value < reference
-            equal = value == reference
-            greater = value > reference
-            match_less = (op & CompareOp.LESS == CompareOp.LESS) & less
-            match_equal = (op & CompareOp.EQUAL == CompareOp.EQUAL) & equal
-            match_greater = (op & CompareOp.GREATER == CompareOp.GREATER) & greater
-            return match_less | match_equal | match_greater
-
-        depth_zero_one = self.i.payload.depth.clamp(0, 1)
-        d_frag_calc = Signal(unsigned(16))
-        m.d.comb += d_frag_calc.eq(((depth_zero_one << 16) - depth_zero_one).round())
-
-        addr_calc = Signal(unsigned(wb_bus_addr_width))
-        depthstencil_base = self.fb_info.depthstencil_address[2:]
-        depthstencil_offset = self.i.payload.coord_pos[0]
-        depthstencil_row = (
-            self.i.payload.coord_pos[1] * self.fb_info.depthstencil_pitch[2:]
-        )
-        m.d.comb += addr_calc.eq(
-            depthstencil_base + depthstencil_offset + depthstencil_row
-        )
-
-        lock_conflict = Signal()
-        lock_free_found = Signal()
-        lock_free_idx = Signal(range(lock_depth))
-        m.d.comb += [
-            lock_conflict.eq(0),
-            lock_free_found.eq(0),
-            lock_free_idx.eq(0),
-        ]
-        for i in range(lock_depth):
-            with m.If(lock_valid[i] & (lock_addr[i] == addr_calc)):
-                m.d.comb += lock_conflict.eq(1)
-            with m.If(~lock_free_found & ~lock_valid[i]):
-                m.d.comb += [
-                    lock_free_found.eq(1),
-                    lock_free_idx.eq(i),
-                ]
-
-        input_ready = (
-            meta_fifo.w_rdy & read_req_fifo.w_rdy & lock_free_found & ~lock_conflict
-        )
-        m.d.comb += [
-            self.i.ready.eq(input_ready),
-            self.ready.eq(input_ready),
-        ]
-
-        meta_in = Signal(meta_layout)
-        read_req_in = Signal(req_layout)
-        read_seq_counter = Signal(unsigned(tag_width))
-
-        m.d.comb += [
-            meta_in.frag.eq(self.i.payload),
-            meta_in.addr.eq(addr_calc),
-            meta_in.d_frag.eq(d_frag_calc),
-            read_req_in.addr.eq(addr_calc),
-            read_req_in.data.eq(0),
-            read_req_in.sel.eq(~0),
-            read_req_in.we.eq(0),
-            read_req_in.tag.eq(read_seq_counter),
-            meta_fifo.w_en.eq(self.i.valid & input_ready),
-            meta_fifo.w_data.eq(meta_in),
-            read_req_fifo.w_en.eq(self.i.valid & input_ready),
-            read_req_fifo.w_data.eq(read_req_in),
-        ]
-
-        with m.If(self.i.valid & input_ready):
-            m.d.sync += [
-                lock_valid[lock_free_idx].eq(1),
-                lock_addr[lock_free_idx].eq(addr_calc),
-                read_seq_counter.eq(read_seq_counter + 1),
-            ]
-
-        rr_toggle = Signal()
-        read_req_out = Signal(req_layout)
-        write_req_out = Signal(req_layout)
-        m.d.comb += [
-            read_req_out.eq(read_req_fifo.r_data),
-            write_req_out.eq(write_req_fifo.r_data),
-        ]
-
-        both_reqs = read_req_fifo.r_rdy & write_req_fifo.r_rdy
-        sel_write = Signal()
-        m.d.comb += sel_write.eq(Mux(both_reqs, rr_toggle, write_req_fifo.r_rdy))
-
-        mem_req_valid = read_req_fifo.r_rdy | write_req_fifo.r_rdy
-        mem_req_in = Signal(req_layout)
-        m.d.comb += [
-            mem_req_in.addr.eq(Mux(sel_write, write_req_out.addr, read_req_out.addr)),
-            mem_req_in.data.eq(Mux(sel_write, write_req_out.data, read_req_out.data)),
-            mem_req_in.sel.eq(Mux(sel_write, write_req_out.sel, read_req_out.sel)),
-            mem_req_in.we.eq(Mux(sel_write, write_req_out.we, read_req_out.we)),
-            mem_req_in.tag.eq(Mux(sel_write, write_req_out.tag, read_req_out.tag)),
-            mem.req.valid.eq(mem_req_valid),
-            mem.req.payload.eq(mem_req_in),
-        ]
-
-        grant = mem.req.ready & mem_req_valid
-        m.d.comb += [
-            read_req_fifo.r_en.eq(grant & ~sel_write),
-            write_req_fifo.r_en.eq(grant & sel_write),
-        ]
-        with m.If(grant & both_reqs):
-            m.d.sync += rr_toggle.eq(~rr_toggle)
-
-        meta_out = Signal(meta_layout)
-        m.d.comb += meta_out.eq(meta_fifo.r_data)
-
-        read_data = Signal(unsigned(wb_bus_data_width))
-        m.d.comb += read_data.eq(mem.read_resp.payload.data)
-
-        fwd_hit = Signal()
-        fwd_data_sel = Signal(unsigned(wb_bus_data_width))
-        fwd_match = Signal()
-        fwd_match_idx = Signal(range(fwd_depth))
-        fwd_free_found = Signal()
-        fwd_free_idx = Signal(range(fwd_depth))
-        m.d.comb += [
-            fwd_hit.eq(0),
-            fwd_data_sel.eq(0),
-            fwd_match.eq(0),
-            fwd_match_idx.eq(0),
-            fwd_free_found.eq(0),
-            fwd_free_idx.eq(0),
-        ]
-        for i in range(fwd_depth):
-            with m.If(fwd_valid[i] & (fwd_addr[i] == meta_out.addr)):
-                m.d.comb += [
-                    fwd_hit.eq(1),
-                    fwd_data_sel.eq(fwd_data[i]),
-                    fwd_match.eq(1),
-                    fwd_match_idx.eq(i),
-                ]
-            with m.If(~fwd_free_found & ~fwd_valid[i]):
-                m.d.comb += [
-                    fwd_free_found.eq(1),
-                    fwd_free_idx.eq(i),
-                ]
-
-        depthstencil_data = Signal(unsigned(wb_bus_data_width))
-        m.d.comb += depthstencil_data.eq(Mux(fwd_hit, fwd_data_sel, read_data))
-        depth_value = depthstencil_data[0:16]
-        stencil_value = depthstencil_data[24:32]
+        d_frag = Signal(unsigned(16))
 
         s_conf = Signal(StencilOpConfig)
-        m.d.comb += s_conf.eq(
-            Mux(
-                meta_out.frag.front_facing,
-                self.stencil_conf_front,
-                self.stencil_conf_back,
-            )
-        )
-
-        s_passed = compare(
-            s_conf.compare_op,
-            stencil_value & s_conf.mask,
-            s_conf.reference & s_conf.mask,
-        )
-        d_passed = compare(self.depth_conf.compare_op, meta_out.d_frag, depth_value)
 
         s_accepted = Signal()
         d_accepted = Signal()
-        m.d.comb += [
-            s_accepted.eq(s_passed),
-            d_accepted.eq(d_passed | ~self.depth_conf.test_enabled),
-        ]
-
-        stencil_op_to_do = Signal(StencilOp)
-        new_stencil_value = Signal(unsigned(8))
-        m.d.comb += new_stencil_value.eq(stencil_value)
-        with m.If(~s_accepted):
-            m.d.comb += stencil_op_to_do.eq(s_conf.fail_op)
-        with m.Elif(~d_accepted):
-            m.d.comb += stencil_op_to_do.eq(s_conf.depth_fail_op)
-        with m.Else():
-            m.d.comb += stencil_op_to_do.eq(s_conf.pass_op)
-
-        with m.Switch(stencil_op_to_do):
-            with m.Case(StencilOp.KEEP):
-                m.d.comb += new_stencil_value.eq(stencil_value)
-            with m.Case(StencilOp.ZERO):
-                m.d.comb += new_stencil_value.eq(0)
-            with m.Case(StencilOp.REPLACE):
-                m.d.comb += new_stencil_value.eq(s_conf.reference)
-            with m.Case(StencilOp.INCR):
-                m.d.comb += new_stencil_value.eq(
-                    Mux(stencil_value == 0xFF, stencil_value, stencil_value + 1)
-                )
-            with m.Case(StencilOp.DECR):
-                m.d.comb += new_stencil_value.eq(
-                    Mux(stencil_value == 0x00, stencil_value, stencil_value - 1)
-                )
-            with m.Case(StencilOp.INVERT):
-                m.d.comb += new_stencil_value.eq(~stencil_value)
-            with m.Case(StencilOp.INCR_WRAP):
-                m.d.comb += new_stencil_value.eq(stencil_value + 1)
-            with m.Case(StencilOp.DECR_WRAP):
-                m.d.comb += new_stencil_value.eq(stencil_value - 1)
 
         real_new_stencil_value = Signal(unsigned(8))
-        for i in range(8):
-            m.d.comb += real_new_stencil_value[i].eq(
-                Mux(s_conf.write_mask[i], new_stencil_value[i], stencil_value[i])
-            )
-
         new_depth_value = Signal(unsigned(16))
-        m.d.comb += new_depth_value.eq(
-            Mux(
-                s_accepted & d_accepted & self.depth_conf.write_enabled,
-                meta_out.d_frag,
-                depth_value,
-            )
-        )
-
         new_depthstencil = Signal(unsigned(32))
         m.d.comb += new_depthstencil.eq(
-            Cat(new_depth_value, Const(0, 8), real_new_stencil_value)
+            Cat(
+                new_depth_value,
+                Const(0, 8),  # padding
+                real_new_stencil_value,
+            )
         )
 
-        write_needed = Signal()
-        m.d.comb += write_needed.eq(new_depthstencil != depthstencil_data)
+        m.d.comb += s_conf.eq(
+            Mux(v.front_facing, self.stencil_conf_front, self.stencil_conf_back)
+        )
 
-        out_needed = s_accepted & d_accepted
-        out_can_accept = (~out_needed) | out_fifo.w_rdy
+        def perform_compare(op, value, reference):
+            less = Signal()
+            equal = Signal()
+            greater = Signal()
 
-        fwd_can_accept = fwd_match | fwd_free_found
-        write_ready = ~write_needed | write_req_fifo.w_rdy
-        fwd_ready = ~write_needed | fwd_can_accept
-        compute_ready = out_can_accept & write_ready & fwd_ready
+            m.d.comb += less.eq(value < reference)
+            m.d.comb += equal.eq(value == reference)
+            m.d.comb += greater.eq(value > reference)
 
-        compute_fire = meta_fifo.r_rdy & mem.read_resp.valid & compute_ready
-        m.d.comb += [
-            meta_fifo.r_en.eq(compute_fire),
-            mem.read_resp.ready.eq(compute_ready & meta_fifo.r_rdy),
-        ]
+            return (
+                ((op & CompareOp.LESS == CompareOp.LESS) & less)
+                | ((op & CompareOp.EQUAL == CompareOp.EQUAL) & equal)
+                | ((op & CompareOp.GREATER == CompareOp.GREATER) & greater)
+            )
 
-        write_seq = Signal(unsigned(tag_width))
-        m.d.comb += write_seq.eq(write_seq_counter)
+        with m.FSM():
+            with m.State("IDLE"):
+                m.d.comb += self.ready.eq(1)
+                m.d.comb += self.i.ready.eq(1)
+                with m.If(self.i.valid):
+                    m.d.sync += v.eq(self.i.payload)
+                    m.next = "PREPARE"
 
-        write_req_in = Signal(req_layout)
-        m.d.comb += [
-            write_req_in.addr.eq(meta_out.addr),
-            write_req_in.data.eq(new_depthstencil),
-            write_req_in.sel.eq(~0),
-            write_req_in.we.eq(1),
-            write_req_in.tag.eq(write_seq),
-            write_req_fifo.w_en.eq(compute_fire & write_needed),
-            write_req_fifo.w_data.eq(write_req_in),
-        ]
+            with m.State("PREPARE"):
+                # TODO: handle minDepth and maxDepth from fb_info
+                depth_zero_one = v.depth.clamp(zero, one)
+                m.d.sync += d_frag.eq(((depth_zero_one << 16) - depth_zero_one).round())
 
-        m.d.comb += [
-            out_fifo.w_en.eq(compute_fire & out_needed),
-            out_fifo.w_data.eq(meta_out.frag),
-        ]
+                m.d.sync += depthstencil_addr.eq(
+                    self.fb_info.depthstencil_address[2:]
+                    + v.coord_pos[0] * 1
+                    + v.coord_pos[1] * self.fb_info.depthstencil_pitch[2:]
+                )
 
-        with m.If(compute_fire):
-            for i in range(lock_depth):
-                with m.If(lock_valid[i] & (lock_addr[i] == meta_out.addr)):
-                    m.d.sync += lock_valid[i].eq(0)
+                m.d.sync += s_accepted.eq(0)
+                m.d.sync += d_accepted.eq(0)
 
-            with m.If(write_needed):
-                with m.If(fwd_match):
+                m.next = "READ_DEPTHSTENCIL"
+
+            with m.State("READ_DEPTHSTENCIL"):
+                # Read 32-bit combined depth/stencil value
+                m.d.comb += [
+                    self.wb_bus.cyc.eq(1),
+                    self.wb_bus.stb.eq(1),
+                    self.wb_bus.adr.eq(depthstencil_addr),
+                    self.wb_bus.we.eq(0),
+                    self.wb_bus.sel.eq(~0),
+                ]
+                with m.If(self.wb_bus.ack):
                     m.d.sync += [
-                        fwd_data[fwd_match_idx].eq(new_depthstencil),
-                        fwd_seq[fwd_match_idx].eq(write_seq),
+                        depthstencil_data.eq(self.wb_bus.dat_r),
+                        # Extract: [15:0]=depth, [31:24]=stencil
+                        depth_value.eq(self.wb_bus.dat_r[0:16]),
+                        stencil_value.eq(self.wb_bus.dat_r[24:32]),
                     ]
+                    m.next = "CHECK_DEPTH_STENCIL"
+
+            with m.State("CHECK_DEPTH_STENCIL"):
+                s_passed = perform_compare(
+                    s_conf.compare_op,
+                    stencil_value & s_conf.mask,
+                    s_conf.reference & s_conf.mask,
+                )
+                d_passed = perform_compare(
+                    self.depth_conf.compare_op, d_frag, depth_value
+                )
+
+                m.d.sync += s_accepted.eq(s_passed)
+                m.d.sync += d_accepted.eq(d_passed | ~self.depth_conf.test_enabled)
+                m.d.sync += [
+                    Print(
+                        Format(
+                            "Stencil test: value={}, ref={}, passed={}",
+                            stencil_value,
+                            s_conf.reference,
+                            s_passed,
+                        )
+                    ),
+                    Print(
+                        Format(
+                            "Depth test: value={}, frag_depth={}, passed={}",
+                            depth_value,
+                            d_frag,
+                            d_passed,
+                        )
+                    ),
+                ]
+                m.next = "COMPUTE_DEPTHSTENCIL"
+
+            with m.State("COMPUTE_DEPTHSTENCIL"):
+                # Perform depth/stencil updates if accepted
+                stencil_op_to_do = Signal(StencilOp)
+                new_stencil_value = Signal(unsigned(8))
+
+                with m.If(~s_accepted):
+                    m.d.comb += stencil_op_to_do.eq(s_conf.fail_op)
+                with m.Elif(~d_accepted):
+                    m.d.comb += stencil_op_to_do.eq(s_conf.depth_fail_op)
                 with m.Else():
-                    m.d.sync += [
-                        fwd_valid[fwd_free_idx].eq(1),
-                        fwd_addr[fwd_free_idx].eq(meta_out.addr),
-                        fwd_data[fwd_free_idx].eq(new_depthstencil),
-                        fwd_seq[fwd_free_idx].eq(write_seq),
+                    m.d.comb += stencil_op_to_do.eq(s_conf.pass_op)
+
+                with m.Switch(stencil_op_to_do):
+                    with m.Case(StencilOp.KEEP):
+                        m.d.comb += new_stencil_value.eq(stencil_value)
+                    with m.Case(StencilOp.ZERO):
+                        m.d.comb += new_stencil_value.eq(0)
+                    with m.Case(StencilOp.REPLACE):
+                        m.d.comb += new_stencil_value.eq(s_conf.reference)
+                    with m.Case(StencilOp.INCR):
+                        with m.If(stencil_value != 0xFF):
+                            m.d.comb += new_stencil_value.eq(stencil_value + 1)
+                    with m.Case(StencilOp.DECR):
+                        with m.If(stencil_value != 0x00):
+                            m.d.comb += new_stencil_value.eq(stencil_value - 1)
+                    with m.Case(StencilOp.INVERT):
+                        m.d.comb += new_stencil_value.eq(~stencil_value)
+                    with m.Case(StencilOp.INCR_WRAP):
+                        m.d.comb += new_stencil_value.eq(stencil_value + 1)
+                    with m.Case(StencilOp.DECR_WRAP):
+                        m.d.comb += new_stencil_value.eq(stencil_value - 1)
+
+                m.d.sync += [
+                    real_new_stencil_value.eq(
+                        Cat(
+                            [
+                                Mux(
+                                    s_conf.write_mask[i],
+                                    new_stencil_value[i],
+                                    stencil_value[i],
+                                )
+                                for i in range(8)
+                            ]
+                        )
+                    ),
+                    new_depth_value.eq(
+                        Mux(
+                            s_accepted & d_accepted & self.depth_conf.write_enabled,
+                            d_frag,
+                            depth_value,
+                        )
+                    ),
+                ]
+
+                m.next = "OUTPUT_DEPTHSTENCIL"
+
+            with m.State("OUTPUT_DEPTHSTENCIL"):
+                # Determine if we need to write back
+
+                ready_send = Signal()
+
+                m.d.sync += [
+                    Print(
+                        Format(
+                            "New stencil value: {}, New depth value: {}",
+                            real_new_stencil_value,
+                            new_depth_value,
+                        )
+                    ),
+                ]
+
+                with m.If(new_depthstencil != depthstencil_data):
+                    m.d.comb += [
+                        self.wb_bus.cyc.eq(1),
+                        self.wb_bus.stb.eq(1),
+                        self.wb_bus.adr.eq(depthstencil_addr),
+                        self.wb_bus.we.eq(1),
+                        self.wb_bus.dat_w.eq(new_depthstencil),
+                        self.wb_bus.sel.eq(~0),
                     ]
+                    m.d.comb += ready_send.eq(self.wb_bus.ack)
+                with m.Else():
+                    m.d.comb += ready_send.eq(1)
 
-        with m.If(compute_fire & write_needed):
-            m.d.sync += write_seq_counter.eq(write_seq + 1)
+                with m.If(ready_send):
+                    with m.If(~s_accepted | ~d_accepted):
+                        m.next = "IDLE"
+                    with m.Else():
+                        m.next = "SEND"
 
-        m.d.comb += [
-            mem.write_resp.ready.eq(1),
-            self.o.valid.eq(out_fifo.r_rdy),
-            self.o.payload.eq(out_fifo.r_data),
-            out_fifo.r_en.eq(self.o.valid & self.o.ready),
-        ]
-
-        with m.If(mem.write_resp.valid):
-            for i in range(fwd_depth):
-                with m.If(fwd_valid[i] & (fwd_seq[i] == mem.write_resp.payload.tag)):
-                    m.d.sync += fwd_valid[i].eq(0)
+            with m.State("SEND"):
+                m.d.comb += self.o.valid.eq(1)
+                m.d.comb += self.o.payload.eq(v)
+                with m.If(self.o.ready):
+                    m.next = "IDLE"
 
         return m
 
@@ -533,207 +405,24 @@ class SwapchainOutput(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        tag_width = 16
-        req_depth = 8
-        inflight_depth = 8
-        lock_depth = 8
-        fwd_depth = 8
-
-        req_layout = data.StructLayout(
-            {
-                "addr": unsigned(wb_bus_addr_width),
-                "data": unsigned(wb_bus_data_width),
-                "sel": unsigned(wb_bus_data_width // 8),
-                "we": unsigned(1),
-                "tag": unsigned(tag_width),
-            }
-        )
-
         color_shape = fixed.UQ(0, 9)
-        meta_layout = data.StructLayout(
-            {
-                "addr": unsigned(wb_bus_addr_width),
-                "src": data.ArrayLayout(color_shape, 4),
-                "need_read": unsigned(1),
-            }
-        )
-
-        m.submodules.mem = mem = WishbonePipelinedMaster(
-            addr_width=wb_bus_addr_width,
-            data_width=wb_bus_data_width,
-            tag_width=tag_width,
-            req_depth=req_depth,
-            inflight_depth=inflight_depth,
-        )
-        wiring.connect(m, mem.wb_bus, wiring.flipped(self.wb_bus))
-
-        m.submodules.meta_fifo = meta_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(meta_layout).width,
-            depth=lock_depth,
-        )
-        m.submodules.read_req_fifo = read_req_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(req_layout).width,
-            depth=req_depth,
-        )
-        m.submodules.write_req_fifo = write_req_fifo = fifo.SyncFIFOBuffered(
-            width=Shape.cast(req_layout).width,
-            depth=req_depth,
-        )
-
-        lock_valid = Array(Signal() for _ in range(lock_depth))
-        lock_addr = Array(
-            Signal(unsigned(wb_bus_addr_width)) for _ in range(lock_depth)
-        )
-
-        fwd_valid = Array(Signal() for _ in range(fwd_depth))
-        fwd_addr = Array(Signal(unsigned(wb_bus_addr_width)) for _ in range(fwd_depth))
-        fwd_data = Array(Signal(unsigned(wb_bus_data_width)) for _ in range(fwd_depth))
-        fwd_seq = Array(Signal(unsigned(tag_width)) for _ in range(fwd_depth))
-        write_seq_counter = Signal(unsigned(tag_width))
-
         one = fixed.Const(1.0).saturate(color_shape)
 
         in_data = Signal(data.ArrayLayout(color_shape, 4))
-        m.d.comb += [
-            in_data[i].eq(self.i.payload.color[i].saturate(color_shape))
-            for i in range(4)
-        ]
-
-        addr_calc = Signal(unsigned(wb_bus_addr_width))
-        color_base = self.fb_info.color_address[2:]
-        color_offset = self.i.payload.coord_pos[0]
-        color_row = self.i.payload.coord_pos[1] * self.fb_info.color_pitch[2:]
-        m.d.comb += addr_calc.eq(color_base + color_offset + color_row)
-
-        lock_conflict = Signal()
-        lock_free_found = Signal()
-        lock_free_idx = Signal(range(lock_depth))
-        m.d.comb += [
-            lock_conflict.eq(0),
-            lock_free_found.eq(0),
-            lock_free_idx.eq(0),
-        ]
-        for i in range(lock_depth):
-            with m.If(lock_valid[i] & (lock_addr[i] == addr_calc)):
-                m.d.comb += lock_conflict.eq(1)
-            with m.If(~lock_free_found & ~lock_valid[i]):
-                m.d.comb += [
-                    lock_free_found.eq(1),
-                    lock_free_idx.eq(i),
-                ]
-
-        need_read = self.conf.enabled
-        input_ready = meta_fifo.w_rdy & lock_free_found & ~lock_conflict
-        input_ready = Mux(need_read, input_ready & read_req_fifo.w_rdy, input_ready)
-        m.d.comb += [
-            self.i.ready.eq(input_ready),
-            self.ready.eq(input_ready),
-        ]
-
-        meta_in = Signal(meta_layout)
-        read_req_in = Signal(req_layout)
-        read_seq_counter = Signal(unsigned(tag_width))
-
-        m.d.comb += [
-            meta_in.addr.eq(addr_calc),
-            meta_in.src.eq(in_data),
-            meta_in.need_read.eq(need_read),
-            meta_fifo.w_en.eq(self.i.valid & input_ready),
-            meta_fifo.w_data.eq(meta_in),
-            read_req_in.addr.eq(addr_calc),
-            read_req_in.data.eq(0),
-            read_req_in.sel.eq(~0),
-            read_req_in.we.eq(0),
-            read_req_in.tag.eq(read_seq_counter),
-            read_req_fifo.w_en.eq(self.i.valid & input_ready & need_read),
-            read_req_fifo.w_data.eq(read_req_in),
-        ]
-
-        with m.If(self.i.valid & input_ready):
-            m.d.sync += [
-                lock_valid[lock_free_idx].eq(1),
-                lock_addr[lock_free_idx].eq(addr_calc),
-                read_seq_counter.eq(read_seq_counter + 1),
-            ]
-
-        rr_toggle = Signal()
-        read_req_out = Signal(req_layout)
-        write_req_out = Signal(req_layout)
-        m.d.comb += [
-            read_req_out.eq(read_req_fifo.r_data),
-            write_req_out.eq(write_req_fifo.r_data),
-        ]
-
-        both_reqs = read_req_fifo.r_rdy & write_req_fifo.r_rdy
-        sel_write = Signal()
-        m.d.comb += sel_write.eq(Mux(both_reqs, rr_toggle, write_req_fifo.r_rdy))
-
-        mem_req_valid = read_req_fifo.r_rdy | write_req_fifo.r_rdy
-        mem_req_in = Signal(req_layout)
-        m.d.comb += [
-            mem_req_in.addr.eq(Mux(sel_write, write_req_out.addr, read_req_out.addr)),
-            mem_req_in.data.eq(Mux(sel_write, write_req_out.data, read_req_out.data)),
-            mem_req_in.sel.eq(Mux(sel_write, write_req_out.sel, read_req_out.sel)),
-            mem_req_in.we.eq(Mux(sel_write, write_req_out.we, read_req_out.we)),
-            mem_req_in.tag.eq(Mux(sel_write, write_req_out.tag, read_req_out.tag)),
-            mem.req.valid.eq(mem_req_valid),
-            mem.req.payload.eq(mem_req_in),
-        ]
-
-        grant = mem.req.ready & mem_req_valid
-        m.d.comb += [
-            read_req_fifo.r_en.eq(grant & ~sel_write),
-            write_req_fifo.r_en.eq(grant & sel_write),
-        ]
-        with m.If(grant & both_reqs):
-            m.d.sync += rr_toggle.eq(~rr_toggle)
-
-        meta_out = Signal(meta_layout)
-        m.d.comb += meta_out.eq(meta_fifo.r_data)
-
-        fwd_hit = Signal()
-        fwd_data_sel = Signal(unsigned(wb_bus_data_width))
-        fwd_match = Signal()
-        fwd_match_idx = Signal(range(fwd_depth))
-        fwd_free_found = Signal()
-        fwd_free_idx = Signal(range(fwd_depth))
-        m.d.comb += [
-            fwd_hit.eq(0),
-            fwd_data_sel.eq(0),
-            fwd_match.eq(0),
-            fwd_match_idx.eq(0),
-            fwd_free_found.eq(0),
-            fwd_free_idx.eq(0),
-        ]
-        for i in range(fwd_depth):
-            with m.If(fwd_valid[i] & (fwd_addr[i] == meta_out.addr)):
-                m.d.comb += [
-                    fwd_hit.eq(1),
-                    fwd_data_sel.eq(fwd_data[i]),
-                    fwd_match.eq(1),
-                    fwd_match_idx.eq(i),
-                ]
-            with m.If(~fwd_free_found & ~fwd_valid[i]):
-                m.d.comb += [
-                    fwd_free_found.eq(1),
-                    fwd_free_idx.eq(i),
-                ]
-
-        read_data = Signal(unsigned(wb_bus_data_width))
-        m.d.comb += read_data.eq(mem.read_resp.payload.data)
-
+        src_data = Signal(data.ArrayLayout(color_shape, 4))
         dst_data = Signal(data.ArrayLayout(color_shape, 4))
-        plain_dat = [Signal(unsigned(8)) for _ in range(4)]
-        effective_read = Signal(unsigned(wb_bus_data_width))
-        m.d.comb += effective_read.eq(Mux(fwd_hit, fwd_data_sel, read_data))
+
+        big_shape = fixed.SQ(3, 18)
+        out_data = Signal(data.ArrayLayout(big_shape, 4))
+
+        out_data_clamped = Signal(data.ArrayLayout(fixed.UQ(0, 18), 4))
         m.d.comb += [
-            plain_dat[i].eq(effective_read.word_select(BGRA_MAP[i], 8))
+            out_data_clamped[i].eq(out_data[i].saturate(fixed.UQ(0, 18)))
             for i in range(4)
         ]
-        for i in range(4):
-            m.d.comb += dst_data[i].eq(Cat(plain_dat[i][7], plain_dat[i]))
 
-        src_data = meta_out.src
+        color_addr = Signal(wb_bus_addr_width)
+
         src_rgb = src_data[0:3]
         src_a = src_data[3]
         dst_rgb = dst_data[0:3]
@@ -744,7 +433,13 @@ class SwapchainOutput(wiring.Component):
         factor_src_a = Signal(color_shape)
         factor_dst_a = Signal(color_shape)
 
-        def factor_value(factor, src_alpha, dst_alpha):
+        mul_shape = fixed.UQ(0, 18)
+        mul_a = Signal(data.ArrayLayout(color_shape, 6))
+        mul_b = Signal(data.ArrayLayout(color_shape, 6))
+        mul_result = Signal(data.ArrayLayout(mul_shape, 6))
+        m.d.comb += [mul_result[i].eq(mul_a[i] * mul_b[i]) for i in range(6)]
+
+        def factor_value(factor):
             ret = Signal(color_shape)
             with m.Switch(factor):
                 with m.Case(BlendFactor.ZERO):
@@ -752,185 +447,178 @@ class SwapchainOutput(wiring.Component):
                 with m.Case(BlendFactor.ONE):
                     m.d.comb += ret.eq(one)
                 with m.Case(BlendFactor.SRC_COLOR):
-                    m.d.comb += Assert(
+                    m.d.sync += Assert(
                         False, "Not implemented: SRC_COLOR factor in blending"
                     )
                 with m.Case(BlendFactor.ONE_MINUS_SRC_COLOR):
-                    m.d.comb += Assert(
+                    m.d.sync += Assert(
                         False, "Not implemented: ONE_MINUS_SRC_COLOR factor in blending"
                     )
                 with m.Case(BlendFactor.DST_COLOR):
-                    m.d.comb += Assert(
+                    m.d.sync += Assert(
                         False, "Not implemented: DST_COLOR factor in blending"
                     )
                 with m.Case(BlendFactor.ONE_MINUS_DST_COLOR):
-                    m.d.comb += Assert(
+                    m.d.sync += Assert(
                         False, "Not implemented: ONE_MINUS_DST_COLOR factor in blending"
                     )
                 with m.Case(BlendFactor.SRC_ALPHA):
-                    m.d.comb += ret.eq(src_alpha)
+                    m.d.comb += ret.eq(src_a)
                 with m.Case(BlendFactor.ONE_MINUS_SRC_ALPHA):
-                    m.d.comb += ret.eq(one - src_alpha)
+                    m.d.comb += ret.eq(one - src_a)
                 with m.Case(BlendFactor.DST_ALPHA):
-                    m.d.comb += ret.eq(dst_alpha)
+                    m.d.comb += ret.eq(dst_a)
                 with m.Case(BlendFactor.ONE_MINUS_DST_ALPHA):
-                    m.d.comb += ret.eq(one - dst_alpha)
+                    m.d.comb += ret.eq(one - dst_a)
             return ret
 
-        m.d.comb += [
-            factor_src_rgb.eq(factor_value(self.conf.src_factor, src_a, dst_a)),
-            factor_dst_rgb.eq(factor_value(self.conf.dst_factor, src_a, dst_a)),
-            factor_src_a.eq(factor_value(self.conf.src_a_factor, src_a, dst_a)),
-            factor_dst_a.eq(factor_value(self.conf.dst_a_factor, src_a, dst_a)),
-        ]
+        v = Signal.like(self.i.payload)
 
-        mul_shape = fixed.UQ(0, 18)
-        mul_a = Signal(data.ArrayLayout(color_shape, 6))
-        mul_b = Signal(data.ArrayLayout(color_shape, 6))
-        mul_result = Signal(data.ArrayLayout(mul_shape, 6))
-        m.d.comb += [mul_result[i].eq(mul_a[i] * mul_b[i]) for i in range(6)]
+        with m.FSM():
+            with m.State("IDLE"):
+                m.d.comb += [self.i.ready.eq(1), self.ready.eq(1)]
+                with m.If(self.i.valid):
+                    m.d.sync += v.eq(self.i.payload)
+                    m.next = "CALC_ADDR"
 
-        big_shape = fixed.SQ(3, 18)
-        blend_out = Signal(data.ArrayLayout(big_shape, 4))
+            with m.State("CALC_ADDR"):
+                m.d.comb += [
+                    in_data[i].eq(v.color[i].saturate(color_shape)) for i in range(4)
+                ]
+                m.d.sync += src_data.eq(in_data)
+                m.d.sync += [out_data[i].eq(in_data[i]) for i in range(4)]
 
-        for i in range(3):
-            m.d.comb += [
-                mul_a[i].eq(src_rgb[i]),
-                mul_b[i].eq(factor_src_rgb),
-                mul_a[i + 3].eq(dst_rgb[i]),
-                mul_b[i + 3].eq(factor_dst_rgb),
-            ]
-
-            src_scaled = mul_result[i]
-            dst_scaled = mul_result[i + 3]
-            with m.Switch(self.conf.blend_op):
-                with m.Case(BlendOp.ADD):
-                    m.d.comb += blend_out[i].eq(src_scaled + dst_scaled)
-                with m.Case(BlendOp.SUBTRACT):
-                    m.d.comb += blend_out[i].eq(src_scaled - dst_scaled)
-                with m.Case(BlendOp.REVERSE_SUBTRACT):
-                    m.d.comb += blend_out[i].eq(dst_scaled - src_scaled)
-                with m.Case(BlendOp.MIN):
-                    m.d.comb += blend_out[i].eq(
-                        Mux(src_rgb[i] < dst_rgb[i], src_scaled, dst_scaled)
-                    )
-                with m.Case(BlendOp.MAX):
-                    m.d.comb += blend_out[i].eq(
-                        Mux(src_rgb[i] > dst_rgb[i], src_scaled, dst_scaled)
-                    )
-
-        src_scaled_a = Signal(mul_shape)
-        dst_scaled_a = Signal(mul_shape)
-        m.d.comb += [
-            mul_a[0].eq(src_a),
-            mul_b[0].eq(factor_src_a),
-            mul_a[3].eq(dst_a),
-            mul_b[3].eq(factor_dst_a),
-            src_scaled_a.eq(mul_result[0]),
-            dst_scaled_a.eq(mul_result[3]),
-        ]
-        with m.Switch(self.conf.blend_a_op):
-            with m.Case(BlendOp.ADD):
-                m.d.comb += blend_out[3].eq(src_scaled_a + dst_scaled_a)
-            with m.Case(BlendOp.SUBTRACT):
-                m.d.comb += blend_out[3].eq(src_scaled_a - dst_scaled_a)
-            with m.Case(BlendOp.REVERSE_SUBTRACT):
-                m.d.comb += blend_out[3].eq(dst_scaled_a - src_scaled_a)
-            with m.Case(BlendOp.MIN):
-                m.d.comb += blend_out[3].eq(
-                    Mux(src_a < dst_a, src_scaled_a, dst_scaled_a)
-                )
-            with m.Case(BlendOp.MAX):
-                m.d.comb += blend_out[3].eq(
-                    Mux(src_a > dst_a, src_scaled_a, dst_scaled_a)
+                m.d.sync += color_addr.eq(
+                    (self.fb_info.color_address[2:] + v.coord_pos[0])
+                    + (v.coord_pos[1] * self.fb_info.color_pitch[2:])
                 )
 
-        out_data = Signal(data.ArrayLayout(big_shape, 4))
-        for i in range(4):
-            m.d.comb += out_data[i].eq(
-                Mux(meta_out.need_read, blend_out[i], src_data[i])
-            )
-
-        out_data_clamped = Signal(data.ArrayLayout(fixed.UQ(0, 18), 4))
-        m.d.comb += [
-            out_data_clamped[i].eq(out_data[i].saturate(fixed.UQ(0, 18)))
-            for i in range(4)
-        ]
-
-        write_mask_swizzled = Signal(unsigned(4))
-        m.d.comb += write_mask_swizzled.eq(
-            Cat(self.conf.color_write_mask[b] for b in BGRA_MAP)
-        )
-
-        ret_v = Signal(data.ArrayLayout(unsigned(8), 4))
-        m.d.comb += [
-            ret_v[BGRA_MAP[i]].eq(
-                ((out_data_clamped[i] << 8) - (out_data_clamped[i] >> 3)).round()
-            )
-            for i in range(4)
-        ]
-
-        write_data = Signal(unsigned(wb_bus_data_width))
-        m.d.comb += write_data.eq(Cat(ret_v))
-
-        write_needed = Signal()
-        m.d.comb += write_needed.eq(write_mask_swizzled != 0)
-
-        fwd_can_accept = fwd_match | fwd_free_found
-        compute_ready = (~write_needed | write_req_fifo.w_rdy) & (
-            ~write_needed | fwd_can_accept
-        )
-
-        read_needed = meta_out.need_read
-        compute_fire = (
-            meta_fifo.r_rdy & compute_ready & (~read_needed | mem.read_resp.valid)
-        )
-
-        m.d.comb += [
-            meta_fifo.r_en.eq(compute_fire),
-            mem.read_resp.ready.eq(compute_ready & meta_fifo.r_rdy & read_needed),
-        ]
-
-        write_seq = Signal(unsigned(tag_width))
-        m.d.comb += write_seq.eq(write_seq_counter)
-
-        write_req_in = Signal(req_layout)
-        m.d.comb += [
-            write_req_in.addr.eq(meta_out.addr),
-            write_req_in.data.eq(write_data),
-            write_req_in.sel.eq(write_mask_swizzled),
-            write_req_in.we.eq(1),
-            write_req_in.tag.eq(write_seq),
-            write_req_fifo.w_en.eq(compute_fire & write_needed),
-            write_req_fifo.w_data.eq(write_req_in),
-        ]
-
-        with m.If(compute_fire):
-            for i in range(lock_depth):
-                with m.If(lock_valid[i] & (lock_addr[i] == meta_out.addr)):
-                    m.d.sync += lock_valid[i].eq(0)
-
-            with m.If(write_needed):
-                with m.If(fwd_match):
-                    m.d.sync += [
-                        fwd_data[fwd_match_idx].eq(write_data),
-                        fwd_seq[fwd_match_idx].eq(write_seq),
-                    ]
+                with m.If(self.conf.enabled):
+                    m.next = "READ_DEST"
                 with m.Else():
-                    m.d.sync += [
-                        fwd_valid[fwd_free_idx].eq(1),
-                        fwd_addr[fwd_free_idx].eq(meta_out.addr),
-                        fwd_data[fwd_free_idx].eq(write_data),
-                        fwd_seq[fwd_free_idx].eq(write_seq),
+                    m.next = "WRITE_OUTPUT"
+
+            with m.State("READ_DEST"):
+                m.d.comb += [
+                    self.wb_bus.cyc.eq(1),
+                    self.wb_bus.adr.eq(color_addr),
+                    self.wb_bus.we.eq(0),
+                    self.wb_bus.stb.eq(1),
+                    self.wb_bus.sel.eq(~0),
+                ]
+                with m.If(self.wb_bus.ack):
+                    plain_dat = [Signal(unsigned(8)) for _ in range(4)]
+                    m.d.comb += [
+                        plain_dat[i].eq(self.wb_bus.dat_r.word_select(BGRA_MAP[i], 8))
+                        for i in range(4)
                     ]
+                    assert color_shape.i_bits == 0
+                    assert color_shape.f_bits == 9
+                    m.d.sync += [
+                        # approximate conversion from [0,255] to [0,1] fixed-point
+                        dst_data[i].eq(Cat(plain_dat[i][7], plain_dat[i]))
+                        for i in range(4)
+                    ]
+                    m.next = "CALC_FACTORS"
 
-        with m.If(compute_fire & write_needed):
-            m.d.sync += write_seq_counter.eq(write_seq + 1)
+            with m.State("CALC_FACTORS"):
+                m.d.sync += factor_src_rgb.eq(factor_value(self.conf.src_factor))
+                m.d.sync += factor_dst_rgb.eq(factor_value(self.conf.dst_factor))
+                m.d.sync += factor_src_a.eq(factor_value(self.conf.src_a_factor))
+                m.d.sync += factor_dst_a.eq(factor_value(self.conf.dst_a_factor))
+                m.next = "BLEND_RGB"
 
-        m.d.comb += mem.write_resp.ready.eq(1)
-        with m.If(mem.write_resp.valid):
-            for i in range(fwd_depth):
-                with m.If(fwd_valid[i] & (fwd_seq[i] == mem.write_resp.payload.tag)):
-                    m.d.sync += fwd_valid[i].eq(0)
+            with m.State("BLEND_RGB"):
+                for i in range(3):
+                    src_comp = src_rgb[i]
+                    dst_comp = dst_rgb[i]
+
+                    m.d.comb += mul_a[i].eq(src_comp)
+                    m.d.comb += mul_b[i].eq(factor_src_rgb)
+                    src_scaled = mul_result[i]
+
+                    m.d.comb += mul_a[i + 3].eq(dst_comp)
+                    m.d.comb += mul_b[i + 3].eq(factor_dst_rgb)
+                    dst_scaled = mul_result[i + 3]
+
+                    with m.Switch(self.conf.blend_op):
+                        with m.Case(BlendOp.ADD):
+                            m.d.sync += out_data[i].eq(src_scaled + dst_scaled)
+                        with m.Case(BlendOp.SUBTRACT):
+                            m.d.sync += out_data[i].eq(src_scaled - dst_scaled)
+                        with m.Case(BlendOp.REVERSE_SUBTRACT):
+                            m.d.sync += out_data[i].eq(dst_scaled - src_scaled)
+                        with m.Case(BlendOp.MIN):
+                            with m.If(src_comp < dst_comp):
+                                m.d.sync += out_data[i].eq(src_scaled)
+                            with m.Else():
+                                m.d.sync += out_data[i].eq(dst_scaled)
+                        with m.Case(BlendOp.MAX):
+                            with m.If(src_comp > dst_comp):
+                                m.d.sync += out_data[i].eq(src_scaled)
+                            with m.Else():
+                                m.d.sync += out_data[i].eq(dst_scaled)
+                m.next = "BLEND_A"
+
+            with m.State("BLEND_A"):
+                src_scaled = Signal(mul_shape)
+                dst_scaled = Signal(mul_shape)
+
+                m.d.comb += mul_a[0].eq(src_a)
+                m.d.comb += mul_b[0].eq(factor_src_a)
+                m.d.comb += src_scaled.eq(mul_result[0])
+
+                m.d.comb += mul_a[3].eq(dst_a)
+                m.d.comb += mul_b[3].eq(factor_dst_a)
+                m.d.comb += dst_scaled.eq(mul_result[3])
+
+                with m.Switch(self.conf.blend_a_op):
+                    with m.Case(BlendOp.ADD):
+                        m.d.sync += out_data[3].eq(src_scaled + dst_scaled)
+                    with m.Case(BlendOp.SUBTRACT):
+                        m.d.sync += out_data[3].eq(src_scaled - dst_scaled)
+                    with m.Case(BlendOp.REVERSE_SUBTRACT):
+                        m.d.sync += out_data[3].eq(dst_scaled - src_scaled)
+                    with m.Case(BlendOp.MIN):
+                        with m.If(src_a < dst_a):
+                            m.d.sync += out_data[3].eq(src_scaled)
+                        with m.Else():
+                            m.d.sync += out_data[3].eq(dst_scaled)
+                    with m.Case(BlendOp.MAX):
+                        with m.If(src_a > dst_a):
+                            m.d.sync += out_data[3].eq(src_scaled)
+                        with m.Else():
+                            m.d.sync += out_data[3].eq(dst_scaled)
+
+                m.next = "WRITE_OUTPUT"
+
+            with m.State("WRITE_OUTPUT"):
+                ret_v = Signal(data.ArrayLayout(unsigned(8), 4))
+
+                m.d.comb += [
+                    # Convert from fixed-point [0,1] to [0,255] (*256 - 1)
+                    # here *256 - /8 as a heuristic to only use 9 bit multiplications
+                    ret_v[BGRA_MAP[i]].eq(
+                        (
+                            (out_data_clamped[i] << 8) - (out_data_clamped[i] >> 3)
+                        ).round()
+                    )
+                    for i in range(4)
+                ]
+
+                write_mask_swizzled = Signal(unsigned(4))
+                m.d.comb += write_mask_swizzled.eq(
+                    Cat(self.conf.color_write_mask[b] for b in BGRA_MAP)
+                )
+                m.d.comb += [
+                    self.wb_bus.cyc.eq(1),
+                    self.wb_bus.adr.eq(color_addr),
+                    self.wb_bus.we.eq(1),
+                    self.wb_bus.stb.eq(1),
+                    self.wb_bus.sel.eq(write_mask_swizzled),
+                    self.wb_bus.dat_w.eq(Cat(ret_v)),
+                ]
+                with m.If(self.wb_bus.ack):
+                    m.next = "IDLE"
 
         return m

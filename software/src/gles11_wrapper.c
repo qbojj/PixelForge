@@ -335,18 +335,16 @@ static void upload_matrices(gles_context_t *ctx) {
 
     float *mv = ctx->modelview_stack.matrices[ctx->modelview_stack.depth];
     float *p = ctx->projection_stack.matrices[ctx->projection_stack.depth];
+    float *t = ctx->texture_stack.matrices[ctx->texture_stack.depth];
 
     pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = 1;
-
     mat4_to_fp16_16(xf.position_mv, mv);
     mat4_to_fp16_16(xf.position_p, p);
+    mat4_to_fp16_16(xf.texture_transform, t);
 
     float nm[9];
     mat3_from_mat4(nm, mv);
     mat3_to_fp16_16(xf.normal_mv_inv_t, nm);
-
-    // TODO: Texture matrix
 
     pf_csr_set_vtx_xf(csr, &xf);
     ctx->dirty &= ~DIRTY_MATRICES;

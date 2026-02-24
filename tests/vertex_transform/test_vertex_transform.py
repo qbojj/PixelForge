@@ -2,17 +2,12 @@ import numpy as np
 import pytest
 from amaranth import *
 from amaranth.sim import Simulator
-from numpy.linalg import inv
 
 from gpu.utils.layouts import num_textures
 from gpu.vertex_transform.cores import VertexTransform
 
 from ..utils.streams import stream_testbench
 from ..utils.testbench import SimpleTestbench
-
-
-def identity_mat(size):
-    return np.identity(size)
 
 
 def make_vertex():
@@ -28,26 +23,19 @@ def test_identity_transform_positions():
     dut = VertexTransform()
     t = SimpleTestbench(dut)
 
-    mv = identity_mat(4)
-    proj = identity_mat(4)
-    vertex = make_vertex()
+    mv = np.identity(4)
+    proj = np.identity(4)
+    mv_inv_t = np.identity(3)
+    tex = np.identity(4)
 
-    mv_inv_t = inv(mv[:3, :3]).T
+    vertex = make_vertex()
 
     async def init_proc(ctx):
         # Set transformation matrices
         ctx.set(dut.position_mv, mv.flatten().tolist())
         ctx.set(dut.position_p, proj.flatten().tolist())
         ctx.set(dut.normal_mv_inv_t, mv_inv_t.flatten().tolist())
-
-        # Disable normal and texture transforms
-        ctx.set(dut.enabled.normal, 0)
-        for i in range(num_textures):
-            ctx.set(dut.enabled.texture[i], 0)
-
-        # Set texture transforms to identity
-        for i in range(num_textures):
-            ctx.set(dut.texture_transforms[i], identity_mat(4).flatten().tolist())
+        ctx.set(dut.texture_transform, tex.flatten().tolist())
 
     async def output_checker(ctx, results):
         assert len(results) == 1
@@ -56,15 +44,28 @@ def test_identity_transform_positions():
         def vec_to_list(vec):
             return [c.as_float() for c in vec]
 
-        assert vec_to_list(out.position_view) == pytest.approx(vertex["position"])
-        assert vec_to_list(out.position_proj) == pytest.approx(vertex["position"])
+        pv = vec_to_list(out.position_view)
+        pp = vec_to_list(out.position_proj)
+        nv = vec_to_list(out.normal_view)
+        tex_vals = [vec_to_list(v) for v in out.texcoords]
+        color = vec_to_list(out.color)
 
-        # Disabled normal/tex transforms should zero normals and leave texcoords as identity defaults (0,0,0,1)
-        assert vec_to_list(out.normal_view) == pytest.approx([0.0, 0.0, 0.0])
+        print(
+            {
+                "pv": pv,
+                "pp": pp,
+                "nv": nv,
+            }
+        )
+
+        assert pv == pytest.approx(vertex["position"])
+        assert pp == pytest.approx(vertex["position"])
+        assert nv == pytest.approx(vertex["normal"])
+
         for tex_idx in range(num_textures):
-            assert vec_to_list(out.texcoords[tex_idx]) == pytest.approx(
-                [0.0, 0.0, 0.0, 1.0]
-            )
+            assert tex_vals[tex_idx] == pytest.approx(vertex["texcoords"][tex_idx])
+
+        assert color == pytest.approx(vertex["color"])
 
     sim = Simulator(t)
     sim.add_clock(1e-6)

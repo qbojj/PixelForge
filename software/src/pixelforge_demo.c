@@ -172,7 +172,6 @@ static void configure_gpu_pipeline(pixelforge_dev *dev,
     mat4_identity(id);
 
     pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = false;
     mat4_to_fp16_16(xf.position_mv, id);
     mat4_to_fp16_16(xf.position_p, id);
     pf_csr_set_vtx_xf(csr, &xf);

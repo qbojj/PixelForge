@@ -119,9 +119,6 @@ static void dump_vertex_transform(volatile uint8_t *csr) {
     pf_csr_get_vtx_xf(csr, &cfg);
 
     printf("\n[VERTEX TRANSFORM]\n");
-    printf("  enabled:\n");
-    printf("    normal:       %u\n", cfg.enabled.normal_enable);
-
     printf("  position_mv (4x4):\n");
     for (int i = 0; i < 4; ++i) {
         printf("    [%d] ", i);
@@ -145,6 +142,15 @@ static void dump_vertex_transform(volatile uint8_t *csr) {
         printf("    [%d] ", i);
         for (int j = 0; j < 3; ++j) {
             printf("%10.4f ", fp16_16_to_float(cfg.normal_mv_inv_t[i * 3 + j]));
+        }
+        printf("\n");
+    }
+
+    printf("  texture_transform (4x4):\n");
+    for (int i = 0; i < 3; ++i) {
+        printf("    [%d] ", i);
+        for (int j = 0; j < 3; ++j) {
+            printf("%10.4f ", fp16_16_to_float(cfg.texture_transform[i * 3 + j]));
         }
         printf("\n");
     }

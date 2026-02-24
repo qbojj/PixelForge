@@ -2,8 +2,6 @@ from amaranth import *
 from amaranth.lib import data, fifo, stream, wiring
 from amaranth.lib.wiring import In, Out
 
-from gpu.utils.stream import WideStreamOutput
-
 from ..utils import fixed
 from ..utils import math as gpu_math
 from ..utils.layouts import (
@@ -114,12 +112,9 @@ class PrimitiveClipper(wiring.Component):
                 m.d.comb += needed.eq(1)
                 m.d.comb += looping_primitive.eq(0)
 
-        m.submodules.w_out = w_out = WideStreamOutput(self.o.p.shape(), 3)
-        wiring.connect(m, wiring.flipped(self.o), w_out.o)
-
         with m.FSM():
             with m.State("COLLECT"):
-                m.d.comb += self.ready.eq((vtx_buf.level == 0) & w_out.i.ready)
+                m.d.comb += self.ready.eq(vtx_buf.level == 0)
                 m.d.comb += self.i.ready.eq(1)
                 m.d.comb += vtx_buf.w_data.eq(self.i.payload)
                 m.d.comb += vtx_buf.w_en.eq(self.i.valid)
@@ -314,22 +309,26 @@ class PrimitiveClipper(wiring.Component):
             with m.State("CLIP_EMIT_POINT"):
                 # only one point can be in the buffer
                 m.d.comb += [
-                    w_out.i.p.data[0].eq(out_first),
-                    w_out.i.p.n.eq(1),
-                    w_out.i.valid.eq(1),
+                    self.o.p.eq(out_first),
+                    self.o.valid.eq(1),
                 ]
-                with m.If(w_out.i.ready):
+                with m.If(self.o.ready):
                     m.next = "COLLECT"
 
             with m.State("CLIP_EMIT_LINE"):
                 # line will have 2 points
                 m.d.comb += [
-                    w_out.i.p.data[0].eq(out_first),
-                    w_out.i.p.data[1].eq(vtx_buf.r_data),
-                    w_out.i.p.n.eq(2),
-                    w_out.i.valid.eq(1),
+                    self.o.p.eq(out_first),
+                    self.o.valid.eq(1),
                 ]
-                with m.If(w_out.i.ready):
+                with m.If(self.o.ready):
+                    m.next = "CLIP_EMIT_LINE_2"
+            with m.State("CLIP_EMIT_LINE_2"):
+                m.d.comb += [
+                    self.o.p.eq(vtx_buf.r_data),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
                     m.d.comb += vtx_buf.r_en.eq(1)
                     m.next = "COLLECT"
 
@@ -339,19 +338,32 @@ class PrimitiveClipper(wiring.Component):
                 m.next = "CLIP_EMIT_TRI"
 
             with m.State("CLIP_EMIT_TRI"):
-                with m.If(vtx_buf.r_rdy):
-                    m.d.comb += [
-                        w_out.i.p.data[0].eq(out_first),
-                        w_out.i.p.data[1].eq(out_prev),
-                        w_out.i.p.data[2].eq(vtx_buf.r_data),
-                        w_out.i.p.n.eq(3),
-                        w_out.i.valid.eq(1),
-                    ]
-                    with m.If(w_out.i.ready):
-                        m.d.sync += out_prev.eq(vtx_buf.r_data)
-                        m.d.comb += vtx_buf.r_en.eq(1)
-                with m.Else():
+                with m.If(~vtx_buf.r_rdy):
                     m.next = "COLLECT"
+                with m.Else():
+                    m.d.comb += [
+                        self.o.p.eq(out_first),
+                        self.o.valid.eq(1),
+                    ]
+                    with m.If(self.o.ready):
+                        m.next = "CLIP_EMIT_TRI_2"
+            with m.State("CLIP_EMIT_TRI_2"):
+                m.d.comb += [
+                    self.o.p.eq(out_prev),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
+                    m.next = "CLIP_EMIT_TRI_3"
+
+            with m.State("CLIP_EMIT_TRI_3"):
+                m.d.comb += [
+                    self.o.p.eq(vtx_buf.r_data),
+                    self.o.valid.eq(1),
+                ]
+                with m.If(self.o.ready):
+                    m.d.comb += vtx_buf.r_en.eq(1)
+                    m.d.sync += out_prev.eq(vtx_buf.r_data)
+                    m.next = "CLIP_EMIT_TRI"
 
         return m
 
@@ -847,7 +859,7 @@ class FragmentGenerator(wiring.Component):
                 m.d.sync += w[2].eq(w[2] - mul_p)
 
                 m.d.sync += weight_linear[2].eq(
-                    1.0 - weight_linear[0] - weight_linear[1]
+                    fixed.Const(1.0) - weight_linear[0] - weight_linear[1]
                 )
 
                 m.d.comb += [
@@ -942,7 +954,9 @@ class FragmentGenerator(wiring.Component):
                 m.next = "INTERP_COLOR_0_1"
 
             with m.State("INTERP_COLOR_0_1"):
-                m.d.sync += weight_persp[2].eq(one - weight_persp[0] - weight_persp[1])
+                m.d.sync += weight_persp[2].eq(
+                    fixed.Const(1.0) - weight_persp[0] - weight_persp[1]
+                )
 
                 m.d.comb += [
                     mul_a_interp.eq(self.ctx.vtx[1].color[0].clamp(0, 1)),

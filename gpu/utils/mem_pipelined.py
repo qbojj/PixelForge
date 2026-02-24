@@ -4,14 +4,24 @@ from amaranth.lib import data, fifo, stream, wiring
 from amaranth.lib.wiring import In, Out
 
 
-def mem_request_layout(addr_width, data_width, tag_width):
+def mem_read_request_layout(addr_width, data_width, tag_width):
     sel_width = data_width // 8
     return data.StructLayout(
         {
             "addr": unsigned(addr_width),
             "data": unsigned(data_width),
             "sel": unsigned(sel_width),
-            "we": unsigned(1),
+            "tag": unsigned(tag_width),
+        }
+    )
+
+
+def mem_write_request_layout(addr_width, data_width, tag_width):
+    sel_width = data_width // 8
+    return data.StructLayout(
+        {
+            "addr": unsigned(addr_width),
+            "sel": unsigned(sel_width),
             "tag": unsigned(tag_width),
         }
     )
@@ -41,28 +51,38 @@ class WishbonePipelinedMaster(wiring.Component):
         addr_width: int,
         data_width: int,
         tag_width: int = 16,
-        req_depth: int = 8,
+        read_req_depth: int = 8,
+        write_req_depth: int = 8,
         inflight_depth: int = 8,
     ):
         self._addr_width = addr_width
         self._data_width = data_width
         self._tag_width = tag_width
-        self._req_depth = req_depth
+        self._read_req_depth = read_req_depth
+        self._write_req_depth = write_req_depth
         self._inflight_depth = inflight_depth
 
-        self._req_layout = mem_request_layout(addr_width, data_width, tag_width)
+        self._read_req_layout = mem_read_request_layout(
+            addr_width, data_width, tag_width
+        )
+        self._write_req_layout = mem_write_request_layout(
+            addr_width, data_width, tag_width
+        )
+
         self._read_resp_layout = mem_read_response_layout(data_width, tag_width)
         self._write_resp_layout = mem_write_response_layout(tag_width)
 
         super().__init__(
             {
-                "req": In(stream.Signature(self._req_layout)),
+                "read_req": In(stream.Signature(self._read_req_layout)),
+                "write_req": In(stream.Signature(self._write_req_layout)),
                 "read_resp": Out(stream.Signature(self._read_resp_layout)),
                 "write_resp": Out(stream.Signature(self._write_resp_layout)),
                 "wb_bus": Out(
                     wb.Signature(
                         addr_width=addr_width,
                         data_width=data_width,
+                        features={wb.Feature.STALL},
                     )
                 ),
             }

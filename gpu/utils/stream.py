@@ -5,6 +5,8 @@ from amaranth import ShapeLike, ValueCastable
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 
+from .transactron_utils import count_leading_zeros
+
 
 class VectorToStream(wiring.Component):
     """
@@ -308,20 +310,20 @@ class AnyDistributor(wiring.Component):
             with m.If(out_s.ready):
                 m.d.sync += out_s.valid.eq(0)
 
-        sel = Signal(range(self.num_outputs + 1), reset=self.num_outputs)
+        valid = Signal(self.num_outputs)
+        ready = Signal(self.num_outputs)
+        m.d.comb += [valid[i].eq(self.o[i].valid) for i in range(self.num_outputs)]
+        m.d.comb += [ready[i].eq(self.o[i].ready) for i in range(self.num_outputs)]
 
-        for i, o in enumerate(self.o):
-            with m.If(~o.valid | o.ready):
-                m.d.comb += sel.eq(i)
+        sel = count_leading_zeros(~valid | ready)
 
         m.d.comb += self.i.ready.eq(sel != self.num_outputs)
-        with m.If(self.i.valid):
-            for i in range(self.num_outputs):
-                with m.If(sel == i):
-                    m.d.sync += [
-                        self.o[i].p.eq(self.i.p),
-                        self.o[i].valid.eq(1),
-                    ]
+        for i in range(self.num_outputs):
+            with m.If(sel == i):
+                m.d.sync += [
+                    self.o[i].p.eq(self.i.p),
+                    self.o[i].valid.eq(1),
+                ]
 
         return m
 
@@ -351,18 +353,16 @@ class AnyRecombiner(wiring.Component):
         with m.If(self.o.ready):
             m.d.sync += self.o.valid.eq(0)
 
-        sel = Signal(range(self.num_inputs + 1), reset=self.num_inputs)
-        for i, inp in enumerate(self.i):
-            with m.If(inp.valid):
-                m.d.comb += sel.eq(i)
+        valid = Signal(self.num_inputs)
+        m.d.comb += [valid[i].eq(self.i[i].valid) for i in range(self.num_inputs)]
+
+        sel = count_leading_zeros(valid)
 
         with m.If(~self.o.valid | self.o.ready):
+            m.d.sync += self.o.valid.eq(sel != self.num_inputs)
             for i in range(self.num_inputs):
                 with m.If(sel == i):
-                    m.d.sync += [
-                        self.o.p.eq(self.i[i].p),
-                        self.o.valid.eq(1),
-                    ]
+                    m.d.sync += self.o.p.eq(self.i[i].p)
                     m.d.comb += self.i[i].ready.eq(1)
 
         return m

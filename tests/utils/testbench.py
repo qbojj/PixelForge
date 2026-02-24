@@ -6,6 +6,7 @@ from amaranth_soc.memory import MemoryMap
 from amaranth_soc.wishbone.bus import Arbiter, Decoder
 from amaranth_soc.wishbone.sram import WishboneSRAM
 
+from gpu.utils.axi import AxiToWishboneBridge
 from gpu.utils.layouts import wb_bus_addr_width, wb_bus_data_width, wb_bus_granularity
 from tests.utils.memory import DebugAccess, get_memory_resource
 
@@ -60,6 +61,15 @@ class SimpleTestbench(Elaboratable):
 
         self.arbiter.add(self.dbg_access)
         self.csrs = []
+        self.axi_bridges: list[tuple[wiring.PureInterface, AxiToWishboneBridge]] = []
+
+    def add_axi_master(self, axi_bus: wiring.PureInterface):
+        bridge = AxiToWishboneBridge(
+            addr_width=self.addr_width + 2,
+            data_width=self.data_width,
+        )
+        self.axi_bridges.append((axi_bus, bridge))
+        self.arbiter.add(bridge.wb)
 
     def set_csrs(
         self,
@@ -99,6 +109,10 @@ class SimpleTestbench(Elaboratable):
 
         if self.dut is not None:
             m.submodules.dut = self.dut
+
+        for idx, (axi_bus, bridge) in enumerate(self.axi_bridges):
+            m.submodules[f"axi_bridge_{idx}"] = bridge
+            wiring.connect(m, axi_bus, bridge.axi)
 
         return m
 

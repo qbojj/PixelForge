@@ -15,10 +15,7 @@ from .types import (
 
 # Number of supported textures and lights
 num_textures = 0
-num_lights = 1
-
-texture_coords = data.ArrayLayout(Vector4, num_textures)
-texture_position = data.ArrayLayout(texture_coord_shape, 2)
+num_lights = 8
 
 # Wishbone bus parameters for GPU memory access
 # granularity 1 byte, data width 4 bytes, 32-bit addresses
@@ -26,11 +23,17 @@ wb_bus_data_width = 32
 wb_bus_granularity = 8
 wb_bus_addr_width = 30  # Addresses are per data width (4 bytes)
 
+# AXI bus parameters for per-pixel memory access
+# byte-addressed, 32-bit data, 4-bit IDs
+axi_addr_width = 32
+axi_data_width = 32
+axi_id_width = 4
+
 
 class VertexLayout(data.Struct):
     position: Vector4
     normal: Vector3
-    texcoords: texture_coords
+    texcoords: data.ArrayLayout(Vector4, num_textures)
     color: Vector4
 
 
@@ -38,20 +41,20 @@ class ShadingVertexLayout(data.Struct):
     position_view: Vector4
     position_proj: Vector4
     normal_view: Vector3
-    texcoords: texture_coords  # After transforms
+    texcoords: data.ArrayLayout(Vector4, num_textures)
     color: Vector4
 
 
 class PrimitiveAssemblyLayout(data.Struct):
     position_ndc: Vector4
-    texcoords: texture_coords
+    texcoords: data.ArrayLayout(Vector4, num_textures)
     color: Vector4
 
 
 class RasterizerLayout(data.Struct):
     position: Vector4  # In clip space coordinates
     color: Vector4
-    texcoords: texture_coords
+    texcoords: data.ArrayLayout(Vector4, num_textures)
 
 
 class RasterizerLayoutNDC(data.Struct):
@@ -61,16 +64,16 @@ class RasterizerLayoutNDC(data.Struct):
         fixed.UQ(1, 17), 3
     )  # x/w, y/w, z/w (perspective-divided, UQ(1,17))
     inv_w: FixedPoint  # 1/w in standard FixedPoint format
-    texcoords: texture_coords
+    texcoords: data.ArrayLayout(Vector4, num_textures)
     color: Vector4
     front_facing: unsigned(1)
 
 
 class FragmentLayout(data.Struct):
     depth: fixed.UQ(1, 17)
-    texcoords: texture_coords
+    texcoords: data.ArrayLayout(Vector4, num_textures)
     color: data.ArrayLayout(fixed.UQ(1, 17), 4)  # rgba in linear space, UQ(1,17) format
-    coord_pos: texture_position
+    coord_pos: data.ArrayLayout(texture_coord_shape, 2)
     front_facing: unsigned(1)
 
 

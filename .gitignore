@@ -6,6 +6,7 @@ test.gtkw
 
 .vscode
 .zed
+.nvim
 .qsys_edit
 .pytest_cache
 .venv

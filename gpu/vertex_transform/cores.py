@@ -2,19 +2,8 @@ from amaranth import *
 from amaranth.lib import data, stream, wiring
 from amaranth.lib.wiring import In, Out
 
-from ..utils.layouts import (
-    ShadingVertexLayout,
-    VertexLayout,
-    num_textures,
-)
+from ..utils.layouts import ShadingVertexLayout, VertexLayout, num_textures
 from ..utils.types import FixedPoint, FixedPoint_mem
-
-
-class VertexTransformEnablementLayout(data.Struct):
-    """Enablement configuration for vertex transform"""
-
-    normal: 1
-    texture: data.ArrayLayout(1, num_textures)
 
 
 class VertexTransform(wiring.Component):
@@ -35,23 +24,32 @@ class VertexTransform(wiring.Component):
     TODO: support for configurable amount of multiplyer circuits (for now 4)
     """
 
-    i: In(stream.Signature(VertexLayout))
-    o: Out(stream.Signature(ShadingVertexLayout))
+    i: stream.Interface
+    o: stream.Interface
 
-    enabled: In(VertexTransformEnablementLayout)
-    position_mv: In(data.ArrayLayout(FixedPoint_mem, 16))
-    position_p: In(data.ArrayLayout(FixedPoint_mem, 16))
-    normal_mv_inv_t: In(data.ArrayLayout(FixedPoint_mem, 9))
-    texture_transforms: In(
-        data.ArrayLayout(data.ArrayLayout(FixedPoint_mem, 16), num_textures)
-    )
+    position_mv: Signal
+    position_p: Signal
+    normal_mv_inv_t: Signal
+    texture_transform: Signal
 
-    ready: Out(1)
+    ready: Signal
 
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            {
+                "i": In(stream.Signature(VertexLayout)),
+                "o": Out(stream.Signature(ShadingVertexLayout)),
+                "position_mv": In(data.ArrayLayout(FixedPoint_mem, 16)),
+                "position_p": In(data.ArrayLayout(FixedPoint_mem, 16)),
+                "normal_mv_inv_t": In(data.ArrayLayout(FixedPoint_mem, 9)),
+                "texture_transform": In(data.ArrayLayout(FixedPoint_mem, 16)),
+                "ready": Out(1),
+            }
+        )
 
     def elaborate(self, platform) -> Module:
+        # TODO: use actual memory for matrices
+
         m = Module()
 
         i_data = Signal.like(self.i.payload)
@@ -69,7 +67,6 @@ class VertexTransform(wiring.Component):
                 "result": o_data.position_view,
                 "matrix": self.position_mv,
                 "vector": i_data.position,
-                "enabled": C(1),
                 "dim": 4,
             },
             {
@@ -77,7 +74,6 @@ class VertexTransform(wiring.Component):
                 "result": o_data.position_proj,
                 "matrix": self.position_p,
                 "vector": o_data.position_view,
-                "enabled": C(1),
                 "dim": 4,
             },
             {
@@ -85,16 +81,14 @@ class VertexTransform(wiring.Component):
                 "result": o_data.normal_view,
                 "matrix": self.normal_mv_inv_t,
                 "vector": i_data.normal,
-                "enabled": self.enabled.normal,
                 "dim": 3,
             },
         ] + [
             {
                 "name": f"TEXTURE_{i}",
                 "result": o_data.texcoords[i],
-                "matrix": self.texture_transforms[i],
+                "matrix": self.texture_transform,
                 "vector": i_data.texcoords[i],
-                "enabled": self.enabled.texture[i],
                 "dim": 4,
             }
             for i in range(num_textures)
@@ -107,8 +101,6 @@ class VertexTransform(wiring.Component):
                     m.d.comb += self.i.ready.eq(1)
                     m.d.sync += [
                         i_data.eq(self.i.payload),
-                        o_data.normal_view.eq(self.i.p.normal),
-                        o_data.texcoords.eq(self.i.p.texcoords),
                         o_data.color.eq(self.i.p.color),
                     ]
                     m.d.sync += Print("VertexTransform vtx in: ", self.i.payload)
@@ -124,13 +116,7 @@ class VertexTransform(wiring.Component):
 
                 with m.State(f"{base}_INIT"):
                     m.d.sync += cum_result.eq(0)
-                    with m.If(attr["enabled"]):
-                        m.next = f"{base}_0_0"
-                    with m.Else():
-                        # skip transformation - return 0,0,0,1 vector
-                        for j in range(len(attr["result"])):
-                            m.d.sync += attr["result"][j].eq(0.0 if j < 3 else 1.0)
-                        m.next = next_state
+                    m.next = f"{base}_0_0"
 
                 for i in range(attr["dim"]):
                     for j in range(attr["dim"]):

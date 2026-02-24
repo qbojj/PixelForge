@@ -19,7 +19,6 @@ from .pixel_shading.cores import (
     DepthTestConfig,
     StencilOpConfig,
     SwapchainOutput,
-    Texturing,
 )
 from .rasterizer.cores import (
     PerspectiveDivide,
@@ -42,7 +41,7 @@ from .vertex_shading.cores import (
     MaterialPropertyLayout,
     VertexShading,
 )
-from .vertex_transform.cores import VertexTransform, VertexTransformEnablementLayout
+from .vertex_transform.cores import VertexTransform
 
 __all__ = ["GraphicsPipeline", "GraphicsPipelineCSR", "GraphicsPipelineAvalonCSR"]
 
@@ -55,7 +54,7 @@ class GraphicsPipeline(wiring.Component):
       VertexShading → PrimitiveClipper → TriangleRasterizer →
       Texturing → DepthStencilTest → SwapchainOutput
 
-    Exposes separate Wishbone buses for vertex fetch, depth/stencil and color.
+    Exposes Wishbone buses for vertex fetch and AXI for depth/stencil + color.
     """
 
     # Draw/index generation
@@ -77,11 +76,10 @@ class GraphicsPipeline(wiring.Component):
     c_col: In(InputAssemblyAttrConfigLayout)
 
     # Vertex transform configuration
-    vt_enabled: In(VertexTransformEnablementLayout)
     position_mv: In(data.ArrayLayout(FixedPoint_mem, 16))
     position_p: In(data.ArrayLayout(FixedPoint_mem, 16))
     normal_mv_inv_t: In(data.ArrayLayout(FixedPoint_mem, 9))
-    texture_transforms: In(data.ArrayLayout(FixedPoint_mem, 16)).array(num_textures)
+    texture_transform: In(data.ArrayLayout(FixedPoint_mem, 16))
 
     # Shading configuration
     material: In(MaterialPropertyLayout)
@@ -136,91 +134,80 @@ class GraphicsPipeline(wiring.Component):
         m.submodules.rast = rast = DomainRenamer("pixel")(
             TriangleRasterizer(num_generators=8, inv_steps=2)
         )
-        m.submodules.tex = tex = DomainRenamer("pixel")(Texturing())
         m.submodules.ds = ds = DomainRenamer("pixel")(DepthStencilTest())
         m.submodules.sc = sc = DomainRenamer("pixel")(SwapchainOutput())
 
         fifo_size_default = 256
 
         # FIFO buffers between stages
-        m.submodules.idx_to_topo_fifo = fifo_idx_topo = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_topo = fifo_topo = fifo.SyncFIFOBuffered(
             width=Shape.cast(topo.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.topo_to_ia_fifo = fifo_topo_ia = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_ia = fifo_ia = fifo.SyncFIFOBuffered(
             width=Shape.cast(ia.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.ia_to_vtx_xf_fifo = fifo_ia_vtx_xf = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_vtx_xf = fifo_vtx_xf = fifo.SyncFIFOBuffered(
             width=Shape.cast(vtx_xf.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.vtx_xf_to_vtx_sh_fifo = fifo_vtx_xf_vtx_sh = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_vtx_sh = fifo_vtx_sh = fifo.SyncFIFOBuffered(
             width=Shape.cast(vtx_sh.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.vtx_sh_to_clip_fifo = fifo_vtx_sh_clip = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_clip = fifo_clip = fifo.SyncFIFOBuffered(
             width=Shape.cast(clip.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.clip_to_div_fifo = fifo_clip_div = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_div = fifo_div = fifo.SyncFIFOBuffered(
             width=Shape.cast(div.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.div_to_tri_prep_fifo = fifo_div_tri_prep = fifo.SyncFIFOBuffered(
+        m.submodules.fifo_tri_prep = fifo_tri_prep = fifo.SyncFIFOBuffered(
             width=Shape.cast(tri_prep.i.p.shape()).width, depth=fifo_size_default
         )
-        m.submodules.tri_prep_to_rast_fifo = fifo_tri_prep_rast = (
-            fifo.AsyncFIFOBuffered(
-                width=Shape.cast(rast.i.p.shape()).width,
-                depth=fifo_size_default,
-                w_domain="sync",
-                r_domain="pixel",
-            )
+        m.submodules.fifo_rast = fifo_rast = fifo.AsyncFIFOBuffered(
+            width=Shape.cast(rast.i.p.shape()).width,
+            depth=fifo_size_default,
+            w_domain="sync",
+            r_domain="pixel",
         )
-        m.submodules.rast_to_tex_fifo = fifo_rast_tex = DomainRenamer("pixel")(
-            fifo.SyncFIFOBuffered(
-                width=Shape.cast(tex.i.p.shape()).width, depth=fifo_size_default
-            )
-        )
-        m.submodules.tex_to_ds_fifo = fifo_tex_ds = DomainRenamer("pixel")(
+        m.submodules.fifo_ds = fifo_ds = DomainRenamer("pixel")(
             fifo.SyncFIFOBuffered(
                 width=Shape.cast(ds.i.p.shape()).width, depth=fifo_size_default
             )
         )
-        m.submodules.ds_to_sc_fifo = fifo_ds_sc = DomainRenamer("pixel")(
+        m.submodules.fifo_sc = fifo_sc = DomainRenamer("pixel")(
             fifo.SyncFIFOBuffered(
                 width=Shape.cast(sc.i.p.shape()).width, depth=fifo_size_default
             )
         )
 
-        wiring.connect(m, idx.o, fifo_idx_topo.w_stream)
+        wiring.connect(m, idx.o, fifo_topo.w_stream)
 
-        wiring.connect(m, fifo_idx_topo.r_stream, topo.i)
-        wiring.connect(m, topo.o, fifo_topo_ia.w_stream)
+        wiring.connect(m, fifo_topo.r_stream, topo.i)
+        wiring.connect(m, topo.o, fifo_ia.w_stream)
 
-        wiring.connect(m, fifo_topo_ia.r_stream, ia.i)
-        wiring.connect(m, ia.o, fifo_ia_vtx_xf.w_stream)
+        wiring.connect(m, fifo_ia.r_stream, ia.i)
+        wiring.connect(m, ia.o, fifo_vtx_xf.w_stream)
 
-        wiring.connect(m, fifo_ia_vtx_xf.r_stream, vtx_xf.i)
-        wiring.connect(m, vtx_xf.o, fifo_vtx_xf_vtx_sh.w_stream)
+        wiring.connect(m, fifo_vtx_xf.r_stream, vtx_xf.i)
+        wiring.connect(m, vtx_xf.o, fifo_vtx_sh.w_stream)
 
-        wiring.connect(m, fifo_vtx_xf_vtx_sh.r_stream, vtx_sh.i)
-        wiring.connect(m, vtx_sh.o, fifo_vtx_sh_clip.w_stream)
+        wiring.connect(m, fifo_vtx_sh.r_stream, vtx_sh.i)
+        wiring.connect(m, vtx_sh.o, fifo_clip.w_stream)
 
-        wiring.connect(m, fifo_vtx_sh_clip.r_stream, clip.i)
-        wiring.connect(m, clip.o, fifo_clip_div.w_stream)
+        wiring.connect(m, fifo_clip.r_stream, clip.i)
+        wiring.connect(m, clip.o, fifo_div.w_stream)
 
-        wiring.connect(m, fifo_clip_div.r_stream, div.i)
-        wiring.connect(m, div.o, fifo_div_tri_prep.w_stream)
+        wiring.connect(m, fifo_div.r_stream, div.i)
+        wiring.connect(m, div.o, fifo_tri_prep.w_stream)
 
-        wiring.connect(m, fifo_div_tri_prep.r_stream, tri_prep.i)
-        wiring.connect(m, tri_prep.o, fifo_tri_prep_rast.w_stream)
+        wiring.connect(m, fifo_tri_prep.r_stream, tri_prep.i)
+        wiring.connect(m, tri_prep.o, fifo_rast.w_stream)
 
-        wiring.connect(m, fifo_tri_prep_rast.r_stream, rast.i)
-        wiring.connect(m, rast.o, fifo_rast_tex.w_stream)
+        wiring.connect(m, fifo_rast.r_stream, rast.i)
+        wiring.connect(m, rast.o, fifo_ds.w_stream)
 
-        wiring.connect(m, fifo_rast_tex.r_stream, tex.i)
-        wiring.connect(m, tex.o, fifo_tex_ds.w_stream)
+        wiring.connect(m, fifo_ds.r_stream, ds.i)
+        wiring.connect(m, ds.o, fifo_sc.w_stream)
 
-        wiring.connect(m, fifo_tex_ds.r_stream, ds.i)
-        wiring.connect(m, ds.o, fifo_ds_sc.w_stream)
-
-        wiring.connect(m, fifo_ds_sc.r_stream, sc.i)
+        wiring.connect(m, fifo_sc.r_stream, sc.i)
 
         # Wishbone buses wiring
         wiring.connect(m, idx.bus, wiring.flipped(self.wb_index))
@@ -229,28 +216,27 @@ class GraphicsPipeline(wiring.Component):
         wiring.connect(m, sc.wb_bus, wiring.flipped(self.wb_color))
 
         input_assembly_ready_ = [
-            idx.ready & ~fifo_idx_topo.w_en,
-            ~fifo_idx_topo.r_rdy & topo.ready & ~fifo_topo_ia.w_en,
-            ~fifo_topo_ia.r_rdy & ia.ready & ~fifo_ia_vtx_xf.w_en,
+            idx.ready & ~idx.o.valid,
+            (fifo_topo.r_level == 0) & topo.ready & ~topo.o.valid,
+            (fifo_ia.r_level == 0) & ia.ready & ~ia.o.valid,
         ]
 
         vertex_transform_ready_ = [
-            ~fifo_ia_vtx_xf.r_rdy & vtx_xf.ready & ~fifo_vtx_xf_vtx_sh.w_en,
-            ~fifo_vtx_xf_vtx_sh.r_rdy & vtx_sh.ready & ~fifo_vtx_sh_clip.w_en,
+            (fifo_vtx_xf.r_level == 0) & vtx_xf.ready & ~vtx_xf.o.valid,
+            (fifo_vtx_sh.r_level == 0) & vtx_sh.ready & ~vtx_sh.o.valid,
         ]
 
         raster_ready_ = [
-            ~fifo_vtx_sh_clip.r_rdy & clip.ready & ~fifo_clip_div.w_en,
-            ~fifo_clip_div.r_rdy & div.ready & ~fifo_div_tri_prep.w_en,
-            ~fifo_div_tri_prep.r_rdy & tri_prep.ready & ~fifo_tri_prep_rast.w_en,
+            (fifo_vtx_sh.r_level == 0) & clip.ready & ~clip.o.valid,
+            (fifo_clip.r_level == 0) & div.ready & ~div.o.valid,
+            (fifo_div.r_level == 0) & tri_prep.ready & ~tri_prep.o.valid,
         ]
 
         # fragment processing (everything in pixel domain)
         fragment_processing_ready_ = [
-            ~fifo_tri_prep_rast.r_rdy & rast.ready & ~fifo_rast_tex.w_en,
-            ~fifo_rast_tex.r_rdy & tex.ready & ~fifo_tex_ds.w_en,
-            ~fifo_tex_ds.r_rdy & ds.ready & ~fifo_ds_sc.w_en,
-            ~fifo_ds_sc.r_rdy & sc.ready,
+            (fifo_rast.r_level == 0) & rast.ready & ~rast.o.valid,
+            (fifo_ds.r_level == 0) & ds.ready & ~ds.o.valid,
+            (fifo_sc.r_level == 0) & sc.ready,
         ]
 
         input_assembly_ready = Signal(len(input_assembly_ready_))
@@ -339,14 +325,10 @@ class GraphicsPipeline(wiring.Component):
 
         # Vertex transform configuration
         m.d.comb += [
-            vtx_xf.enabled.eq(self.vt_enabled),
             vtx_xf.position_mv.eq(self.position_mv),
             vtx_xf.position_p.eq(self.position_p),
             vtx_xf.normal_mv_inv_t.eq(self.normal_mv_inv_t),
-            *[
-                vtx_xf.texture_transforms[i].eq(self.texture_transforms[i])
-                for i in range(num_textures)
-            ],
+            vtx_xf.texture_transform.eq(self.texture_transform),
         ]
 
         # Vertex shading configuration
@@ -392,29 +374,51 @@ class GraphicsPipeline(wiring.Component):
 class GraphicsPipelineCSR(wiring.Component):
     """Graphics pipeline with CSR interface exposing configuration registers."""
 
-    ready: Out(1)
+    ready: Signal
+    wb_index: wb.Interface
+    wb_vertex: wb.Interface
+    wb_depthstencil: wb.Interface
+    wb_color: wb.Interface
+    wb_csr: wb.Interface
 
-    wb_index: Out(
-        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
-    )
-    wb_vertex: Out(
-        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
-    )
-    wb_depthstencil: Out(
-        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
-    )
-    wb_color: Out(
-        wb.Signature(addr_width=wb_bus_addr_width, data_width=wb_bus_data_width)
-    )
-
-    wb_csr: In(wb.Signature(addr_width=10, data_width=32, granularity=32))
+    def __init__(self):
+        super().__init__(
+            {
+                "ready": Out(1),
+                "wb_index": Out(
+                    wb.Signature(
+                        addr_width=wb_bus_addr_width, data_width=wb_bus_data_width
+                    )
+                ),
+                "wb_vertex": Out(
+                    wb.Signature(
+                        addr_width=wb_bus_addr_width, data_width=wb_bus_data_width
+                    )
+                ),
+                "wb_depthstencil": Out(
+                    wb.Signature(
+                        addr_width=wb_bus_addr_width, data_width=wb_bus_data_width
+                    )
+                ),
+                "wb_color": Out(
+                    wb.Signature(
+                        addr_width=wb_bus_addr_width, data_width=wb_bus_data_width
+                    )
+                ),
+                "wb_csr": In(
+                    wb.Signature(addr_width=10, data_width=32, granularity=32)
+                ),
+            }
+        )
 
     def elaborate(self, platform):
         m = Module()
 
         m.submodules.pipeline = pipeline = GraphicsPipeline()
 
-        bld = csr.Builder(addr_width=10, data_width=32)
+        m.submodules.csr_decoder = csr_decoder = csr.Decoder(
+            addr_width=10, data_width=32, alignment=5
+        )
 
         class RWReg(csr.Register):
             def __init__(self, field_shape):
@@ -422,277 +426,297 @@ class GraphicsPipelineCSR(wiring.Component):
                     csr.Field(csr.action.RW, Shape.cast(field_shape)), "rw"
                 )
 
-        with bld.Cluster("idx"):
-            idx_addr = bld.add("address", RWReg(unsigned(32)))
-            idx_count = bld.add("count", RWReg(unsigned(32)))
-            idx_kind = bld.add(
-                "kind",
-                RWReg(pipeline.c_index_kind.shape()),
-            )
-            idx_start = bld.add("start", csr.Register(csr.Field(csr.action.W, 1), "w"))
+        # index CSRs
+        bld = csr.Builder(addr_width=6, data_width=32)
+        idx_addr = bld.add("address", RWReg(unsigned(32)))
+        idx_count = bld.add("count", RWReg(unsigned(32)))
+        idx_kind = bld.add(
+            "kind",
+            RWReg(pipeline.c_index_kind.shape()),
+        )
+        idx_start = bld.add("start", csr.Register(csr.Field(csr.action.W, 1), "w"))
 
+        m.d.comb += [
+            pipeline.c_index_address.eq(idx_addr.f.data),
+            pipeline.c_index_count.eq(idx_count.f.data),
+            pipeline.c_index_kind.eq(idx_kind.f.data),
+            pipeline.start.eq(idx_start.f.w_data & idx_start.f.w_stb),
+        ]
+        m.submodules.csr_idx = csr_idx = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_idx.bus, name="idx")
+
+        # topo CSRs
+        bld = csr.Builder(addr_width=4, data_width=32)
+        topo_topology = bld.add(
+            "input_topology",
+            RWReg(pipeline.c_input_topology.shape()),
+        )
+        topo_prim_restart_en = bld.add(
+            "primitive_restart_enable",
+            RWReg(pipeline.c_primitive_restart_enable.shape()),
+        )
+        topo_prim_restart_idx = bld.add(
+            "primitive_restart_index",
+            RWReg(pipeline.c_primitive_restart_index.shape()),
+        )
+        topo_base_vertex = bld.add("base_vertex", RWReg(pipeline.c_base_vertex.shape()))
+
+        m.d.comb += [
+            pipeline.c_input_topology.eq(topo_topology.f.data),
+            pipeline.c_primitive_restart_enable.eq(topo_prim_restart_en.f.data),
+            pipeline.c_primitive_restart_index.eq(topo_prim_restart_idx.f.data),
+            pipeline.c_base_vertex.eq(topo_base_vertex.f.data),
+        ]
+        m.submodules.csr_topo = csr_topo = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_topo.bus, name="topo")
+
+        # IA CSRs
+        bld = csr.Builder(addr_width=5, data_width=32)
+
+        def add_attr_cluster(name, cfg):
+            with bld.Cluster(name):
+                mode = bld.add("mode", RWReg(cfg.mode.shape()))
+                info = bld.add("info", RWReg(cfg.info.shape()))
+            return mode, info
+
+        ia_pos_mode, ia_pos_info = add_attr_cluster("pos", pipeline.c_pos)
+        ia_norm_mode, ia_norm_info = add_attr_cluster("norm", pipeline.c_norm)
+        ia_tex_mode = []
+        ia_tex_info = []
+        for i in range(num_textures):
+            with bld.Cluster(str(i)):
+                mode, info = add_attr_cluster("tex", pipeline.c_tex[i])
+                ia_tex_mode.append(mode)
+                ia_tex_info.append(info)
+        ia_col_mode, ia_col_info = add_attr_cluster("col", pipeline.c_col)
+
+        m.d.comb += [
+            pipeline.c_pos.mode.eq(ia_pos_mode.f.data),
+            pipeline.c_pos.info.eq(ia_pos_info.f.data),
+            pipeline.c_norm.mode.eq(ia_norm_mode.f.data),
+            pipeline.c_norm.info.eq(ia_norm_info.f.data),
+            pipeline.c_col.mode.eq(ia_col_mode.f.data),
+            pipeline.c_col.info.eq(ia_col_info.f.data),
+        ]
+        for i in range(num_textures):
             m.d.comb += [
-                pipeline.c_index_address.eq(idx_addr.f.data),
-                pipeline.c_index_count.eq(idx_count.f.data),
-                pipeline.c_index_kind.eq(idx_kind.f.data),
-                pipeline.start.eq(idx_start.f.w_data & idx_start.f.w_stb),
+                pipeline.c_tex[i].mode.eq(ia_tex_mode[i].f.data),
+                pipeline.c_tex[i].info.eq(ia_tex_info[i].f.data),
             ]
 
-        with bld.Cluster("topo"):
-            topo_topology = bld.add(
-                "input_topology",
-                RWReg(pipeline.c_input_topology.shape()),
-            )
-            topo_prim_restart_en = bld.add(
-                "primitive_restart_enable",
-                RWReg(pipeline.c_primitive_restart_enable.shape()),
-            )
-            topo_prim_restart_idx = bld.add(
-                "primitive_restart_index",
-                RWReg(pipeline.c_primitive_restart_index.shape()),
-            )
-            topo_base_vertex = bld.add(
-                "base_vertex", RWReg(pipeline.c_base_vertex.shape())
-            )
+        m.submodules.csr_ia = csr_ia = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_ia.bus, name="ia")
 
-            m.d.comb += [
-                pipeline.c_input_topology.eq(topo_topology.f.data),
-                pipeline.c_primitive_restart_enable.eq(topo_prim_restart_en.f.data),
-                pipeline.c_primitive_restart_index.eq(topo_prim_restart_idx.f.data),
-                pipeline.c_base_vertex.eq(topo_base_vertex.f.data),
-            ]
+        # Vertex transform CSRs
+        bld = csr.Builder(addr_width=8, data_width=32)
+        pos_mv_regs = bld.add(
+            "position_mv",
+            RWReg(pipeline.position_mv.shape()),
+        )
+        pos_p_regs = bld.add(
+            "position_p",
+            RWReg(pipeline.position_p.shape()),
+        )
+        norm_mv_regs = bld.add(
+            "normal_mv_inv_t",
+            RWReg(pipeline.normal_mv_inv_t.shape()),
+        )
+        tex_transform = bld.add(
+            "texture_transform",
+            RWReg(pipeline.texture_transform.shape()),
+        )
+        m.d.comb += [
+            pipeline.position_mv.eq(pos_mv_regs.f.data),
+            pipeline.position_p.eq(pos_p_regs.f.data),
+            pipeline.normal_mv_inv_t.eq(norm_mv_regs.f.data),
+        ]
+        m.d.comb += pipeline.texture_transform.eq(tex_transform.f.data)
 
-        with bld.Cluster("ia"):
+        m.submodules.csr_vtx_xf = csr_vtx_xf = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_vtx_xf.bus, name="vtx_xf")
 
-            def add_attr_cluster(name, cfg):
-                with bld.Cluster(name):
-                    mode = bld.add("mode", RWReg(cfg.mode.shape()))
-                    info = bld.add("info", RWReg(cfg.info.shape()))
-                return mode, info
-
-            ia_pos_mode, ia_pos_info = add_attr_cluster("pos", pipeline.c_pos)
-            ia_norm_mode, ia_norm_info = add_attr_cluster("norm", pipeline.c_norm)
-            ia_tex_mode = []
-            ia_tex_info = []
-            for i in range(num_textures):
-                with bld.Cluster(str(i)):
-                    mode, info = add_attr_cluster("tex", pipeline.c_tex[i])
-                    ia_tex_mode.append(mode)
-                    ia_tex_info.append(info)
-            ia_col_mode, ia_col_info = add_attr_cluster("col", pipeline.c_col)
-
-            m.d.comb += [
-                pipeline.c_pos.mode.eq(ia_pos_mode.f.data),
-                pipeline.c_pos.info.eq(ia_pos_info.f.data),
-                pipeline.c_norm.mode.eq(ia_norm_mode.f.data),
-                pipeline.c_norm.info.eq(ia_norm_info.f.data),
-                pipeline.c_col.mode.eq(ia_col_mode.f.data),
-                pipeline.c_col.info.eq(ia_col_info.f.data),
-            ]
-            for i in range(num_textures):
-                m.d.comb += [
-                    pipeline.c_tex[i].mode.eq(ia_tex_mode[i].f.data),
-                    pipeline.c_tex[i].info.eq(ia_tex_info[i].f.data),
-                ]
-
-        with bld.Cluster("vtx_xf"):
-            vt_enabled = bld.add("enabled", RWReg(pipeline.vt_enabled.shape()))
-
-            pos_mv_regs = bld.add(
-                "position_mv",
-                RWReg(pipeline.position_mv.shape()),
+        # Vertex Shading CSRs
+        bld = csr.Builder(addr_width=8, data_width=32)
+        with bld.Cluster("material"):
+            mat_amb = bld.add(
+                "ambient",
+                RWReg(pipeline.material.ambient.shape()),
             )
-            pos_p_regs = bld.add(
-                "position_p",
-                RWReg(pipeline.position_p.shape()),
+            mat_dif = bld.add(
+                "diffuse",
+                RWReg(pipeline.material.diffuse.shape()),
             )
-            norm_mv_regs = bld.add(
-                "normal_mv_inv_t",
-                RWReg(pipeline.normal_mv_inv_t.shape()),
+            mat_spe = bld.add(
+                "specular",
+                RWReg(pipeline.material.specular.shape()),
             )
-            tex_xf_regs = []
-            for t in range(num_textures):
-                tex_xf_regs.append(
-                    bld.add(
-                        "texture_transform",
-                        RWReg(pipeline.texture_transforms[t].shape()),
-                    )
+            mat_shine = bld.add("shininess", RWReg(FixedPoint_mem))
+
+        light_regs = []
+        for l_idx in range(num_lights):
+            with bld.Cluster("light"), bld.Cluster(f"{l_idx}"):
+                light = pipeline.lights[l_idx]
+                pos = bld.add(
+                    "position",
+                    RWReg(light.position.shape()),
                 )
-            m.d.comb += [
-                pipeline.vt_enabled.eq(vt_enabled.f.data),
-                pipeline.position_mv.eq(pos_mv_regs.f.data),
-                pipeline.position_p.eq(pos_p_regs.f.data),
-                pipeline.normal_mv_inv_t.eq(norm_mv_regs.f.data),
-            ]
-            for t in range(num_textures):
-                m.d.comb += pipeline.texture_transforms[t].eq(tex_xf_regs[t].f.data)
-
-        with bld.Cluster("vtx_sh"):
-            with bld.Cluster("material"):
-                mat_amb = bld.add(
+                amb = bld.add(
                     "ambient",
-                    RWReg(pipeline.material.ambient.shape()),
+                    RWReg(light.ambient.shape()),
                 )
-                mat_dif = bld.add(
+                dif = bld.add(
                     "diffuse",
-                    RWReg(pipeline.material.diffuse.shape()),
+                    RWReg(light.diffuse.shape()),
                 )
-                mat_spe = bld.add(
+                spe = bld.add(
                     "specular",
-                    RWReg(pipeline.material.specular.shape()),
+                    RWReg(light.specular.shape()),
                 )
-                mat_shine = bld.add("shininess", RWReg(FixedPoint_mem))
+                light_regs.append((pos, amb, dif, spe))
 
-            light_regs = []
-            for l_idx in range(num_lights):
-                with bld.Cluster(f"{l_idx}"), bld.Cluster("light"):
-                    light = pipeline.lights[l_idx]
-                    pos = bld.add(
-                        "position",
-                        RWReg(light.position.shape()),
-                    )
-                    amb = bld.add(
-                        "ambient",
-                        RWReg(light.ambient.shape()),
-                    )
-                    dif = bld.add(
-                        "diffuse",
-                        RWReg(light.diffuse.shape()),
-                    )
-                    spe = bld.add(
-                        "specular",
-                        RWReg(light.specular.shape()),
-                    )
-                    light_regs.append((pos, amb, dif, spe))
-
+        m.d.comb += [
+            pipeline.material.ambient.eq(mat_amb.f.data),
+            pipeline.material.diffuse.eq(mat_dif.f.data),
+            pipeline.material.specular.eq(mat_spe.f.data),
+            pipeline.material.shininess.eq(mat_shine.f.data),
+        ]
+        for idx, (pos, amb, dif, spe) in enumerate(light_regs):
             m.d.comb += [
-                pipeline.material.ambient.eq(mat_amb.f.data),
-                pipeline.material.diffuse.eq(mat_dif.f.data),
-                pipeline.material.specular.eq(mat_spe.f.data),
-                pipeline.material.shininess.eq(mat_shine.f.data),
-            ]
-            for idx, (pos, amb, dif, spe) in enumerate(light_regs):
-                m.d.comb += [
-                    pipeline.lights[idx].position.eq(pos.f.data),
-                    pipeline.lights[idx].ambient.eq(amb.f.data),
-                    pipeline.lights[idx].diffuse.eq(dif.f.data),
-                    pipeline.lights[idx].specular.eq(spe.f.data),
-                ]
-
-        with bld.Cluster("prim"):
-            prim_type = bld.add("type", RWReg(pipeline.pa_conf.type.shape()))
-            prim_cull = bld.add("cull", RWReg(pipeline.pa_conf.cull.shape()))
-            prim_wind = bld.add("winding", RWReg(pipeline.pa_conf.winding.shape()))
-
-            m.d.comb += [
-                pipeline.pa_conf.type.eq(prim_type.f.data),
-                pipeline.pa_conf.cull.eq(prim_cull.f.data),
-                pipeline.pa_conf.winding.eq(prim_wind.f.data),
+                pipeline.lights[idx].position.eq(pos.f.data),
+                pipeline.lights[idx].ambient.eq(amb.f.data),
+                pipeline.lights[idx].diffuse.eq(dif.f.data),
+                pipeline.lights[idx].specular.eq(spe.f.data),
             ]
 
-        with bld.Cluster("fb"):
-            fb_width = bld.add("width", RWReg(pipeline.fb_info.width.shape()))
-            fb_height = bld.add("height", RWReg(pipeline.fb_info.height.shape()))
-            fb_vx = bld.add("viewport_x", RWReg(FixedPoint_mem))
-            fb_vy = bld.add("viewport_y", RWReg(FixedPoint_mem))
-            fb_vw = bld.add("viewport_width", RWReg(FixedPoint_mem))
-            fb_vh = bld.add("viewport_height", RWReg(FixedPoint_mem))
-            fb_min_d = bld.add("viewport_min_depth", RWReg(FixedPoint_mem))
-            fb_max_d = bld.add("viewport_max_depth", RWReg(FixedPoint_mem))
-            fb_sc_x = bld.add(
-                "scissor_offset_x", RWReg(pipeline.fb_info.scissor_offset_x.shape())
-            )
-            fb_sc_y = bld.add(
-                "scissor_offset_y", RWReg(pipeline.fb_info.scissor_offset_y.shape())
-            )
-            fb_sc_w = bld.add(
-                "scissor_width", RWReg(pipeline.fb_info.scissor_width.shape())
-            )
-            fb_sc_h = bld.add(
-                "scissor_height", RWReg(pipeline.fb_info.scissor_height.shape())
-            )
-            fb_color_addr = bld.add(
-                "color_address", RWReg(pipeline.fb_info.color_address.shape())
-            )
-            fb_color_pitch = bld.add(
-                "color_pitch", RWReg(pipeline.fb_info.color_pitch.shape())
-            )
-            fb_depthstencil_addr = bld.add(
-                "depthstencil_address",
-                RWReg(pipeline.fb_info.depthstencil_address.shape()),
-            )
-            fb_depthstencil_pitch = bld.add(
-                "depthstencil_pitch", RWReg(pipeline.fb_info.depthstencil_pitch.shape())
-            )
+        m.submodules.csr_vtx_sh = csr_vtx_sh = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_vtx_sh.bus, name="vtx_sh")
 
-            m.d.comb += [
-                pipeline.fb_info.width.eq(fb_width.f.data),
-                pipeline.fb_info.height.eq(fb_height.f.data),
-                pipeline.fb_info.viewport_x.eq(
-                    FixedPoint_mem(fb_vx.f.data).saturate(
-                        pipeline.fb_info.viewport_x.shape()
-                    )
-                ),
-                pipeline.fb_info.viewport_y.eq(
-                    FixedPoint_mem(fb_vy.f.data).saturate(
-                        pipeline.fb_info.viewport_y.shape()
-                    )
-                ),
-                pipeline.fb_info.viewport_width.eq(
-                    FixedPoint_mem(fb_vw.f.data).saturate(
-                        pipeline.fb_info.viewport_width.shape()
-                    )
-                ),
-                pipeline.fb_info.viewport_height.eq(
-                    FixedPoint_mem(fb_vh.f.data).saturate(
-                        pipeline.fb_info.viewport_height.shape()
-                    )
-                ),
-                pipeline.fb_info.viewport_min_depth.eq(
-                    FixedPoint_mem(fb_min_d.f.data).saturate(
-                        pipeline.fb_info.viewport_min_depth.shape()
-                    )
-                ),
-                pipeline.fb_info.viewport_max_depth.eq(
-                    FixedPoint_mem(fb_max_d.f.data).saturate(
-                        pipeline.fb_info.viewport_max_depth.shape()
-                    )
-                ),
-                pipeline.fb_info.scissor_offset_x.eq(fb_sc_x.f.data),
-                pipeline.fb_info.scissor_offset_y.eq(fb_sc_y.f.data),
-                pipeline.fb_info.scissor_width.eq(fb_sc_w.f.data),
-                pipeline.fb_info.scissor_height.eq(fb_sc_h.f.data),
-                pipeline.fb_info.color_address.eq(fb_color_addr.f.data),
-                pipeline.fb_info.color_pitch.eq(fb_color_pitch.f.data),
-                pipeline.fb_info.depthstencil_address.eq(fb_depthstencil_addr.f.data),
-                pipeline.fb_info.depthstencil_pitch.eq(fb_depthstencil_pitch.f.data),
-            ]
+        # Primitive CSRs
+        bld = csr.Builder(addr_width=3, data_width=32)
+        prim_type = bld.add("type", RWReg(pipeline.pa_conf.type.shape()))
+        prim_cull = bld.add("cull", RWReg(pipeline.pa_conf.cull.shape()))
+        prim_wind = bld.add("winding", RWReg(pipeline.pa_conf.winding.shape()))
 
-        with bld.Cluster("ds"):
-            stencil_front = bld.add(
-                "stencil_front",
-                RWReg(pipeline.stencil_conf_front.shape()),
-            )
-            stencil_back = bld.add(
-                "stencil_back",
-                RWReg(pipeline.stencil_conf_back.shape()),
-            )
-            depth_cfg = bld.add(
-                "depth",
-                RWReg(pipeline.depth_conf.shape()),
-            )
+        m.d.comb += [
+            pipeline.pa_conf.type.eq(prim_type.f.data),
+            pipeline.pa_conf.cull.eq(prim_cull.f.data),
+            pipeline.pa_conf.winding.eq(prim_wind.f.data),
+        ]
+        m.submodules.csr_prim = csr_prim = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_prim.bus, name="prim")
 
-            m.d.comb += [
-                pipeline.stencil_conf_front.eq(stencil_front.f.data),
-                pipeline.stencil_conf_back.eq(stencil_back.f.data),
-                pipeline.depth_conf.eq(depth_cfg.f.data),
-            ]
+        # frame-buffer infor CSRs
+        bld = csr.Builder(addr_width=5, data_width=32)
+        fb_width = bld.add("width", RWReg(pipeline.fb_info.width.shape()))
+        fb_height = bld.add("height", RWReg(pipeline.fb_info.height.shape()))
+        fb_vx = bld.add("viewport_x", RWReg(FixedPoint_mem))
+        fb_vy = bld.add("viewport_y", RWReg(FixedPoint_mem))
+        fb_vw = bld.add("viewport_width", RWReg(FixedPoint_mem))
+        fb_vh = bld.add("viewport_height", RWReg(FixedPoint_mem))
+        fb_min_d = bld.add("viewport_min_depth", RWReg(FixedPoint_mem))
+        fb_max_d = bld.add("viewport_max_depth", RWReg(FixedPoint_mem))
+        fb_sc_x = bld.add(
+            "scissor_offset_x", RWReg(pipeline.fb_info.scissor_offset_x.shape())
+        )
+        fb_sc_y = bld.add(
+            "scissor_offset_y", RWReg(pipeline.fb_info.scissor_offset_y.shape())
+        )
+        fb_sc_w = bld.add(
+            "scissor_width", RWReg(pipeline.fb_info.scissor_width.shape())
+        )
+        fb_sc_h = bld.add(
+            "scissor_height", RWReg(pipeline.fb_info.scissor_height.shape())
+        )
+        fb_color_addr = bld.add(
+            "color_address", RWReg(pipeline.fb_info.color_address.shape())
+        )
+        fb_color_pitch = bld.add(
+            "color_pitch", RWReg(pipeline.fb_info.color_pitch.shape())
+        )
+        fb_depthstencil_addr = bld.add(
+            "depthstencil_address",
+            RWReg(pipeline.fb_info.depthstencil_address.shape()),
+        )
+        fb_depthstencil_pitch = bld.add(
+            "depthstencil_pitch", RWReg(pipeline.fb_info.depthstencil_pitch.shape())
+        )
 
-        with bld.Cluster("blend"):
-            blend_cfg = bld.add("config", RWReg(pipeline.blend_conf.shape()))
-            m.d.comb += pipeline.blend_conf.eq(blend_cfg.f.data)
+        m.d.comb += [
+            pipeline.fb_info.width.eq(fb_width.f.data),
+            pipeline.fb_info.height.eq(fb_height.f.data),
+            pipeline.fb_info.viewport_x.eq(
+                FixedPoint_mem(fb_vx.f.data).saturate(
+                    pipeline.fb_info.viewport_x.shape()
+                )
+            ),
+            pipeline.fb_info.viewport_y.eq(
+                FixedPoint_mem(fb_vy.f.data).saturate(
+                    pipeline.fb_info.viewport_y.shape()
+                )
+            ),
+            pipeline.fb_info.viewport_width.eq(
+                FixedPoint_mem(fb_vw.f.data).saturate(
+                    pipeline.fb_info.viewport_width.shape()
+                )
+            ),
+            pipeline.fb_info.viewport_height.eq(
+                FixedPoint_mem(fb_vh.f.data).saturate(
+                    pipeline.fb_info.viewport_height.shape()
+                )
+            ),
+            pipeline.fb_info.viewport_min_depth.eq(
+                FixedPoint_mem(fb_min_d.f.data).saturate(
+                    pipeline.fb_info.viewport_min_depth.shape()
+                )
+            ),
+            pipeline.fb_info.viewport_max_depth.eq(
+                FixedPoint_mem(fb_max_d.f.data).saturate(
+                    pipeline.fb_info.viewport_max_depth.shape()
+                )
+            ),
+            pipeline.fb_info.scissor_offset_x.eq(fb_sc_x.f.data),
+            pipeline.fb_info.scissor_offset_y.eq(fb_sc_y.f.data),
+            pipeline.fb_info.scissor_width.eq(fb_sc_w.f.data),
+            pipeline.fb_info.scissor_height.eq(fb_sc_h.f.data),
+            pipeline.fb_info.color_address.eq(fb_color_addr.f.data),
+            pipeline.fb_info.color_pitch.eq(fb_color_pitch.f.data),
+            pipeline.fb_info.depthstencil_address.eq(fb_depthstencil_addr.f.data),
+            pipeline.fb_info.depthstencil_pitch.eq(fb_depthstencil_pitch.f.data),
+        ]
+        m.submodules.csr_fb = csr_fb = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_fb.bus, name="fb")
+
+        # Depth-Stencil CSRs
+        bld = csr.Builder(addr_width=3, data_width=32)
+        stencil_front = bld.add(
+            "stencil_front",
+            RWReg(pipeline.stencil_conf_front.shape()),
+        )
+        stencil_back = bld.add(
+            "stencil_back",
+            RWReg(pipeline.stencil_conf_back.shape()),
+        )
+        depth_cfg = bld.add(
+            "depth",
+            RWReg(pipeline.depth_conf.shape()),
+        )
+
+        m.d.comb += [
+            pipeline.stencil_conf_front.eq(stencil_front.f.data),
+            pipeline.stencil_conf_back.eq(stencil_back.f.data),
+            pipeline.depth_conf.eq(depth_cfg.f.data),
+        ]
+        m.submodules.csr_ds = csr_ds = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_ds.bus, name="ds")
+
+        bld = csr.Builder(addr_width=1, data_width=32)
+        blend_cfg = bld.add("config", RWReg(pipeline.blend_conf.shape()))
+        m.d.comb += pipeline.blend_conf.eq(blend_cfg.f.data)
+        m.submodules.csr_blend = csr_blend = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_blend.bus, name="blend")
 
         # Status register exposing pipeline readiness
+        bld = csr.Builder(addr_width=4, data_width=32)
         ready_reg = bld.add(
             "ready", csr.Register(csr.Field(csr.action.R, unsigned(1)), "r")
         )
@@ -707,10 +731,11 @@ class GraphicsPipelineCSR(wiring.Component):
             "ready_vec", csr.Register(csr.Field(csr.action.R, unsigned(32)), "r")
         )
         m.d.comb += ready_vec.f.r_data.eq(pipeline.ready_vec)
+        m.submodules.csr_status = csr_status = csr.Bridge(bld.as_memory_map())
+        csr_decoder.add(csr_status.bus, name=None)
 
-        m.submodules.csr_bus = csr_bus = csr.Bridge(bld.as_memory_map())
         m.submodules.csr_bridge = csr_bridge = WishboneCSRBridge(
-            csr_bus.bus, data_width=32
+            csr_decoder.bus, data_width=32
         )
 
         wiring.connect(m, wiring.flipped(self.wb_csr), csr_bridge.wb_bus)
@@ -730,8 +755,15 @@ class GraphicsPipelineCSR(wiring.Component):
 class GraphicsPipelineAvalonCSR(wiring.Component):
     """Graphics pipeline with CSR and Avalon-MM interfaces.
 
-    Wraps GraphicsPipelineCSR and bridges all Wishbone buses (memory + CSR) to Avalon-MM.
+    Wraps GraphicsPipelineCSR and bridges index/vertex + CSR Wishbone buses to Avalon-MM.
     """
+
+    ready: Signal
+    avl_index: avl.Interface
+    avl_vertex: avl.Interface
+    avl_depthstencil: avl.Interface
+    avl_color: avl.Interface
+    avl_csr: avl.Interface
 
     def __init__(self):
         self._pipeline_csr = GraphicsPipelineCSR()
@@ -769,12 +801,10 @@ class GraphicsPipelineAvalonCSR(wiring.Component):
 
         m.submodules.bridge_index = bridge_index = self._bridge_index
         m.submodules.bridge_vertex = bridge_vertex = self._bridge_vertex
-        m.submodules.bridge_depthstencil = bridge_depthstencil = DomainRenamer("pixel")(
+        m.submodules.bridge_depthstencil = bridge_depthstencil = (
             self._bridge_depthstencil
         )
-        m.submodules.bridge_color = bridge_color = DomainRenamer("pixel")(
-            self._bridge_color
-        )
+        m.submodules.bridge_color = bridge_color = self._bridge_color
         m.submodules.bridge_csr = bridge_csr = self._bridge_csr
 
         # Connect memory buses

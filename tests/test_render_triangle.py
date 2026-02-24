@@ -165,8 +165,8 @@ def test_render_triangle():
     # Add all Wishbone buses to arbiter
     t.arbiter.add(dut.wb_index)
     t.arbiter.add(dut.wb_vertex)
-    t.arbiter.add(dut.wb_depthstencil)
-    t.arbiter.add(dut.wb_color)
+    t.add_axi_master(dut.axi_depthstencil)
+    t.add_axi_master(dut.axi_color)
 
     async def testbench(ctx):
         # Initialize vertex buffer memory

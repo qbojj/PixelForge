@@ -228,6 +228,8 @@ class Interface(wiring.PureInterface):
 class WishboneMasterToAvalonBridge(Component):
     """Wishbone initiator to Avalon-MM master bridge."""
 
+    avl_bus: Interface
+
     def __init__(self, bus: wb.Interface):
         if isinstance(bus, wiring.FlippedInterface):
             unflipped_bus = wiring.flipped(bus)
@@ -307,6 +309,8 @@ class WishboneSlaveToAvalonBridge(Component):
         Wishbone target-side interface (word-addressed). The bridge derives the Avalon
         signature from this interface's signature.
     """
+
+    avl_bus: Interface
 
     def __init__(self, wb_bus: wb.Interface):
         # Handle flipped interfaces

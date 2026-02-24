@@ -172,7 +172,6 @@ static void configure_gpu(pixelforge_dev *dev, uint32_t vertex_count,
     mat3_from_mat4(nm, mv);
 
     pixelforge_vtx_xf_config_t xf = {0};
-    xf.enabled.normal_enable = true;
     mat4_to_fp16_16(xf.position_mv, mv);
     mat4_to_fp16_16(xf.position_p, p);
     mat3_to_fp16_16(xf.normal_mv_inv_t, nm);

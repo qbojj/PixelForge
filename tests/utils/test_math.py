@@ -1,3 +1,5 @@
+from math import ceil, log2
+
 import pytest
 from amaranth import *
 from amaranth.sim import Simulator
@@ -59,23 +61,29 @@ def test_normalize(data: list[list[float]]):
             sim.run()
 
 
+@pytest.mark.parametrize("pipelined", [True, False])
 @pytest.mark.parametrize(
     "ibits, fbits, signed, data",
     [
         (15, 0, False, [1024.0 * 16.0]),
         (8, 0, False, [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]),
+        (20, 20, False, [2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0]),
         (0, 6, False, [0.5, 0.25, 0.125, 0.0625, 0.03125]),
         (1, 6, True, [0.5, -0.5, 0.25, -0.25, 0.125, -0.125]),
         (4, 0, True, [4.0, -4.0, 2.0, -2.0, 1.0, -1.0]),
     ],
 )
 def test_inverse_unbalanced_type(
-    ibits: int, fbits: int, signed: bool, data: list[float]
+    ibits: int, fbits: int, signed: bool, data: list[float], pipelined: bool
 ):
     expected = [1.0 / v for v in data]
 
     t = fixed.SQ(ibits, fbits) if signed else fixed.UQ(ibits, fbits)
-    dut = FixedPointInv(t, steps=3)
+    bits_initial = 8
+    steps = max(int(ceil(log2((ibits + fbits) / bits_initial))), 0)
+    dut = FixedPointInv(
+        t, pipelined=pipelined, steps=steps, initial_guess_bits=bits_initial
+    )
 
     async def output_checker(ctx, results):
         results = [v.as_float() for v in results]

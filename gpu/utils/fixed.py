@@ -78,11 +78,13 @@ class Shape(hdl.ShapeCastable):
 
     def format(self, obj: "Value", spec: str):
         # format as standard fixed_point
+        obj = Value.cast(hdl.Value.cast(obj), obj.shape().f_bits)
+
         decimal_length = ceil(log10(1 << self.f_bits)) + 1
         len_pow = 10**decimal_length
 
-        integer = obj.as_value() >> self.f_bits
-        fract = obj.as_value() & ((1 << self.f_bits) - 1)
+        integer = hdl.Value.cast(obj) >> self.f_bits
+        fract = hdl.Value.cast(obj) & ((1 << self.f_bits) - 1)
 
         if spec == "b":
             # format as binary
